@@ -1,0 +1,20 @@
+# Node.js
+node_modules/
+dist/
+npm-debug.log
+yarn-error.log
+
+# Môi trường (Tuyệt đối không đẩy lên)
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Prisma
+packages/database/src/generated/
+
+# Hệ điều hành & Editor
+.DS_Store
+.vscode/
+.idea/

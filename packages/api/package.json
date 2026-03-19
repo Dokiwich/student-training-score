@@ -1,0 +1,31 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.17",
+    "@nestjs/core": "^11.1.17",
+    "@nestjs/platform-express": "^11.1.17",
+    "@prisma/client": "6.19.2",
+    "@prisma/internals": "^7.5.0",
+    "@student-score/database": "*",
+    "dotenv": "^17.3.1",
+    "prisma": "6.19.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "@student-score/shared": "*"
+  }
+}
