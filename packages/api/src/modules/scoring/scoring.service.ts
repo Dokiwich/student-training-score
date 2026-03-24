@@ -97,4 +97,45 @@ export class ScoringService {
       data: criteriaList
     };
   }
+  // Cập nhật điểm theo Role
+  async submitCriteria(formId: string, criteriaId: number, score: number, role: string) {
+    // 1. Kiểm tra xem tiêu chí có tồn tại không
+    const criteria = await prisma.criteria.findUnique({ where: { id: criteriaId } });
+    if (!criteria) throw new Error('Tiêu chí không tồn tại');
+
+    // 2. Chuyển mạch: Xác định Cột nào được phép cập nhật
+    let updateData: any = {};
+    if (role === 'STUDENT') {
+      updateData = { student_score: score };
+    } else if (role === 'CLASS_PRESIDENT') {
+      updateData = { class_score: score };
+    } else if (role === 'ADVISOR') {
+      updateData = { advisor_score: score };
+    } else {
+      throw new Error('Vai trò không hợp lệ để chấm điểm');
+    }
+
+    // 3. Upsert (Nếu chưa có thì Tạo mới, nếu có rồi thì Cập nhật đúng cột đó)
+    // Đã có formId, kiểm tra phiếu có tồn tại không
+    const form = await prisma.scoring_sheets.findUnique({ where: { id: formId } });
+    if (!form) throw new Error('Không tìm thấy phiếu điểm');
+
+    const savedScore = await prisma.score_details.upsert({
+      where: {
+        scoring_sheet_id_criteria_id: {
+          scoring_sheet_id: formId,
+          criteria_id: criteriaId,
+        },
+      },
+      update: updateData, // Chỉ cập nhật đúng cột của Role đó
+      create: {
+        id: randomUUID(),
+        scoring_sheets: { connect: { id: formId } },
+        criteria: { connect: { id: criteriaId } },
+        ...updateData, // Lần đầu tạo cũng chỉ nhét điểm vào đúng cột
+      },
+    });
+
+    return { message: 'Lưu điểm thành công', data: savedScore };
+  }
 }

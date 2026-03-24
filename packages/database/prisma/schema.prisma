@@ -233,25 +233,28 @@ model score_adjustment_logs {
 }
 
 model score_details {
-  id                    String                  @id @db.VarChar(36)
-  scoring_sheet_id      String                  @db.VarChar(36)
-  criteria_id           Int
-  student_score         Decimal?                @db.Decimal(5, 1)
-  class_score           Decimal?                @db.Decimal(5, 1)
-  advisor_score         Decimal?                @db.Decimal(5, 1)
-  final_score           Decimal?                @db.Decimal(5, 1)
-  student_note          String?                 @db.Text
-  class_note            String?                 @db.Text
-  advisor_note          String?                 @db.Text
-  school_note           String?                 @db.Text
-  created_at            DateTime                @default(now()) @db.DateTime(0)
-  updated_at            DateTime                @default(now()) @db.DateTime(0)
-  score_adjustment_logs score_adjustment_logs[]
-  criteria              criteria                @relation(fields: [criteria_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_detail_criteria")
-  scoring_sheets        scoring_sheets          @relation(fields: [scoring_sheet_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_detail_sheet")
+  id               String          @id @db.VarChar(36)
+  scoring_sheet_id String          @db.VarChar(36)
+  criteria_id      Int
+  
+  // 3 CỘT QUYỀN LỰC CHO 3 VAI TRÒ
+  student_score Decimal?  @db.Decimal(5, 2) // Điểm Sinh viên tự chấm
+  class_score   Decimal?  @db.Decimal(5, 2) // Điểm Lớp trưởng/BCS chấm
+  advisor_score Decimal?  @db.Decimal(5, 2) // Điểm Cố vấn học tập chấm
+  
+  // BỘ ĐỆM CHO CÁC TÍNH NĂNG TƯƠNG LAI
+  proof_url     String?   @db.Text          // Link ảnh/minh chứng
+  note          String?   @db.Text          // Ghi chú/giải trình tại sao trừ điểm
 
-  @@unique([scoring_sheet_id, criteria_id], map: "uk_detail_sheet_criteria")
-  @@index([criteria_id], map: "idx_detail_criteria")
+  created_at    DateTime  @default(now()) @db.DateTime(0)
+  updated_at    DateTime  @default(now()) @db.DateTime(0)
+
+  scoring_sheets        scoring_sheets          @relation(fields: [scoring_sheet_id], references: [id])
+  criteria              criteria                @relation(fields: [criteria_id], references: [id])
+  score_adjustment_logs score_adjustment_logs[]
+
+  // Ràng buộc: Một phiếu chỉ có 1 dòng duy nhất cho 1 tiêu chí
+  @@unique([scoring_sheet_id, criteria_id])
 }
 
 model scoring_sheets {

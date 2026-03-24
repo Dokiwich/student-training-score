@@ -8,16 +8,15 @@ export class ScoringController {
   constructor(private readonly scoringService: ScoringService) { }
 
   @Post(':formId/submit-criteria')
-  async submitCriteriaScore(
+  async submitCriteria(
     @Param('formId') formId: string,
-    @Body(new ZodValidationPipe(SubmitScoreSchema)) body: SubmitScoreType,
+    @Body('criteriaId') criteriaId: number,
+    @Body('studentScore') score: number,
+    @Body('role') role: string // Tạm thời nhận role từ body để test
   ) {
-    const result = await this.scoringService.saveStudentScore(
-      formId,
-      body.criteriaId,
-      body.studentScore,
-    );
-    return result;
+    // Nếu Frontend không gửi role, mặc định coi như là Sinh viên tự chấm
+    const activeRole = role || 'STUDENT';
+    return this.scoringService.submitCriteria(formId, criteriaId, score, activeRole);
   }
 
   @Get(':formId/scores')
