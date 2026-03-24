@@ -85,4 +85,16 @@ export class ScoringService {
       data: scores,
     };
   }
+  // Lấy toàn bộ danh sách tiêu chí để Frontend vẽ Bảng Excel
+  async getAllCriteria() {
+    const criteriaList = await prisma.criteria.findMany({
+      // Bắt buộc phải sắp xếp theo thứ tự ID (hoặc số thứ tự) để bảng không bị nhảy loạn xạ
+      orderBy: { id: 'asc' }
+    });
+
+    return {
+      message: 'Lấy danh mục tiêu chí thành công',
+      data: criteriaList
+    };
+  }
 }

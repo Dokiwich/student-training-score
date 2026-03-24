@@ -24,4 +24,8 @@ export class ScoringController {
   async getFormScores(@Param('formId') formId: string) {
     return this.scoringService.getScoresByFormId(formId);
   }
+  @Get('criteria')
+  async getAllCriteria() {
+    return this.scoringService.getAllCriteria();
+  }
 }
