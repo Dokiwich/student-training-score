@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
@@ -45,18 +46,50 @@ async function main() {
     }
   });
 
-  const user = await prisma.users.upsert({
-    where: { email: 'student@example.com' },
-    update: {},
+  const hashed123 = await bcrypt.hash('123', 10);
+  const user1 = await prisma.users.upsert({
+    where: { email: '123@student.edu.vn' },
+    update: { password_hash: hashed123, role: 'STUDENT', student_id: '123' },
     create: {
-      id: 'USER_01',
-      student_id: '0211103122',
-      email: 'student@example.com',
-      password_hash: 'hashed_password_abc',
-      full_name: 'ProArt',
+      id: 'USER_123',
+      student_id: '123',
+      email: '123@student.edu.vn',
+      password_hash: hashed123,
+      full_name: 'Sinh viên 123',
       role: 'STUDENT',
       department_id: department.id,
       class_id: classObj.id,
+    }
+  });
+
+  const hashed456 = await bcrypt.hash('456', 10);
+  const user2 = await prisma.users.upsert({
+    where: { email: '456@student.edu.vn' },
+    update: { password_hash: hashed456, role: 'CLASS_COMMITTEE', student_id: '456' },
+    create: {
+      id: 'USER_456',
+      student_id: '456',
+      email: '456@student.edu.vn',
+      password_hash: hashed456,
+      full_name: 'Lớp trưởng 456',
+      role: 'CLASS_COMMITTEE',
+      department_id: department.id,
+      class_id: classObj.id,
+    }
+  });
+
+  const hashed789 = await bcrypt.hash('789', 10);
+  const user3 = await prisma.users.upsert({
+    where: { email: '789@gv.edu.vn' },
+    update: { password_hash: hashed789, role: 'ADVISOR', student_id: '789' },
+    create: {
+      id: 'USER_789',
+      student_id: '789',
+      email: '789@gv.edu.vn',
+      password_hash: hashed789,
+      full_name: 'Cố vấn 789',
+      role: 'ADVISOR',
+      department_id: department.id,
     }
   });
 
@@ -103,7 +136,7 @@ async function main() {
     update: {},
     create: {
       id: 'PHIEU_THAT_01',
-      student_id: user.id,
+      student_id: user1.id,
       semester_id: semester.id,
       class_id: classObj.id,
       status: 'DRAFT',

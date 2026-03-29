@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSession } from 'next-auth/react';
 import { z } from 'zod';
 
 const API_BASE = 'http://localhost:3000/api';
@@ -151,7 +152,23 @@ const ROLE_STYLES: Record<
 // =============================================
 // MAIN COMPONENT
 // =============================================
-export function ScoringForm() {
+interface ScoringFormProps { 
+  forcedRole?: Role; 
+  studentId?: string; 
+  formId?: string; 
+  viewMode?: 'edit' | 'history';
+  stickyTop?: string; // e.g. "top-0" or "top-[72px]"
+}
+export function ScoringForm({ 
+  forcedRole, 
+  studentId, 
+  formId = 'PHIEU_THAT_01', 
+  viewMode = 'edit',
+  stickyTop = 'top-0'
+}: ScoringFormProps) {
+  const { data: session } = useSession();
+  const token = (session as { customJwt?: string })?.customJwt || '';
+
   const [criteria, setCriteria] = useState<Criterion[]>([]);
 
   // 3 rổ điểm đã lưu (mỗi vai trò 1 rổ)
@@ -174,10 +191,18 @@ export function ScoringForm() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>('1');
 
-  // MOCK ROLE STATE
-  const [currentRole, setCurrentRole] = useState<Role>('STUDENT');
+  const [currentRole, setCurrentRole] = useState<Role>(forcedRole || 'STUDENT');
 
-  const formId = 'PHIEU_THAT_01';
+  // Cột hiển thị: STUDENT edit → chỉ cột SV; history/BCS/CVHT → đủ 3 cột
+  const visibleRoles: Role[] = (currentRole === 'STUDENT' && viewMode === 'edit')
+    ? ['STUDENT']
+    : ALL_ROLES;
+
+  // Quyền sửa: history mode → cấm tuyệt đối
+  const canEdit = viewMode !== 'history';
+
+  // formId từ props
+  // ✅ STATE TRẠNG THÁI PHIẾU_THAT_01';
 
   // Ref để chỉ sync inputValues khi đổi vai trò hoặc tải lần đầu
   const prevRoleRef = useRef<Role>(currentRole);
@@ -215,9 +240,10 @@ export function ScoringForm() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
+      const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {};
       const [criteriaRes, scoresRes] = await Promise.all([
-        fetch(`${API_BASE}/scoring/criteria`),
-        fetch(`${API_BASE}/scoring/${formId}/scores`),
+        fetch(`${API_BASE}/scoring/criteria`, { headers }),
+        fetch(`${API_BASE}/scoring/${formId}/scores?studentId=${studentId}`, { headers }),
       ]);
 
       if (criteriaRes.ok) {
@@ -248,7 +274,7 @@ export function ScoringForm() {
     } finally {
       setIsLoading(false);
     }
-  }, [formId]);
+  }, [formId, studentId, token]);
 
   useEffect(() => {
     fetchData();
@@ -375,7 +401,10 @@ export function ScoringForm() {
   // CALCULATE SCORE FROM MAP (dùng cho cột không active)
   // ------------------------------------------
   const calculateScoreFromMap = useCallback(
-    (itemId: number, scoreMap: Record<number, number>): number => {
+    (itemId: number, scoreMap: Record<number, number>, visited = new Set<number>()): number => {
+      if (visited.has(itemId)) return 0;
+      visited.add(itemId);
+
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return 0;
       if (FIXED_CODES.includes(item.code)) return item.max_points;
@@ -383,7 +412,7 @@ export function ScoringForm() {
       const children = criteria.filter((c) => c.parent_id === itemId);
       if (children.length > 0) {
         const sum = children.reduce(
-          (acc, child) => acc + calculateScoreFromMap(child.id, scoreMap),
+          (acc, child) => acc + calculateScoreFromMap(child.id, scoreMap, visited),
           0,
         );
         return item.max_points > 0 ? Math.min(sum, item.max_points) : sum;
@@ -397,7 +426,10 @@ export function ScoringForm() {
   // CALCULATE AUTO SCORE (dùng inputValues - cột active)
   // ------------------------------------------
   const calculateAutoScore = useCallback(
-    (itemId: number): number => {
+    (itemId: number, visited = new Set<number>()): number => {
+      if (visited.has(itemId)) return 0;
+      visited.add(itemId);
+
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return 0;
       if (FIXED_CODES.includes(item.code)) return item.max_points;
@@ -405,7 +437,7 @@ export function ScoringForm() {
       const children = criteria.filter((c) => c.parent_id === itemId);
       if (children.length > 0) {
         const sum = children.reduce(
-          (acc, child) => acc + calculateAutoScore(child.id),
+          (acc, child) => acc + calculateAutoScore(child.id, visited),
           0,
         );
         return item.max_points > 0 ? Math.min(sum, item.max_points) : sum;
@@ -462,11 +494,15 @@ export function ScoringForm() {
         `${API_BASE}/scoring/${formId}/submit-criteria`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
           body: JSON.stringify({
             criteriaId,
             score: result.data.score,
             role: currentRole,
+            studentId: studentId,
           }),
         },
       );
@@ -499,6 +535,38 @@ export function ScoringForm() {
   };
 
   // ------------------------------------------
+  // SUBMIT FORM (chốt nộp phiếu)
+  // ------------------------------------------
+  const handleSubmitForm = async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE}/scoring/${formId}/submit`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            role: currentRole,
+            studentId: studentId,
+          }),
+        },
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        addToast('success', data.message || 'Nộp phiếu thành công!');
+      } else {
+        const errorData = await response.json().catch(() => null);
+        addToast('error', errorData?.message || 'Lỗi khi nộp phiếu');
+      }
+    } catch {
+      addToast('error', 'Không thể kết nối máy chủ');
+    }
+  };
+
+  // ------------------------------------------
   // LOADING STATE
   // ------------------------------------------
   if (isLoading)
@@ -523,37 +591,46 @@ export function ScoringForm() {
       )}
 
       {/* ========== MOCK ROLE SWITCHER ========== */}
-      <div className="bg-yellow-100 border-b-2 border-yellow-400 p-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 rounded-lg shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">⚠️</span>
-          <div>
-            <p className="font-bold text-yellow-800 text-sm">
-              CHẾ ĐỘ GIẢ LẬP QUYỀN (MOCK ROLE)
-            </p>
-            <p className="text-xs text-yellow-700">
-              Chuyển đổi vai trò để test tính năng khóa/mở cột điểm.
-            </p>
+      {!forcedRole && (
+        <div className="bg-yellow-100 border-b-2 border-yellow-400 p-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 rounded-lg shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">⚠️</span>
+            <div>
+              <p className="font-bold text-yellow-800 text-sm">
+                CHẾ ĐỘ GIẢ LẬP QUYỀN (MOCK ROLE)
+              </p>
+              <p className="text-xs text-yellow-700">
+                Chuyển đổi vai trò để test tính năng khóa/mở cột điểm.
+              </p>
+            </div>
+          </div>
+          <div className="flex bg-white rounded-lg p-1 border border-yellow-300 shadow-sm">
+            {ALL_ROLES.map((role) => {
+              const isActive = currentRole === role;
+              const style = ROLE_STYLES[role];
+              return (
+                <button
+                  key={role}
+                  onClick={() => setCurrentRole(role)}
+                  className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${isActive
+                      ? `${style.btnActive} ${style.btnActiveText}`
+                      : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                >
+                  {ROLE_CONFIG[role].label}
+                </button>
+              );
+            })}
+            {/* Hiển thị canEdit */}
+            {/* Note: 'canEdit' variable is not defined in the provided context. */}
+            {/* This part assumes 'canEdit' would be defined elsewhere in the component. */}
+            {/* For now, it's commented out or needs a placeholder if it's meant to be dynamic. */}
+            {/* <span className={`text-xs font-bold px-2 py-1 rounded ${canEdit ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
+              {canEdit ? '🔓 Được sửa' : '🔒 Bị khóa'}
+            </span> */}
           </div>
         </div>
-        <div className="flex bg-white rounded-lg p-1 border border-yellow-300 shadow-sm">
-          {ALL_ROLES.map((role) => {
-            const isActive = currentRole === role;
-            const style = ROLE_STYLES[role];
-            return (
-              <button
-                key={role}
-                onClick={() => setCurrentRole(role)}
-                className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${isActive
-                    ? `${style.btnActive} ${style.btnActiveText}`
-                    : 'text-gray-500 hover:bg-gray-100'
-                  }`}
-              >
-                {ROLE_CONFIG[role].label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      )}
 
       {/* ========== MAIN CARD ========== */}
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden mb-10">
@@ -580,14 +657,14 @@ export function ScoringForm() {
           </div>
         </div>
 
-        {/* BODY: Sidebar + Table */}
-        <div className="flex flex-col lg:flex-row bg-gray-50">
-          {/* ───── LEFT SIDEBAR: TAB MENU ───── */}
-          <div className="w-full lg:w-1/4 xl:w-1/5 border-r border-gray-200 bg-white p-4">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 px-2">
+        {/* BODY: Tabs + Table */}
+        <div className="flex flex-col bg-gray-50">
+          {/* ───── TOP TABS ───── */}
+          <div className="w-full border-b border-gray-200 bg-white p-4">
+            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 px-2 hidden sm:block">
               Danh mục đánh giá
             </h3>
-            <div className="flex flex-col gap-2">
+            <div className="flex overflow-x-auto pb-2 gap-3 snap-x custom-scrollbar">
               {TAB_GROUPS.map((tab) => {
                 const isActive = activeTabId === tab.id;
                 const tabRoots = criteria.filter(
@@ -607,7 +684,7 @@ export function ScoringForm() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTabId(tab.id)}
-                    className={`text-left p-3 rounded-xl border-2 transition-all ${isActive
+                    className={`shrink-0 snap-start text-left p-3 rounded-xl border-2 transition-all min-w-[260px] max-w-[320px] ${isActive
                         ? 'border-indigo-500 bg-indigo-50/50 shadow-sm'
                         : 'border-transparent hover:bg-gray-50 hover:border-gray-200'
                       }`}
@@ -629,8 +706,9 @@ export function ScoringForm() {
                       </span>
                     </div>
                     <p
-                      className={`text-sm font-medium line-clamp-2 ${isActive ? 'text-indigo-900' : 'text-gray-600'
+                      className={`text-sm font-medium line-clamp-1 truncate ${isActive ? 'text-indigo-900' : 'text-gray-600'
                         }`}
+                      title={tab.title}
                     >
                       {tab.title}
                     </p>
@@ -643,10 +721,16 @@ export function ScoringForm() {
             </div>
           </div>
 
-          {/* ───── RIGHT: SCORING TABLE ───── */}
-          <div className="w-full lg:w-3/4 xl:w-4/5 flex flex-col">
+          {/* ───── BOTTOM: SCORING TABLE ───── */}
+          <div className="w-full flex flex-col">
             {/* Toolbar */}
-            <div className="px-6 py-3 bg-white border-b border-gray-200 flex items-center justify-between sticky top-0 z-10">
+            {currentRole === 'STUDENT' && viewMode === 'edit' && (
+              <div className="px-6 py-2 bg-blue-50 border-b border-blue-200 text-blue-700 text-xs font-medium flex items-center gap-2">
+                <span>💡</span>
+                <p><strong>Hướng dẫn:</strong> Chỉ nhập điểm vào các mục bạn có tham gia. Các mục không tham gia vui lòng để trống (mặc định 0 điểm). Nguyên tắc: 1 điểm / 1 hoạt động (trừ mục có quy định riêng).</p>
+              </div>
+            )}
+            <div className={`px-6 py-3 bg-white border-b border-gray-200 flex items-center justify-between sticky ${stickyTop} z-10`}>
               <p className="text-xs text-gray-500">
                 Điểm mục lớn <strong>tự động cộng dồn</strong>. Cột đang sửa:{' '}
                 <strong className="text-indigo-600">
@@ -670,16 +754,16 @@ export function ScoringForm() {
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto bg-white flex-1">
+            <div className="overflow-x-auto bg-white flex-1 min-h-[400px]">
               <table className="w-full text-left border-collapse min-w-[950px]">
-                <thead>
-                  <tr className="bg-gray-50/80 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                <thead className={`sticky ${stickyTop === 'top-0' ? 'top-12' : 'top-[128px]'} z-20`}>
+                  <tr className="bg-gray-50/90 backdrop-blur-sm text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200 shadow-sm">
                     <th className="p-3 w-16">Mã</th>
                     <th className="p-3">Nội dung</th>
-                    <th className="p-3 w-14 text-center">Max</th>
+                    <th className="p-3 w-20 text-center">Điểm</th>
 
-                    {/* 3 CỘT ĐIỂM */}
-                    {ALL_ROLES.map((role) => {
+                    {/* CỘT ĐIỂM (lọc theo visibleRoles) */}
+                    {visibleRoles.map((role) => {
                       const isActiveCol = role === currentRole;
                       const rs = ROLE_STYLES[role];
                       return (
@@ -700,7 +784,7 @@ export function ScoringForm() {
                       );
                     })}
 
-                    <th className="p-3 w-24 text-center">Thao tác</th>
+                    {canEdit && <th className="p-3 w-24 text-center">Thao tác</th>}
                   </tr>
                 </thead>
 
@@ -797,8 +881,8 @@ export function ScoringForm() {
                               {item.max_points}
                             </td>
 
-                            {/* 3 cột điểm tự cộng */}
-                            {ALL_ROLES.map((role) => {
+                            {/* cột điểm tự cộng */}
+                            {visibleRoles.map((role) => {
                               const isActiveCol = role === currentRole;
                               const rs = ROLE_STYLES[role];
                               return (
@@ -819,11 +903,13 @@ export function ScoringForm() {
                               );
                             })}
 
+                            {canEdit && (
                             <td className="p-3 text-center">
                               <span className="text-[10px] text-gray-400 uppercase">
                                 Σ Tự cộng
                               </span>
                             </td>
+                            )}
                           </tr>
                         );
                       }
@@ -866,8 +952,8 @@ export function ScoringForm() {
                             {item.max_points}
                           </td>
 
-                          {/* 3 CỘT ĐIỂM */}
-                          {ALL_ROLES.map((role) => {
+                          {/* CỘT ĐIỂM */}
+                          {visibleRoles.map((role) => {
                             const isActiveCol = role === currentRole;
                             const rs = ROLE_STYLES[role];
                             const roleMap =
@@ -904,15 +990,19 @@ export function ScoringForm() {
                                     min={0}
                                     max={item.max_points}
                                     value={inputValues[item.id] || ''}
+                                    disabled={!canEdit}
+                                    readOnly={!canEdit}
                                     onChange={(e) =>
                                       handleInputChange(
                                         item.id,
                                         e.target.value,
                                       )
                                     }
-                                    className={`w-full border rounded-md px-2 py-1.5 text-center text-sm outline-none transition-all ${isSaved
-                                        ? 'bg-green-50 border-green-300 text-green-700 font-bold'
-                                        : 'border-gray-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30'
+                                    className={`w-full border rounded-md px-2 py-1.5 text-center text-sm outline-none transition-all ${!canEdit
+                                        ? 'bg-gray-100/80 border-gray-200 text-gray-400 cursor-not-allowed'
+                                        : isSaved
+                                          ? 'bg-green-50 border-green-300 text-green-700 font-bold'
+                                          : 'border-gray-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30'
                                       }`}
                                   />
                                 </td>
@@ -924,16 +1014,21 @@ export function ScoringForm() {
                             return (
                               <td
                                 key={role}
-                                className="p-3 text-center border-l border-gray-100"
+                                className="p-3 border-l border-gray-100 bg-gray-50/50"
                               >
-                                <span className="text-sm text-gray-400">
-                                  {val !== undefined ? val : '–'}
-                                </span>
+                                <input
+                                  type="text"
+                                  disabled
+                                  readOnly
+                                  value={val !== undefined ? val : '–'}
+                                  className="w-full border border-gray-200 bg-gray-100/80 rounded-md px-2 py-1.5 text-center text-sm font-bold text-gray-400 cursor-not-allowed select-none"
+                                />
                               </td>
                             );
                           })}
 
                           {/* CỘT THAO TÁC */}
+                          {canEdit && (
                           <td className="p-3 text-center">
                             {!isFixed && (
                               <button
@@ -954,6 +1049,7 @@ export function ScoringForm() {
                               </button>
                             )}
                           </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -962,11 +1058,13 @@ export function ScoringForm() {
             </div>
 
             {/* FOOTER */}
+            {canEdit && (
             <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end">
-              <button className="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-sm transition-all">
+              <button onClick={handleSubmitForm} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-sm transition-all">
                 ✅ CHỐT NỘP PHIẾU NÀY
               </button>
             </div>
+            )}
           </div>
         </div>
       </div>

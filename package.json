@@ -7,5 +7,8 @@
   "scripts": {
     "dev:web": "npm run dev --workspace=@student-score/web",
     "dev:api": "npm run start:dev --workspace=@student-score/api"
+  },
+  "devDependencies": {
+    "knip": "^6.0.6"
   }
 }
