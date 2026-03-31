@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 import { Providers } from "./components/Providers";
 
 export const metadata: Metadata = {
-  title: "Hệ thống Chấm điểm Rèn luyện",
-  description: "Hệ thống quản lý và chấm điểm rèn luyện sinh viên",
+  title: "He thong Cham diem Ren luyen",
+  description: "He thong quan ly va cham diem ren luyen sinh vien",
 };
 
 export default function RootLayout({
@@ -29,7 +29,7 @@ export default function RootLayout({
       lang="vi"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex bg-gray-50">
+      <body className="min-h-full flex bg-white">
         <Providers>
           <main className="flex-1 min-h-screen">
             {children}

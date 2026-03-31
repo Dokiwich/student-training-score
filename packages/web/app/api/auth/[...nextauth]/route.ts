@@ -30,11 +30,13 @@ export const authOptions: AuthOptions = {
         const isPasswordValid = await bcrypt.compare(credentials.password, user.password_hash);
         if (!isPasswordValid) return null;
 
+        const mappedRole = user.role === 'CLASS_COMMITTEE' ? 'CLASS_PRESIDENT' : user.role;
+
         return {
           id: user.id,
           name: user.full_name,
           email: user.student_id, // we map student_id to Auth's email field for ease
-          role: user.role, 
+          role: mappedRole, 
         } as { id: string; name: string; email: string; role: string; };
       }
     })

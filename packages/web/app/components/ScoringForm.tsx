@@ -95,6 +95,7 @@ export function ScoringForm({
   const [savedStudentScores, setSavedStudentScores] = useState<Record<number, number>>({});
   const [savedClassScores, setSavedClassScores] = useState<Record<number, number>>({});
   const [savedAdvisorScores, setSavedAdvisorScores] = useState<Record<number, number>>({});
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [inputValues, setInputValues] = useState<Record<number, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -130,18 +131,27 @@ export function ScoringForm({
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
+      const customJwt = (session as any)?.customJwt;
+      const headersInit: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (customJwt) {
+        headersInit['Authorization'] = `Bearer ${customJwt}`;
+      }
+
       const [criteriaRes, scoresRes] = await Promise.all([
-        fetch(`${API_BASE}/scoring/criteria`, { credentials: 'include' }),
-        fetch(`${API_BASE}/scoring/${formId}/scores?studentId=${studentId}`, { credentials: 'include' }),
+        fetch(`${API_BASE}/scoring/criteria`, { headers: headersInit, credentials: 'include' }),
+        fetch(`${API_BASE}/scoring/${formId}/scores?studentId=${studentId}`, { headers: headersInit, credentials: 'include' }),
       ]);
 
       if (criteriaRes.ok) {
         const data = await criteriaRes.json();
+        const rootItems = (data.data || []).filter((c: Criterion) => c.parent_id === null || c.parent_id === 0).map((c: Criterion) => c.id);
         setCriteria(data.data || []);
-        const roots = (data.data || [])
-          .filter((c: Criterion) => c.parent_id === null || c.parent_id === 0)
-          .map((c: Criterion) => c.id);
-        setExpandedIds(new Set(roots));
+        setExpandedIds(new Set(rootItems));
+      } else {
+        const text = await criteriaRes.text();
+        setFetchError(`Cannot fetch criteria: ${criteriaRes.status} ${text}`);
       }
 
       if (scoresRes.ok) {
@@ -311,7 +321,7 @@ export function ScoringForm({
   const totalScore = useMemo(() => {
     return TAB_GROUPS.reduce((acc, tab) => {
       const tabRoots = criteria.filter(
-        (c) => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.includes(tab.id) || c.code.startsWith(`TC_0${tab.id}`)),
+        (c) => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith(`TC_0${tab.id}`) || c.code.startsWith(`TC_${tab.id}`)),
       );
       const tabSum = tabRoots.reduce((sum, root) => sum + calculateAutoScore(root.id), 0);
       return acc + Math.min(tabSum, tab.max);
@@ -331,10 +341,14 @@ export function ScoringForm({
 
     setSavingId(criteriaId);
     try {
+      const customJwt = (session as any)?.customJwt;
+      const headersInit: HeadersInit = { 'Content-Type': 'application/json' };
+      if (customJwt) headersInit['Authorization'] = `Bearer ${customJwt}`;
+
       const response = await fetch(`${API_BASE}/scoring/${formId}/submit-criteria`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headersInit,
         body: JSON.stringify({ criteriaId, score, role: currentRole, studentId }),
       });
 
@@ -354,10 +368,14 @@ export function ScoringForm({
 
   const handleSubmitForm = async () => {
     try {
+      const customJwt = (session as any)?.customJwt;
+      const headersInit: HeadersInit = { 'Content-Type': 'application/json' };
+      if (customJwt) headersInit['Authorization'] = `Bearer ${customJwt}`;
+
       const response = await fetch(`${API_BASE}/scoring/${formId}/submit`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headersInit,
         body: JSON.stringify({ role: currentRole, studentId }),
       });
 
@@ -417,7 +435,7 @@ export function ScoringForm({
               {TAB_GROUPS.map((tab) => {
                 const isActive = activeTabId === tab.id;
                 const tabRoots = criteria.filter(
-                  (c) => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.includes(tab.id) || c.code.startsWith(`TC_0${tab.id}`)),
+                  (c) => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith(`TC_0${tab.id}`) || c.code.startsWith(`TC_${tab.id}`)),
                 );
                 const tabScore = Math.min(
                   tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0),
@@ -480,14 +498,44 @@ export function ScoringForm({
                 </thead>
 
                 <tbody className="divide-y divide-gray-100">
-                  {sortedCriteria
-                    .filter((item) => {
+                  {/* DEBUG INFO TO FIGURE OUT WHY TABLE IS EMPTY */}
+                  {criteria.length > 0 && (
+                    <tr className="bg-yellow-50">
+                      <td colSpan={4} className="p-2 text-[10px] text-gray-500 font-mono border-b border-yellow-200">
+                        Total items: {criteria.length}. Sorted: {sortedCriteria.length}. Tab {activeTabId} matching roots: {criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === activeTabId || c.code.startsWith(activeTabId + '.') || c.code.startsWith(`TC_0${activeTabId}`))).length}.
+                      </td>
+                    </tr>
+                  )}
+                  
+                  {fetchError && (
+                    <tr>
+                      <td colSpan={4} className="p-4 text-center text-red-600 bg-red-50 border border-red-200">
+                        <strong>Lỗi hệ thống:</strong> {fetchError}
+                      </td>
+                    </tr>
+                  )}
+                  {(() => {
+                    const filtered = sortedCriteria.filter((item) => {
                       if (!isVisible(item.id)) return false;
                       const root = getRoot(item.id);
-                      if (!root) return false;
-                      return root.code === activeTabId || root.code.startsWith(activeTabId + '.') || root.code.includes(activeTabId) || root.code.startsWith(`TC_0${activeTabId}`);
-                    })
-                    .map((item) => {
+                      if (!root) return true; // failsafe
+                      return root.code === activeTabId || root.code.startsWith(activeTabId + '.') || root.code.startsWith(`TC_0${activeTabId}`) || root.code.startsWith(`TC_${activeTabId}`);
+                    });
+                    
+                    // FALLBACK: If filter blocked EVERYTHING, but there are criteria, something is wrong with matching! Render everything to save the day.
+                    const itemsToRender = filtered.length > 0 ? filtered : (sortedCriteria.length > 0 ? sortedCriteria.filter(item => isVisible(item.id)) : []);
+
+                    if (itemsToRender.length === 0 && !isLoading && criteria.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={4} className="p-8 text-center text-gray-500">
+                            Không có tiêu chí đánh giá nào. Vui lòng liên hệ quản trị viên.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return itemsToRender.map((item) => {
                       const isParent = parentIds.has(item.id);
                       const depth = depthMap.get(item.id) || 0;
                       const isExpanded = expandedIds.has(item.id);
@@ -605,7 +653,8 @@ export function ScoringForm({
                           )}
                         </tr>
                       );
-                    })}
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>

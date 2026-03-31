@@ -7,20 +7,20 @@ import Link from 'next/link';
 
 export default function StudentHistoryPage() {
   const { data: session } = useSession();
-  const studentId = (session as any)?.user?.id || '';
+  const studentId = (session as { user?: { id?: string } })?.user?.id || '';
 
   return (
-    <main className="p-4 md:p-8 bg-gray-50 min-h-screen max-w-7xl mx-auto">
+    <main className="p-4 md:p-8 bg-white min-h-screen max-w-7xl mx-auto">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <Link href="/student" className="text-indigo-600 hover:text-indigo-800 text-sm font-bold flex items-center gap-1 mb-2 group transition-colors">
-            <span className="group-hover:-translate-x-1 transition-transform inline-block">←</span> Quay lại tự chấm
+          <Link href="/student" className="text-black hover:underline text-sm font-bold mb-2 inline-block">
+            &larr; Quay lai tu cham
           </Link>
-          <div className="flex items-center gap-2">
-            <span className="bg-purple-100 text-purple-800 text-xs font-semibold px-2.5 py-0.5 rounded border border-purple-400">LỊCH SỬ</span>
+          <div>
+            <span className="text-xs font-bold px-2 py-0.5 border border-gray-300 text-gray-600">LICH SU</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800 mt-2">Lịch sử đánh giá</h1>
-          <p className="text-gray-600">Xem chi tiết điểm do Ban cán sự và Cố vấn học tập chấm.</p>
+          <h1 className="text-xl font-bold text-black mt-2">Lich su danh gia</h1>
+          <p className="text-gray-500 text-sm">Xem chi tiet diem do Ban can su va Co van hoc tap cham.</p>
         </div>
         <UserMenu />
       </div>

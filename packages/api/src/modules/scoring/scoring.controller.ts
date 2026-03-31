@@ -32,7 +32,10 @@ export class ScoringController {
     @Req() req: any,
     @Body('proofUrl') proofUrl?: string
   ) {
-    const activeRole = req.user?.role || 'STUDENT';
+    let activeRole = req.user?.role || 'STUDENT';
+    if (activeRole === 'CLASS_PRESIDENT') {
+      activeRole = 'CLASS_COMMITTEE';
+    }
     return this.scoringService.submitCriteria(formId, criteriaId, score, activeRole, studentId, proofUrl);
   }
 
@@ -42,7 +45,10 @@ export class ScoringController {
     @Body('studentId') studentId: string,
     @Req() req: any
   ) {
-    const activeRole = req.user?.role || 'STUDENT';
+    let activeRole = req.user?.role || 'STUDENT';
+    if (activeRole === 'CLASS_PRESIDENT') {
+      activeRole = 'CLASS_COMMITTEE';
+    }
     return this.scoringService.submitForm(formId, activeRole, studentId);
   }
 }

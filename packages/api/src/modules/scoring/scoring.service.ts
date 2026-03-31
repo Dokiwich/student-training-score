@@ -30,7 +30,7 @@ const STATE_TRANSITIONS: Record<string, {
     currentStep: 2,
     errorMessage: 'Sinh viên chỉ được nộp khi phiếu đang là Bản Nháp (DRAFT)',
   },
-  CLASS_PRESIDENT: {
+  CLASS_COMMITTEE: {
     requiredStatus: WorkflowStatus.SUBMITTED,
     nextStatus: WorkflowStatus.CLASS_APPROVED,
     timestampField: 'class_reviewed_at',
@@ -50,7 +50,7 @@ const STATE_TRANSITIONS: Record<string, {
 // Role nào được chấm ở trạng thái nào?
 const SCORING_PERMISSIONS: Record<string, string> = {
   STUDENT: WorkflowStatus.DRAFT,
-  CLASS_PRESIDENT: WorkflowStatus.SUBMITTED,
+  CLASS_COMMITTEE: WorkflowStatus.SUBMITTED,
   ADVISOR: WorkflowStatus.CLASS_APPROVED,
 };
 
@@ -288,14 +288,14 @@ export class ScoringService {
 
     if (!allowedStatus) {
       throw new BadRequestException(
-        `Vai trò "${role}" không hợp lệ. Chỉ chấp nhận: STUDENT, CLASS_PRESIDENT, ADVISOR`,
+        `Vai trò "${role}" không hợp lệ. Chỉ chấp nhận: STUDENT, CLASS_COMMITTEE, ADVISOR`,
       );
     }
 
     if (form.status !== allowedStatus) {
       const roleLabels: Record<string, string> = {
         STUDENT: 'Sinh viên',
-        CLASS_PRESIDENT: 'Lớp trưởng',
+        CLASS_COMMITTEE: 'Lớp trưởng',
         ADVISOR: 'Cố vấn học tập',
       };
 
@@ -406,7 +406,7 @@ export class ScoringService {
         }
         break;
 
-      case 'CLASS_PRESIDENT':
+      case 'CLASS_COMMITTEE':
         updateData.class_score = score;
         break;
 
@@ -505,7 +505,7 @@ export class ScoringService {
 
     if (!transition) {
       throw new BadRequestException(
-        `Vai trò "${role}" không hợp lệ. Chỉ chấp nhận: STUDENT, CLASS_PRESIDENT, ADVISOR`,
+        `Vai trò "${role}" không hợp lệ. Chỉ chấp nhận: STUDENT, CLASS_COMMITTEE, ADVISOR`,
       );
     }
 
@@ -531,7 +531,7 @@ export class ScoringService {
     // Gắn tổng điểm tương ứng
     if (role === 'STUDENT') {
       updateData.student_total = totals.studentTotal;
-    } else if (role === 'CLASS_PRESIDENT') {
+    } else if (role === 'CLASS_COMMITTEE') {
       updateData.class_total = totals.classTotal;
     } else if (role === 'ADVISOR') {
       updateData.advisor_total = totals.advisorTotal;
@@ -545,6 +545,33 @@ export class ScoringService {
       where: { id: form.id },
       data: updateData,
     });
+
+    // BẮN THÔNG BÁO CHO NGƯỜI NHẬN TIẾP THEO (LỚP TRƯỞNG / CỐ VẤN)
+    try {
+      if (role === 'STUDENT') {
+        const studentInfo = await prisma.users.findFirst({ where: { id: studentId }, select: { full_name: true, class_id: true }});
+        if (studentInfo) {
+          const classMonitors = await prisma.users.findMany({
+            where: { class_id: studentInfo.class_id, role: 'CLASS_COMMITTEE' },
+            select: { id: true }
+          });
+          if (classMonitors.length > 0) {
+            await prisma.notifications.createMany({
+              data: classMonitors.map(monitor => ({
+                id: randomUUID(),
+                user_id: monitor.id,
+                type: 'SCORE_SUBMITTED',
+                title: 'Có phiếu rèn luyện mới gửi lên',
+                content: `Sinh viên ${studentInfo.full_name} đã nộp tự đánh giá điểm rèn luyện. Vui lòng chấm duyệt.`,
+                is_read: 0,
+              }))
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Lỗi khi gửi thông báo nội bộ:', err);
+    }
 
     return {
       message: this.getSuccessMessage(role),
@@ -606,7 +633,7 @@ export class ScoringService {
     switch (role) {
       case 'STUDENT':
         return 'Nộp phiếu thành công! Phiếu đã được chuyển cho Lớp trưởng xét duyệt.';
-      case 'CLASS_PRESIDENT':
+      case 'CLASS_COMMITTEE':
         return 'Duyệt thành công! Phiếu đã được chuyển cho Cố vấn học tập.';
       case 'ADVISOR':
         return 'Phê duyệt hoàn tất! Phiếu đã được chốt sổ cuối cùng.';
