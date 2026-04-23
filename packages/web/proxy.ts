@@ -1,29 +1,51 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
+const ROLE_REDIRECTS: Record<string, string> = {
+  STUDENT: '/student',
+  CLASS_PRESIDENT: '/class-president',
+  CLASS_COMMITTEE: '/class-president',
+  ADVISOR: '/advisor',
+  SCHOOL_ADMIN: '/admin',
+  SUPER_ADMIN: '/admin',
+};
+
 export default withAuth(
   function middleware(req) {
     const role = req.nextauth.token?.role as string;
     const path = req.nextUrl.pathname;
 
+    // Root "/" → redirect to role-based dashboard
+    if (path === '/') {
+      const destination = ROLE_REDIRECTS[role] || '/student';
+      return NextResponse.redirect(new URL(destination, req.url));
+    }
+
     // Admin routes
     if (path.startsWith('/admin') && role !== 'SCHOOL_ADMIN' && role !== 'SUPER_ADMIN') {
-      return NextResponse.redirect(new URL('/', req.url));
+      const destination = ROLE_REDIRECTS[role] || '/student';
+      return NextResponse.redirect(new URL(destination, req.url));
     }
     // Class president routes
     if (path.startsWith('/class-president') && role !== 'CLASS_COMMITTEE' && role !== 'CLASS_PRESIDENT') {
-      return NextResponse.redirect(new URL('/', req.url));
+      const destination = ROLE_REDIRECTS[role] || '/student';
+      return NextResponse.redirect(new URL(destination, req.url));
     }
     // Advisor routes
     if (path.startsWith('/advisor') && role !== 'ADVISOR') {
-      return NextResponse.redirect(new URL('/', req.url));
+      const destination = ROLE_REDIRECTS[role] || '/student';
+      return NextResponse.redirect(new URL(destination, req.url));
     }
     // Student routes
     if (path.startsWith('/student') && role !== 'STUDENT') {
-      return NextResponse.redirect(new URL('/', req.url));
+      const destination = ROLE_REDIRECTS[role] || '/student';
+      return NextResponse.redirect(new URL(destination, req.url));
     }
   },
   {
+    pages: {
+      signIn: '/login',
+    },
     callbacks: {
       authorized: ({ token }) => !!token,
     },
@@ -31,5 +53,6 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico|api).*)"],
+  // Protect all dashboard routes + root. Login page remains public.
+  matcher: ["/", "/admin/:path*", "/student/:path*", "/class-president/:path*", "/advisor/:path*"],
 };

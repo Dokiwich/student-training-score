@@ -70,14 +70,37 @@ export class ScoringService {
       select: { id: true, class_id: true, role: true },
     });
 
-    if (!currentUser || !currentUser.class_id) {
-      return { message: 'Không tìm thấy lớp', data: [] };
+    if (!currentUser) {
+      return { message: 'Không tìm thấy người dùng', data: [] };
     }
 
-    // Lấy tất cả sinh viên cùng lớp
+    // Xác định class_id:
+    // - Sinh viên / Lớp trưởng: lấy trực tiếp từ users.class_id
+    // - Cố vấn học tập: lấy từ bảng class_roles (vì ADVISOR không có class_id trên users)
+    let classIds: string[] = [];
+
+    if (currentUser.class_id) {
+      classIds = [currentUser.class_id];
+    } else {
+      // Tìm trong class_roles (cho ADVISOR hoặc các role khác không có class_id)
+      const classRoles = await prisma.class_roles.findMany({
+        where: {
+          user_id: currentUser.id,
+          is_active: 1,
+        },
+        select: { class_id: true },
+      });
+      classIds = classRoles.map((cr) => cr.class_id);
+    }
+
+    if (classIds.length === 0) {
+      return { message: 'Không tìm thấy lớp phụ trách', data: [] };
+    }
+
+    // Lấy tất cả sinh viên cùng lớp (hỗ trợ nhiều lớp cho ADVISOR)
     const students = await prisma.users.findMany({
       where: {
-        class_id: currentUser.class_id,
+        class_id: { in: classIds },
         role: 'STUDENT',
         is_active: 1,
       },
@@ -130,7 +153,7 @@ export class ScoringService {
     return {
       message: 'Lấy danh sách sinh viên thành công',
       data,
-      classId: currentUser.class_id,
+      classId: classIds.length === 1 ? classIds[0] : classIds.join(','),
     };
   }
 
@@ -332,11 +355,7 @@ export class ScoringService {
       );
     }
 
-    if (score > criteria.max_points) {
-      throw new BadRequestException(
-        `Điểm không được vượt quá ${criteria.max_points} (tiêu chí "${criteria.code}")`,
-      );
-    }
+    // Đã bỏ giới hạn max_points — cho phép vượt quá (1 SV tham gia nhiều CLB)
 
     return { form, criteria };
   }
@@ -549,7 +568,7 @@ export class ScoringService {
     // BẮN THÔNG BÁO CHO NGƯỜI NHẬN TIẾP THEO (LỚP TRƯỞNG / CỐ VẤN)
     try {
       if (role === 'STUDENT') {
-        const studentInfo = await prisma.users.findFirst({ where: { id: studentId }, select: { full_name: true, class_id: true }});
+        const studentInfo = await prisma.users.findFirst({ where: { id: studentId }, select: { full_name: true, class_id: true } });
         if (studentInfo) {
           const classMonitors = await prisma.users.findMany({
             where: { class_id: studentInfo.class_id, role: 'CLASS_COMMITTEE' },

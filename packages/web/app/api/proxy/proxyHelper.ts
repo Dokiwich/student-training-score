@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
-const BACKEND_URL = 'http://127.0.0.1:3000';
+const BACKEND_URL = 'http://127.0.0.1:3001';
 
 /**
  * Forward a request from the browser to the NestJS backend,

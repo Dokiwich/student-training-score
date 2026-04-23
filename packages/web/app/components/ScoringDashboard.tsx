@@ -41,13 +41,13 @@ interface ScoringDashboardProps {
 
 const ROLE_META = {
   CLASS_PRESIDENT: {
-    title: 'Ban Can Su Cham Diem',
-    subtitle: 'Xet duyet ren luyen HK1 - 2026',
+    title: 'Ban Cán Sự Chấm Điểm',
+    subtitle: 'Xét duyệt rèn luyện HK1 - 2026',
     scoreCol: 'classTotal' as const,
   },
   ADVISOR: {
-    title: 'Co Van Duyet Diem',
-    subtitle: 'Xet duyet ren luyen HK1 - 2026',
+    title: 'Cố Vấn Duyệt Điểm',
+    subtitle: 'Xét duyệt rèn luyện HK1 - 2026',
     scoreCol: 'advisorTotal' as const,
   },
 };
@@ -60,6 +60,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
   const [search, setSearch] = useState('');
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const meta = ROLE_META[role];
 
@@ -67,12 +68,28 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
     if (!session?.user) return;
     const fetchStudents = async () => {
       setIsLoading(true);
+      setFetchError(null);
       try {
-        const res = await fetch(`${API_BASE}/scoring/students`, { credentials: 'include' });
+        const customJwt = (session as any)?.customJwt;
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (customJwt) headers['Authorization'] = `Bearer ${customJwt}`;
+
+        const res = await fetch(`${API_BASE}/scoring/students`, {
+          headers,
+          credentials: 'include',
+        });
         if (res.ok) {
           const json = await res.json();
+          console.log('[ScoringDashboard] students:', json.data?.length, 'classId:', json.classId);
           setStudents(json.data || []);
+        } else {
+          const errText = await res.text();
+          console.error('[ScoringDashboard] Fetch error:', res.status, errText);
+          setFetchError(`Lỗi ${res.status}: ${errText}`);
         }
+      } catch (err) {
+        console.error('[ScoringDashboard] Network error:', err);
+        setFetchError('Không thể kết nối máy chủ');
       } finally {
         setIsLoading(false);
       }
@@ -135,7 +152,12 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {isLoading ? (
+            {fetchError ? (
+              <div className="p-4 text-center">
+                <p className="text-xs text-red-500 font-bold mb-2">Lỗi tải danh sách</p>
+                <p className="text-[10px] text-red-400 break-all">{fetchError}</p>
+              </div>
+            ) : isLoading ? (
               <div className="p-3 space-y-2">
                 {[1, 2, 3, 4, 5].map((i) => (
                   <div key={i} className="h-12 bg-gray-100 animate-pulse" />
@@ -192,7 +214,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
                     </button>
                   );
                 })}
-                {filtered.length === 0 && <p className="text-center text-xs text-gray-400 py-6">Khong tim thay SV</p>}
+                {filtered.length === 0 && <p className="text-center text-xs text-gray-400 py-6">Không tìm thấy SV</p>}
               </div>
             )}
           </div>

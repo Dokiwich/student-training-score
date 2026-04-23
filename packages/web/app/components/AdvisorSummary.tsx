@@ -19,12 +19,12 @@ interface StudentSummary {
 }
 
 const CLASSIFICATION_LABELS: Record<string, string> = {
-  EXCELLENT: 'Xuat sac',
-  VERY_GOOD: 'Gioi',
-  GOOD: 'Kha',
-  AVERAGE: 'Trung binh',
-  WEAK: 'Yeu',
-  POOR: 'Kem',
+  EXCELLENT: 'Xuất sắc',
+  VERY_GOOD: 'Giỏi',
+  GOOD: 'Khá',
+  AVERAGE: 'Trung bình',
+  WEAK: 'Yếu',
+  POOR: 'Kém',
 };
 
 export function AdvisorSummary() {
@@ -39,7 +39,14 @@ export function AdvisorSummary() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/scoring/students`, { credentials: 'include' });
+        const customJwt = (session as any)?.customJwt;
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (customJwt) headers['Authorization'] = `Bearer ${customJwt}`;
+
+        const res = await fetch(`${API_BASE}/scoring/students`, {
+          headers,
+          credentials: 'include',
+        });
         if (res.ok) {
           const json = await res.json();
           setStudents(json.data || []);
@@ -66,7 +73,7 @@ export function AdvisorSummary() {
   }, [students]);
 
   const exportCSV = () => {
-    const header = ['STT', 'MSSV', 'Ho va Ten', 'Lop', 'Diem SV', 'Diem BCS', 'Diem CVHT', 'Xep loai', 'Ghi chu'];
+    const header = ['STT', 'MSSV', 'Họ và Tên', 'Lớp', 'Điểm SV', 'Điểm BCS', 'Điểm CVHT', 'Xếp loại', 'Ghi chú'];
     const rows = students.map((s, i) => [
       i + 1,
       s.studentCode || '',
@@ -133,7 +140,7 @@ export function AdvisorSummary() {
           className="px-4 py-2 bg-black text-white text-sm font-bold hover:bg-gray-800 transition-colors"
           id="export-csv-btn"
         >
-          Xuat Excel (CSV)
+          Xuất Excel (CSV)
         </button>
       </div>
 
@@ -145,13 +152,13 @@ export function AdvisorSummary() {
               <tr className="bg-black text-white text-xs uppercase tracking-wider">
                 <th className="p-3 w-12 text-center border-r border-gray-700">STT</th>
                 <th className="p-3 w-28 border-r border-gray-700">MSSV</th>
-                <th className="p-3 border-r border-gray-700">Ho va Ten</th>
-                <th className="p-3 w-24 border-r border-gray-700">Lop</th>
-                <th className="p-3 w-20 text-center border-r border-gray-700">Diem SV</th>
-                <th className="p-3 w-20 text-center border-r border-gray-700">Diem BCS</th>
-                <th className="p-3 w-20 text-center border-r border-gray-700">Diem CVHT</th>
-                <th className="p-3 w-24 text-center border-r border-gray-700">Xep loai</th>
-                <th className="p-3">Ghi chu</th>
+                <th className="p-3 border-r border-gray-700">Họ và Tên</th>
+                <th className="p-3 w-24 border-r border-gray-700">Lớp</th>
+                <th className="p-3 w-20 text-center border-r border-gray-700">Điểm SV</th>
+                <th className="p-3 w-20 text-center border-r border-gray-700">Điểm BCS</th>
+                <th className="p-3 w-20 text-center border-r border-gray-700">Điểm CVHT</th>
+                <th className="p-3 w-24 text-center border-r border-gray-700">Xếp loại</th>
+                <th className="p-3">Ghi chú</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -182,7 +189,7 @@ export function AdvisorSummary() {
                       <td className="p-3">
                         <input
                           type="text"
-                          placeholder="Nhap ghi chu..."
+                          placeholder="Nhập ghi chú..."
                           value={notes[student.id] || ''}
                           onChange={(e) => setNotes((prev) => ({ ...prev, [student.id]: e.target.value }))}
                           className="w-full text-sm border-0 bg-transparent outline-none placeholder-gray-300 focus:bg-gray-50 px-1 py-0.5"
