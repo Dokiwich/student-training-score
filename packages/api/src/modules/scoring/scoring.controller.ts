@@ -9,8 +9,8 @@ export class ScoringController {
 
   @Get('students')
   async getStudents(@Req() req: any) {
-    const studentId = req.user?.studentId;
-    return this.scoringService.getStudentListByUser(studentId);
+    const userId = req.user?.id;
+    return this.scoringService.getStudentListByUser(userId);
   }
 
   @Get(':formId/scores')
@@ -33,9 +33,6 @@ export class ScoringController {
     @Body('proofUrl') proofUrl?: string
   ) {
     let activeRole = req.user?.role || 'STUDENT';
-    if (activeRole === 'CLASS_PRESIDENT') {
-      activeRole = 'CLASS_COMMITTEE';
-    }
     return this.scoringService.submitCriteria(formId, criteriaId, score, activeRole, studentId, proofUrl);
   }
 
@@ -46,9 +43,16 @@ export class ScoringController {
     @Req() req: any
   ) {
     let activeRole = req.user?.role || 'STUDENT';
-    if (activeRole === 'CLASS_PRESIDENT') {
-      activeRole = 'CLASS_COMMITTEE';
-    }
     return this.scoringService.submitForm(formId, activeRole, studentId);
+  }
+
+  @Post(':formId/reject')
+  async rejectForm(
+    @Param('formId') formId: string,
+    @Body('studentId') studentId: string,
+    @Req() req: any
+  ) {
+    let activeRole = req.user?.role || 'STUDENT';
+    return this.scoringService.rejectForm(formId, activeRole, studentId);
   }
 }

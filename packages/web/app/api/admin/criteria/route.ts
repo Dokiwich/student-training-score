@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function checkAdmin(session: any) {
-  if (!session?.user || !['SCHOOL_ADMIN', 'SUPER_ADMIN'].includes((session.user as { role?: string }).role || '')) {
+  if (!session?.user || (session.user as { role?: string }).role !== 'SCHOOL_ADMIN') {
     return false;
   }
   return true;

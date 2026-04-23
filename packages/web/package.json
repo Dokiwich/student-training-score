@@ -14,6 +14,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "bcrypt": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^1.7.0",
     "next": "16.2.0",
     "next-auth": "^4.24.13",
     "react": "19.2.4",

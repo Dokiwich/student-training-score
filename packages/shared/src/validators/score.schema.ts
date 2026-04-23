@@ -7,15 +7,14 @@ export const SubmitScoreSchema = z.object({
     invalid_type_error: 'Mã tiêu chí phải là số',
   }).int('Mã tiêu chí phải là số nguyên'),
 
-  // Điểm số bắt buộc là số, từ 0 đến tối đa 100 điểm
-  // Chỉ cho phép tối đa 1 chữ số thập phân (khớp DB Decimal(5,1))
+  // Điểm số bắt buộc là số, từ 0 trở lên
+  // Không giới hạn max ở đây — trần điểm do mục cha quy định (frontend tính)
+  // DB column: Decimal(5,2) → max vật lý: 999.99
   studentScore: z.number({
     required_error: 'Bắt buộc phải nhập điểm',
     invalid_type_error: 'Điểm rèn luyện phải là một con số',
   })
-  .min(0, 'Điểm rèn luyện không được là số âm')
-  .max(100, 'Điểm rèn luyện không được vượt quá 100')
-  .multipleOf(0.1, 'Điểm rèn luyện chỉ được có tối đa 1 chữ số thập phân'),
+  .min(0, 'Điểm rèn luyện không được là số âm'),
 });
 
 // Zod tự động dịch Schema trên thành Type cho TypeScript xài

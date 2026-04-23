@@ -19,9 +19,16 @@ export const authOptions: AuthOptions = {
           return null;
         }
         
-        const user = await prisma.users.findFirst({
+        // Try finding by student_id first, then by email
+        let user = await prisma.users.findFirst({
           where: { student_id: credentials.username }
         });
+        
+        if (!user) {
+          user = await prisma.users.findFirst({
+            where: { email: credentials.username }
+          });
+        }
 
         if (!user) {
           return null;
@@ -30,7 +37,7 @@ export const authOptions: AuthOptions = {
         const isPasswordValid = await bcrypt.compare(credentials.password, user.password_hash);
         if (!isPasswordValid) return null;
 
-        const mappedRole = user.role === 'CLASS_COMMITTEE' ? 'CLASS_PRESIDENT' : user.role;
+        const mappedRole = user.role;
 
         return {
           id: user.id,

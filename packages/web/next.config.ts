@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/proxy-api/:path*',
-        destination: 'http://127.0.0.1:3000/api/:path*',
+        destination: 'http://127.0.0.1:3001/api/:path*',
       },
     ]
   }

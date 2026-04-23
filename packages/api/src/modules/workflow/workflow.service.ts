@@ -1,9 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaClient } from '@student-score/database'; 
+import { prisma } from '@student-score/database'; 
 // Import bộ luật xịn xò từ Shared
 import { WORKFLOW_RULES, WorkflowAction } from '@student-score/shared';
-
-const prisma = new PrismaClient();
 
 @Injectable()
 export class WorkflowService {

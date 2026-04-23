@@ -6,11 +6,9 @@ import Link from 'next/link';
 
 const ROLE_LABELS: Record<string, string> = {
   STUDENT: 'Sinh viên',
-  CLASS_PRESIDENT: 'Ban cán sự',
   CLASS_COMMITTEE: 'Ban cán sự',
   ADVISOR: 'Cố vấn học tập',
   SCHOOL_ADMIN: 'Quản trị viên',
-  SUPER_ADMIN: 'Quản trị cấp cao',
 };
 
 export function UserMenu() {
@@ -34,85 +32,90 @@ export function UserMenu() {
   const name = user.name || 'Người dùng';
   const role = user.role || '';
   const roleLabel = ROLE_LABELS[role] || role;
+  const initial = name.split(' ').pop()?.[0]?.toUpperCase() || '?';
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="relative" ref={menuRef}>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-2 cursor-pointer px-3 py-2 border border-gray-200 hover:bg-gray-50 transition-colors text-sm"
-          id="user-menu-button"
-        >
-          <span className="font-bold text-black">{name}</span>
-          <span className="text-gray-400">|</span>
-          <span className="text-gray-500 text-xs">{roleLabel}</span>
-        </button>
-
-        {open && (
-          <div className="absolute right-0 mt-1 w-56 bg-white border border-gray-200 py-1 z-50 animate-fade-in shadow-md">
-            <div className="px-4 py-3 border-b border-gray-100">
-              <p className="text-sm font-bold text-black">{name}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{roleLabel}</p>
-              {user.studentId && (
-                <p className="text-xs text-gray-400 mt-0.5">MSSV: {user.studentId}</p>
-              )}
-            </div>
-
-            <div className="px-2 py-1 border-b border-gray-100 text-sm">
-              {role === 'STUDENT' ? (
-                <>
-                  <Link
-                    href="/student"
-                    className="block px-3 py-2 text-black hover:bg-gray-50"
-                    onClick={() => setOpen(false)}
-                  >
-                    Trang tự chấm
-                  </Link>
-                  <Link
-                    href="/student/history"
-                    className="block px-3 py-2 text-black hover:bg-gray-50"
-                    onClick={() => setOpen(false)}
-                  >
-                    Lịch sử đánh giá
-                  </Link>
-                </>
-              ) : (
-                <Link
-                  href={
-                    role === 'CLASS_PRESIDENT' || role === 'CLASS_COMMITTEE'
-                      ? '/class-president'
-                      : role === 'SCHOOL_ADMIN' || role === 'SUPER_ADMIN'
-                      ? '/admin'
-                      : '/advisor'
-                  }
-                  className="block px-3 py-2 text-black hover:bg-gray-50"
-                  onClick={() => setOpen(false)}
-                >
-                  Bảng điều khiển
-                </Link>
-              )}
-            </div>
-
-            <div className="px-2 py-1">
-              <button
-                onClick={() => signOut({ callbackUrl: '/login' })}
-                className="w-full text-left px-3 py-2 text-sm text-black hover:bg-gray-50"
-                id="logout-button-menu"
-              >
-                Đăng xuất
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-      
+    <div style={{ position: 'relative' }} ref={menuRef}>
       <button
-        onClick={() => signOut({ callbackUrl: '/login' })}
-        className="px-4 py-2 text-sm font-bold bg-black text-white hover:bg-gray-800 transition-colors"
-        id="logout-button-direct"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 12px', borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border)', background: 'var(--bg-surface)',
+          cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'inherit',
+        }}
+        id="user-menu-button"
       >
-        Đăng xuất
+        <div style={{
+          width: 28, height: 28, borderRadius: 'var(--radius)',
+          background: 'var(--accent)', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 700,
+        }}>{initial}</div>
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{name}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{roleLabel}</div>
+        </div>
       </button>
+
+      {open && (
+        <div className="animate-fade-in" style={{
+          position: 'absolute', right: 0, top: '100%', marginTop: 4,
+          width: 220, background: 'var(--bg-surface)',
+          border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-lg)', zIndex: 50, overflow: 'hidden',
+        }}>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-light)' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{name}</p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>{roleLabel}</p>
+            {user.studentId && (
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0', fontFamily: 'var(--font-mono)' }}>MSSV: {user.studentId}</p>
+            )}
+          </div>
+
+          <div style={{ padding: 4, borderBottom: '1px solid var(--border-light)' }}>
+            {role === 'STUDENT' ? (
+              <>
+                <Link href="/student" onClick={() => setOpen(false)}
+                  style={{ display: 'block', padding: '8px 12px', fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'none', borderRadius: 'var(--radius)', transition: 'background 0.1s' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-hover)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  Trang tự chấm
+                </Link>
+                <Link href="/student/history" onClick={() => setOpen(false)}
+                  style={{ display: 'block', padding: '8px 12px', fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'none', borderRadius: 'var(--radius)', transition: 'background 0.1s' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-hover)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  Lịch sử đánh giá
+                </Link>
+              </>
+            ) : (
+              <Link
+                href={role === 'CLASS_COMMITTEE' ? '/class-president' : role === 'SCHOOL_ADMIN' ? '/admin' : '/advisor'}
+                onClick={() => setOpen(false)}
+                style={{ display: 'block', padding: '8px 12px', fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'none', borderRadius: 'var(--radius)', transition: 'background 0.1s' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-hover)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                Bảng điều khiển
+              </Link>
+            )}
+          </div>
+
+          <div style={{ padding: 4 }}>
+            <button
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              style={{
+                width: '100%', textAlign: 'left', padding: '8px 12px',
+                fontSize: 13, color: 'var(--danger)', background: 'none',
+                border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer',
+                fontFamily: 'inherit', transition: 'background 0.1s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--danger-bg)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              id="logout-button-menu"
+            >
+              Đăng xuất
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

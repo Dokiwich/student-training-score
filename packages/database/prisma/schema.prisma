@@ -410,7 +410,6 @@ enum users_role {
   CLASS_COMMITTEE
   ADVISOR
   SCHOOL_ADMIN
-  SUPER_ADMIN
 }
 
 enum scoring_sheets_classification {

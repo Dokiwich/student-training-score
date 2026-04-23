@@ -5,6 +5,9 @@
     "esModuleInterop": true,
     "types": ["node"],
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "module": "commonjs"
   }
 }

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin", "vietnamese"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -15,8 +16,8 @@ const geistMono = Geist_Mono({
 import { Providers } from "./components/Providers";
 
 export const metadata: Metadata = {
-  title: "He thong Cham diem Ren luyen",
-  description: "He thong quan ly va cham diem ren luyen sinh vien",
+  title: "Hệ Thống Chấm Điểm Rèn Luyện",
+  description: "Hệ thống quản lý và chấm điểm rèn luyện sinh viên",
 };
 
 export default function RootLayout({
@@ -27,9 +28,9 @@ export default function RootLayout({
   return (
     <html
       lang="vi"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex bg-white">
+      <body className="min-h-full" style={{ background: 'var(--bg-page)', fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
         <Providers>
           <main className="flex-1 min-h-screen">
             {children}

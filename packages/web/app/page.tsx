@@ -1,32 +1,36 @@
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "./api/auth/[...nextauth]/route";
+'use client';
 
-export default async function RootPage() {
-  const session = await getServerSession(authOptions);
-  
-  if (!session) {
-    redirect('/login');
-  }
+import { useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 
-  const role = (session.user as { role?: string })?.role;
+const ROLE_REDIRECTS: Record<string, string> = {
+  STUDENT: '/student',
+  CLASS_COMMITTEE: '/class-president',
+  ADVISOR: '/advisor',
+  SCHOOL_ADMIN: '/admin',
+};
 
-  if (role === 'STUDENT') {
-    redirect('/student');
-  } else if (role === 'CLASS_COMMITTEE' || role === 'CLASS_PRESIDENT') {
-    redirect('/class-president');
-  } else if (role === 'ADVISOR') {
-    redirect('/advisor');
-  } else if (role === 'SCHOOL_ADMIN' || role === 'SUPER_ADMIN') {
-    redirect('/admin');
-  }
+export default function HomePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === 'loading') return;
+
+    if (!session) {
+      router.replace('/login');
+      return;
+    }
+
+    const role = (session.user as { role?: string })?.role || 'STUDENT';
+    const destination = ROLE_REDIRECTS[role] || '/student';
+    router.replace(destination);
+  }, [session, status, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white">
-      <div className="p-8 text-center border border-gray-200">
-        <h2 className="text-lg font-bold text-black">Khong ho tro chuc nang</h2>
-        <p className="text-gray-500 mt-2 text-sm">Vai tro cua ban chua duoc thiet lap tren he thong.</p>
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <p style={{ color: '#9ca3af', fontSize: 14 }}>Đang chuyển hướng...</p>
     </div>
   );
 }
