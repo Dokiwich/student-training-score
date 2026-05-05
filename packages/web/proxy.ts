@@ -1,6 +1,15 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
+const ROLE_REDIRECTS: Record<string, string> = {
+  STUDENT: '/student',
+  CLASS_COMMITTEE: '/class-president',
+  CLASS_PRESIDENT: '/class-president',
+  ADVISOR: '/advisor',
+  SCHOOL_ADMIN: '/admin',
+  SUPER_ADMIN: '/admin',
+};
+
 export default withAuth(
   function middleware(req) {
     const role = req.nextauth.token?.role as string;

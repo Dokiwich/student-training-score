@@ -67,6 +67,57 @@ export async function GET(req: Request) {
   });
 }
 
+import bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
+
+export async function POST(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!isAdmin(session)) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
+  }
+
+  try {
+    const body = await req.json();
+    const { full_name, email, password, student_id, role, department_id, class_id } = body;
+
+    if (!full_name || !email || !password || !role) {
+      return NextResponse.json({ message: 'Vui lòng nhập đầy đủ các trường bắt buộc' }, { status: 400 });
+    }
+
+    const existingUser = await prisma.users.findUnique({ where: { email } });
+    if (existingUser) {
+      return NextResponse.json({ message: 'Email đã tồn tại' }, { status: 400 });
+    }
+    
+    if (student_id) {
+      const existingStudentId = await prisma.users.findUnique({ where: { student_id } });
+      if (existingStudentId) {
+        return NextResponse.json({ message: 'Mã số sinh viên đã tồn tại' }, { status: 400 });
+      }
+    }
+
+    const password_hash = await bcrypt.hash(password, 10);
+    const newUser = await prisma.users.create({
+      data: {
+        id: randomUUID(),
+        full_name,
+        email,
+        password_hash,
+        student_id: student_id || null,
+        role,
+        department_id: department_id || null,
+        class_id: class_id || null,
+        is_active: 1
+      }
+    });
+
+    return NextResponse.json({ message: 'Thêm tài khoản thành công', data: { id: newUser.id } });
+  } catch (err: any) {
+    console.error('Add user error:', err);
+    return NextResponse.json({ message: 'Lỗi server khi thêm tài khoản' }, { status: 500 });
+  }
+}
+
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isAdmin(session)) {

@@ -46,8 +46,7 @@ const STATE_TRANSITIONS: Record<string, {
   },
 };
 
-// ✅ MA TRẬN QUYỀN CHẤM ĐIỂM
-// Role nào được chấm ở trạng thái nào?
+
 const SCORING_PERMISSIONS: Record<string, string> = {
   STUDENT: WorkflowStatus.DRAFT,
   CLASS_COMMITTEE: WorkflowStatus.SUBMITTED,
@@ -100,7 +99,7 @@ export class ScoringService {
     const students = await prisma.users.findMany({
       where: {
         class_id: { in: classIds },
-        role: 'STUDENT',
+        role: { in: ['STUDENT', 'CLASS_COMMITTEE'] },
         is_active: 1,
       },
       select: {

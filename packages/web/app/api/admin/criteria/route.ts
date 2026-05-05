@@ -32,7 +32,7 @@ export async function GET() {
   });
 }
 
-// PUT: update criterion
+// PUT: update criterion or category
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
   if (!checkAdmin(session)) {
@@ -41,6 +41,25 @@ export async function PUT(req: Request) {
 
   try {
     const body = await req.json();
+
+    if (body._type === 'category') {
+      const { id, name, max_score, code } = body;
+      if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
+
+      const updateData: Record<string, unknown> = {};
+      if (name !== undefined) updateData.name = name;
+      if (max_score !== undefined) updateData.max_score = parseFloat(max_score);
+      if (code !== undefined) updateData.code = code;
+
+      const updated = await prisma.criteria_categories.update({
+        where: { id },
+        data: updateData,
+      });
+
+      return NextResponse.json({ message: 'Cập nhật mục thành công', data: updated });
+    }
+
+    // Update criterion
     const { id, max_points, content, code } = body;
     if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
 
@@ -54,10 +73,10 @@ export async function PUT(req: Request) {
       data: updateData,
     });
 
-    return NextResponse.json({ message: 'Cap nhat thanh cong', data: updated });
+    return NextResponse.json({ message: 'Cập nhật tiêu chí thành công', data: updated });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ message: 'Loi server' }, { status: 500 });
+    return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }
 }
 
@@ -74,7 +93,7 @@ export async function POST(req: Request) {
     // Create category
     if (body._type === 'category') {
       const { code, name, max_score } = body;
-      if (!code || !name) return NextResponse.json({ message: 'Thieu ma hoac ten muc' }, { status: 400 });
+      if (!code || !name) return NextResponse.json({ message: 'Thiếu mã hoặc tên mục' }, { status: 400 });
 
       // Get active criteria version
       const activeVersion = await prisma.criteria_versions.findFirst({
@@ -83,7 +102,7 @@ export async function POST(req: Request) {
       });
 
       if (!activeVersion) {
-        return NextResponse.json({ message: 'Khong tim thay phien ban tieu chi dang hoat dong' }, { status: 400 });
+        return NextResponse.json({ message: 'Không tìm thấy phiên bản tiêu chí đang hoạt động' }, { status: 400 });
       }
 
       const maxOrder = await prisma.criteria_categories.aggregate({
@@ -102,12 +121,12 @@ export async function POST(req: Request) {
         },
       });
 
-      return NextResponse.json({ message: 'Them muc thanh cong', data: newCat });
+      return NextResponse.json({ message: 'Thêm mục thành công', data: newCat });
     }
 
     // Create criterion
     const { code, content, max_points, parent_id, category_id } = body;
-    if (!code || !content) return NextResponse.json({ message: 'Thieu ma hoac noi dung' }, { status: 400 });
+    if (!code || !content) return NextResponse.json({ message: 'Thiếu mã hoặc nội dung tiêu chí' }, { status: 400 });
 
     const newCriteria = await prisma.criteria.create({
       data: {
@@ -121,10 +140,10 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json({ message: 'Them tieu chi thanh cong', data: newCriteria });
+    return NextResponse.json({ message: 'Thêm tiêu chí thành công', data: newCriteria });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ message: 'Loi server' }, { status: 500 });
+    return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }
 }
 
@@ -142,7 +161,7 @@ export async function DELETE(req: Request) {
       // Delete all criteria in this category first
       await prisma.criteria.deleteMany({ where: { category_id: body.id } });
       await prisma.criteria_categories.delete({ where: { id: body.id } });
-      return NextResponse.json({ message: 'Da xoa muc va tat ca tieu chi lien quan' });
+      return NextResponse.json({ message: 'Đã xóa mục và tất cả tiêu chí liên quan' });
     }
 
     // Delete criterion
@@ -153,9 +172,9 @@ export async function DELETE(req: Request) {
     await prisma.criteria.deleteMany({ where: { parent_id: typeof id === 'string' ? parseInt(id) : id } });
     await prisma.criteria.delete({ where: { id: typeof id === 'string' ? parseInt(id) : id } });
 
-    return NextResponse.json({ message: 'Da xoa tieu chi thanh cong' });
+    return NextResponse.json({ message: 'Đã xóa tiêu chí thành công' });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ message: 'Loi khi xoa. Co the tieu chi dang duoc su dung.' }, { status: 500 });
+    return NextResponse.json({ message: 'Lỗi khi xóa. Có thể tiêu chí đang được sử dụng.' }, { status: 500 });
   }
 }

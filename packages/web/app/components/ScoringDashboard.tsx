@@ -41,7 +41,7 @@ interface ScoringDashboardProps {
 }
 
 const ROLE_META = {
-  CLASS_PRESIDENT: {
+  CLASS_COMMITTEE: {
     title: 'Ban Can Su Cham Diem',
     subtitle: 'Xet duyet ren luyen HK1 - 2026',
     scoreCol: 'classTotal' as const,
@@ -59,6 +59,9 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
 
   const meta = ROLE_META[role];
 
@@ -68,7 +71,11 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
       setIsLoading(true);
       setFetchError(null);
       try {
-        const res = await fetch(`${API_BASE}/scoring/students`, { credentials: 'include' });
+        const customJwt = (session as any)?.customJwt;
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (customJwt) headers['Authorization'] = `Bearer ${customJwt}`;
+
+        const res = await fetch(`${API_BASE}/scoring/students`, { headers, credentials: 'include' });
         if (res.ok) {
           const json = await res.json();
           console.log('[ScoringDashboard] students:', json.data?.length, 'classId:', json.classId);

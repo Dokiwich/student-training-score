@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 interface UserItem { id: string; student_id: string | null; email: string; full_name: string; phone: string | null; role: string; class_id: string | null; department_id: string | null; className: string; departmentName: string; is_active: number; }
 interface Dept { id: string; code: string; name: string; }
@@ -18,13 +19,24 @@ export function UsersTab() {
   const [depts, setDepts] = useState<Dept[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterRole, setFilterRole] = useState('');
+  const searchParams = useSearchParams();
+  const urlRole = searchParams.get('role');
+  const [filterRole, setFilterRole] = useState(urlRole || '');
   const [filterDept, setFilterDept] = useState('');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<UserItem | null>(null);
   const [editRole, setEditRole] = useState('');
   const [editClassId, setEditClassId] = useState('');
   const [editDeptId, setEditDeptId] = useState('');
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newFullname, setNewFullname] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState('STUDENT');
+  const [newStudentId, setNewStudentId] = useState('');
+  const [newDeptId, setNewDeptId] = useState('');
+  const [newClassId, setNewClassId] = useState('');
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -57,6 +69,44 @@ export function UsersTab() {
     } catch { alert('Lỗi kết nối'); }
   };
 
+  const handleAddUser = async () => {
+    if (!newFullname || !newEmail || !newPassword || !newRole) {
+      return alert('Vui lòng nhập đầy đủ thông tin bắt buộc (Họ tên, Email, Mật khẩu, Vai trò)');
+    }
+    try {
+      const r = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: newFullname,
+          email: newEmail,
+          password: newPassword,
+          role: newRole,
+          student_id: newStudentId,
+          department_id: newDeptId,
+          class_id: newClassId
+        }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setShowAddModal(false);
+        setNewFullname('');
+        setNewEmail('');
+        setNewPassword('');
+        setNewStudentId('');
+        setNewRole('STUDENT');
+        setNewDeptId('');
+        setNewClassId('');
+        fetchAll();
+        alert('Thêm tài khoản thành công');
+      } else {
+        alert(d.message);
+      }
+    } catch {
+      alert('Lỗi kết nối');
+    }
+  };
+
   const handleDelete = async (u: UserItem) => {
     if (!confirm(`Xác nhận xóa người dùng "${u.full_name}"?`)) return;
     try {
@@ -72,11 +122,14 @@ export function UsersTab() {
 
   return (
     <div>
-      <div className="dashboard-card-header" style={{ marginBottom: 16 }}>
+      <div className="dashboard-card-header" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 className="dashboard-card-title">Quản lý Người dùng</h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{filtered.length} / {users.length} người dùng</p>
         </div>
+        <button className="btn-primary" onClick={() => setShowAddModal(true)}>
+          Thêm tài khoản
+        </button>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -168,6 +221,59 @@ export function UsersTab() {
             <div className="modal-footer">
               <button onClick={() => setEditing(null)} className="btn-secondary">Hủy</button>
               <button onClick={handleSave} className="btn-primary">Lưu thay đổi</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: 500 }}>
+            <div className="modal-header">
+              <h3 className="modal-header-title">Thêm tài khoản mới</h3>
+              <button onClick={() => setShowAddModal(false)} className="modal-close-btn">✕</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Họ tên *</label>
+                <input type="text" className="form-input" value={newFullname} onChange={e => setNewFullname(e.target.value)} placeholder="Nhập họ tên" />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Email *</label>
+                <input type="email" className="form-input" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Nhập email" />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Mật khẩu *</label>
+                <input type="password" className="form-input" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Nhập mật khẩu" />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Vai trò *</label>
+                <select value={newRole} onChange={e => setNewRole(e.target.value)} className="form-select">
+                  {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">MSSV (Tùy chọn)</label>
+                <input type="text" className="form-input" value={newStudentId} onChange={e => setNewStudentId(e.target.value)} placeholder="Nhập mã số sinh viên" />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Khoa (Tùy chọn)</label>
+                <select value={newDeptId} onChange={e => setNewDeptId(e.target.value)} className="form-select">
+                  <option value="">-- Không chọn --</option>
+                  {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Lớp (Tùy chọn)</label>
+                <select value={newClassId} onChange={e => setNewClassId(e.target.value)} className="form-select">
+                  <option value="">-- Không chọn --</option>
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowAddModal(false)} className="btn-secondary">Hủy</button>
+              <button onClick={handleAddUser} className="btn-primary">Thêm tài khoản</button>
             </div>
           </div>
         </div>

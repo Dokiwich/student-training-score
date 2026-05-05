@@ -1,8 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { UserMenu } from '../components/UserMenu';
+import { DashboardLayout } from '../components/DashboardLayout';
 import { useSession } from 'next-auth/react';
+import { ListTree, Building2, GraduationCap, UserPlus, CalendarDays } from 'lucide-react';
+
+import { UsersTab } from './UsersTab';
+import { SemestersTab } from './SemestersTab';
+import { DepartmentsTab } from './DepartmentsTab';
+import { ClassesTab } from './ClassesTab';
 
 interface Category {
   id: string; code: string; name: string; max_score: number; sort_order: number;
@@ -24,7 +32,16 @@ const TAB_CONFIG: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
 
 export default function AdminPage() {
   return (
-    <Suspense fallback={<DashboardLayout pageTitle="Quản trị hệ thống"><p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 32 }}>Đang tải...</p></DashboardLayout>}>
+    <Suspense fallback={
+      <DashboardLayout pageTitle="Quản trị hệ thống" pageSubtitle="Đang tải dữ liệu...">
+        <div className="flex items-center justify-center h-full">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 rounded-full border-4 border-sky-100 border-t-sky-500 animate-spin"></div>
+            <span className="text-sky-600 text-sm">Đang tải dữ liệu...</span>
+          </div>
+        </div>
+      </DashboardLayout>
+    }>
       <AdminPageInner />
     </Suspense>
   );
@@ -40,6 +57,7 @@ function AdminPageInner() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingCriterion, setEditingCriterion] = useState<Criterion | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [newContent, setNewContent] = useState('');
@@ -82,13 +100,41 @@ function AdminPageInner() {
         alert(data.message);
       }
     } catch {
-      alert('Loi khi sua tieu chi');
+      alert('Lỗi khi sửa tiêu chí');
+    }
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+    try {
+      const res = await fetch('/api/admin/criteria', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _type: 'category',
+          id: editingCategory.id,
+          code: editingCategory.code,
+          name: editingCategory.name,
+          max_score: editingCategory.max_score
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message);
+        setEditingCategory(null);
+        fetchData();
+      } else {
+        alert(data.message);
+      }
+    } catch {
+      alert('Lỗi khi sửa mục');
     }
   };
 
   const handleAddCriterion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCode || !newContent) return alert('Nhập đầy đủ mã và nội dung');
+    if (!newCode || !newContent) return alert('Vui lòng nhập đầy đủ mã và nội dung');
     try {
       const res = await fetch('/api/admin/criteria', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -107,7 +153,7 @@ function AdminPageInner() {
         alert(data.message);
       }
     } catch {
-      alert('Loi khi them tieu chi');
+      alert('Lỗi khi thêm tiêu chí');
     }
   };
 
@@ -118,13 +164,13 @@ function AdminPageInner() {
       const data = await res.json(); alert(data.message);
       if (res.ok) fetchData();
     } catch {
-      alert('Loi khi xoa tieu chi');
+      alert('Lỗi khi xóa tiêu chí');
     }
   };
 
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCatCode || !newCatName) return alert('Nhập đầy đủ mã và tên mục');
+    if (!newCatCode || !newCatName) return alert('Vui lòng nhập đầy đủ mã và tên mục');
     try {
       const res = await fetch('/api/admin/criteria', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -142,7 +188,7 @@ function AdminPageInner() {
         alert(data.message);
       }
     } catch {
-      alert('Loi khi them muc');
+      alert('Lỗi khi thêm mục');
     }
   };
 
@@ -153,12 +199,22 @@ function AdminPageInner() {
       const data = await res.json(); alert(data.message);
       if (res.ok) fetchData();
     } catch {
-      alert('Loi khi xoa muc');
+      alert('Lỗi khi xóa mục');
     }
   };
 
-  if (!session) return <div className="p-8 text-center text-gray-500">Dang tai...</div>;
-  if (!isAdmin) return <div className="p-8 text-center text-black font-bold">Loi: Khong co quyen truy cap!</div>;
+  if (!session) return (
+    <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="w-10 h-10 rounded-full border-4 border-sky-100 border-t-sky-500 animate-spin"></div>
+    </div>
+  );
+  if (!isAdmin) return (
+    <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="p-8 text-center text-red-600 font-bold bg-white rounded-2xl shadow-sm border border-red-100">
+        Lỗi: Bạn không có quyền truy cập trang này!
+      </div>
+    </div>
+  );
 
   // Group criteria by category
   const criteriaByCategory: Record<string, Criterion[]> = {};
@@ -168,178 +224,245 @@ function AdminPageInner() {
   });
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-black">Trang Quan Tri He Thong</h1>
-          <p className="text-sm text-gray-500">Quan ly cau hinh tieu chi cham diem</p>
-        </div>
-        <UserMenu />
-      </div>
+    <DashboardLayout pageTitle="Quản trị Hệ thống" pageSubtitle="Quản lý cấu hình tiêu chí chấm điểm">
+      <div className="max-w-6xl mx-auto p-6 space-y-6">
+        {activeTab === 'users' && <UsersTab />}
+        {activeTab === 'departments' && <DepartmentsTab />}
+        {activeTab === 'classes' && <ClassesTab />}
+        {activeTab === 'semesters' && <SemestersTab />}
 
-      <div className="max-w-7xl mx-auto p-6">
-        {loading ? (
-          <p className="text-gray-500 text-center py-10">Dang tai du lieu...</p>
-        ) : (
-          <div>
-            {/* Actions bar */}
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-black">Quan ly Tieu Chi Cham Diem</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowAddCategoryForm(!showAddCategoryForm)}
-                  className="px-4 py-2 text-sm font-bold border border-gray-300 text-black hover:bg-gray-50"
-                >
-                  {showAddCategoryForm ? 'Dong' : 'Them muc'}
-                </button>
-                <button
-                  onClick={() => setShowAddForm(!showAddForm)}
-                  className="px-4 py-2 text-sm font-bold bg-black text-white hover:bg-gray-800"
-                >
-                  {showAddForm ? 'Dong' : 'Them tieu chi'}
-                </button>
+        {activeTab === 'criteria' && (
+          <>
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-10 h-10 rounded-full border-4 border-sky-100 border-t-sky-500 animate-spin"></div>
+                  <span className="text-sky-600 text-sm">Đang tải dữ liệu...</span>
+                </div>
               </div>
-            </div>
-
-            {/* Add category form */}
-            {showAddCategoryForm && (
-              <form onSubmit={handleAddCategory} className="mb-6 border border-gray-200 p-4 bg-gray-50">
-                <h3 className="font-bold text-sm mb-3">Them muc moi</h3>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <input type="text" placeholder="Ma muc (VD: 7)" value={newCatCode} onChange={(e) => setNewCatCode(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black" />
-                  <input type="text" placeholder="Ten muc" value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 text-sm flex-1 outline-none focus:border-black" />
-                  <input type="number" step="0.1" placeholder="Diem toi da" value={newCatMaxScore} onChange={(e) => setNewCatMaxScore(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 text-sm w-32 outline-none focus:border-black" />
-                  <button type="submit" className="px-4 py-2 bg-black text-white text-sm font-bold hover:bg-gray-800">THEM</button>
-                </div>
-              </form>
-            )}
-
-            {/* Add criterion form */}
-            {showAddForm && (
-              <form onSubmit={handleAddCriterion} className="mb-6 border border-gray-200 p-4 bg-gray-50">
-                <h3 className="font-bold text-sm mb-3">Them tieu chi moi</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                  <input type="text" placeholder="Ma tieu chi (VD: 1.2.3)" value={newCode} onChange={(e) => setNewCode(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black" />
-                  <input type="number" step="0.1" placeholder="Diem toi da" value={newMaxPoints} onChange={(e) => setNewMaxPoints(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black" />
-                  <select value={newCategoryId} onChange={(e) => setNewCategoryId(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black">
-                    <option value="">-- Chon muc --</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>{cat.code} - {cat.name}</option>
-                    ))}
-                  </select>
-                  <input type="number" placeholder="Parent ID (de trong neu la goc)" value={newParentId} onChange={(e) => setNewParentId(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black" />
-                </div>
-                <textarea placeholder="Noi dung tieu chi" value={newContent} onChange={(e) => setNewContent(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black mb-3 min-h-[60px]" />
-                <button type="submit" className="px-4 py-2 bg-black text-white text-sm font-bold hover:bg-gray-800">THEM TIEU CHI</button>
-              </form>
-            )}
-
-            {/* Categories & Criteria */}
-            {categories.map((cat) => (
-              <div key={cat.id} className="mb-6 border border-gray-200">
-                <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-200">
-                  <div>
-                    <span className="font-bold text-black text-sm">[{cat.code}]</span>
-                    <span className="ml-2 text-sm text-gray-700">{cat.name}</span>
-                    <span className="ml-2 text-xs text-gray-400">(Toi da: {cat.max_score} diem)</span>
+            ) : (
+              <div>
+                {/* Actions bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+                  <h2 className="text-xl font-bold text-gray-800">Quản lý Tiêu Chí Chấm Điểm</h2>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowAddCategoryForm(!showAddCategoryForm)}
+                      className="px-5 py-2.5 text-sm font-semibold rounded-xl border border-sky-200 text-sky-700 hover:bg-sky-50 transition-colors shadow-sm"
+                    >
+                      {showAddCategoryForm ? 'Đóng' : 'Thêm mục mới'}
+                    </button>
+                    <button
+                      onClick={() => setShowAddForm(!showAddForm)}
+                      className="px-5 py-2.5 text-sm font-semibold rounded-xl bg-sky-600 text-white hover:bg-sky-700 transition-colors shadow-sm"
+                    >
+                      {showAddForm ? 'Đóng' : 'Thêm tiêu chí'}
+                    </button>
                   </div>
-                  <button onClick={() => handleDeleteCategory(cat.id, cat.name)}
-                    className="text-xs px-3 py-1 border border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-black">
-                    Xoa muc
-                  </button>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-white text-gray-500 text-xs uppercase border-b border-gray-200">
-                        <th className="px-4 py-2 w-16">ID</th>
-                        <th className="px-4 py-2 w-24">Ma</th>
-                        <th className="px-4 py-2">Noi dung</th>
-                        <th className="px-4 py-2 w-24 text-center">Diem max</th>
-                        <th className="px-4 py-2 w-20 text-center">Parent</th>
-                        <th className="px-4 py-2 w-32 text-center">Thao tac</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(criteriaByCategory[cat.id] || []).map((item) => (
-                        <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-4 py-2 text-gray-400 text-xs">{item.id}</td>
-                          <td className="px-4 py-2 font-mono font-bold text-black">{item.code}</td>
-                          <td className="px-4 py-2 text-gray-700 max-w-md" title={item.content}>
-                            <span className="line-clamp-2">{item.content}</span>
-                          </td>
-                          <td className="px-4 py-2 text-center">
-                            <span className="font-bold text-black">{item.max_points}</span>
-                          </td>
-                          <td className="px-4 py-2 text-center text-gray-400 text-xs">
-                            {item.parent_id || '-'}
-                          </td>
-                          <td className="px-4 py-2 text-center">
-                            <div className="flex gap-1 justify-center">
-                              <button onClick={() => setEditingCriterion(item)}
-                                className="text-xs px-2 py-1 border border-gray-300 text-black hover:bg-gray-100 font-bold">
-                                Sua
-                              </button>
-                              <button onClick={() => handleDeleteCriterion(item.id, item.code)}
-                                className="text-xs px-2 py-1 border border-gray-300 text-gray-600 hover:bg-gray-100">
-                                Xoa
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {!(criteriaByCategory[cat.id] || []).length && (
-                        <tr><td colSpan={6} className="px-4 py-4 text-center text-gray-400 text-sm">Chua co tieu chi</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+                {/* Add category form */}
+                {showAddCategoryForm && (
+                  <form onSubmit={handleAddCategory} className="mb-8 border border-sky-100 rounded-2xl p-6 bg-white shadow-sm transition-all">
+                    <h3 className="font-bold text-sky-800 text-lg mb-4">Thêm mục lớn mới</h3>
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <input type="text" placeholder="Số thứ tự mục (VD: 1, 2, 3...)" value={newCatCode} onChange={(e) => setNewCatCode(e.target.value)}
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
+                      <input type="text" placeholder="Tên mục" value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm flex-1 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
+                      <input type="number" step="0.1" placeholder="Điểm" value={newCatMaxScore} onChange={(e) => setNewCatMaxScore(e.target.value)}
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm w-32 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
+                      <button type="submit" className="px-6 py-2.5 bg-sky-600 text-white rounded-xl text-sm font-bold hover:bg-sky-700 transition-colors shadow-sm">THÊM MỤC</button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Add criterion form */}
+                {showAddForm && (
+                  <form onSubmit={handleAddCriterion} className="mb-8 border border-sky-100 rounded-2xl p-6 bg-white shadow-sm transition-all">
+                    <h3 className="font-bold text-sky-800 text-lg mb-4">Thêm tiêu chí mới</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Mã tiêu chí *</label>
+                        <input type="text" placeholder="VD: 1.1 hoặc 1.1.1" value={newCode} onChange={(e) => setNewCode(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Điểm tối đa *</label>
+                        <input type="number" step="0.1" placeholder="Nhập số điểm..." value={newMaxPoints} onChange={(e) => setNewMaxPoints(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Thuộc mục lớn *</label>
+                        <select value={newCategoryId} onChange={(e) => setNewCategoryId(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all">
+                          <option value="">-- Vui lòng chọn mục lớn --</option>
+                          {categories.map((cat) => (
+                            <option key={cat.id} value={cat.id}>Mục {cat.code.replace(/CAT/i, '')} - {cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Tiêu chí cha (Chỉ chọn nếu đây là tiêu chí con)</label>
+                        <select value={newParentId} onChange={(e) => setNewParentId(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all">
+                          <option value="">-- Không có (Đây là tiêu chí gốc) --</option>
+                          {newCategoryId && (criteriaByCategory[newCategoryId] || []).map((c) => (
+                            <option key={c.id} value={c.id}>{c.code} - {c.content.substring(0, 40)}...</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Nội dung đánh giá *</label>
+                      <textarea placeholder="Nhập chi tiết nội dung tiêu chí..." value={newContent} onChange={(e) => setNewContent(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all mb-4 min-h-[80px]" />
+                    </div>
+                    <button type="submit" className="px-6 py-2.5 bg-sky-600 text-white rounded-xl text-sm font-bold hover:bg-sky-700 transition-colors shadow-sm">THÊM TIÊU CHÍ</button>
+                  </form>
+                )}
+
+                {/* Categories & Criteria */}
+                <div className="space-y-6 pb-12">
+                  {categories.map((cat) => (
+                    <div key={cat.id} className="bg-white rounded-2xl border border-sky-100 shadow-sm overflow-hidden">
+                      <div className="bg-sky-50/60 px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between border-b border-sky-100 gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-sky-700 bg-sky-100 px-2 py-1 rounded-lg text-sm">Mục {cat.code.replace(/CAT/i, '')}</span>
+                          <span className="font-semibold text-gray-800 text-sm">{cat.name}</span>
+                          <span className="text-xs font-medium text-sky-600 bg-white px-2 py-1 rounded-md border border-sky-100">(Tối đa: {cat.max_score} điểm)</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setEditingCategory(cat)}
+                            className="text-xs px-3 py-1.5 rounded-lg font-semibold border border-sky-200 text-sky-700 hover:bg-sky-50 transition-colors shrink-0">
+                            Sửa mục này
+                          </button>
+                          <button onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                            className="text-xs px-3 py-1.5 rounded-lg font-semibold border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 transition-colors shrink-0">
+                            Xóa mục này
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm border-collapse min-w-[700px]">
+                          <thead>
+                            <tr className="bg-white text-gray-500 text-[11px] font-semibold uppercase tracking-wider border-b border-gray-100">
+                              <th className="px-5 py-3 w-24">Mã</th>
+                              <th className="px-5 py-3">Nội dung đánh giá</th>
+                              <th className="px-5 py-3 w-28 text-center">Điểm</th>
+                              <th className="px-5 py-3 w-36 text-center">Thao tác</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {(criteriaByCategory[cat.id] || []).map((item) => (
+                              <tr key={item.id} className="hover:bg-sky-50/30 transition-colors group">
+                                <td className="px-5 py-3 font-semibold text-sky-600 text-xs">{item.code}</td>
+                                <td className="px-5 py-3 text-gray-700 max-w-md leading-relaxed" title={item.content}>
+                                  <span className="line-clamp-2">{item.content}</span>
+                                </td>
+                                <td className="px-5 py-3 text-center">
+                                  <span className="font-bold text-gray-800 bg-gray-100 px-2.5 py-1 rounded-lg text-xs">{item.max_points}</span>
+                                </td>
+                                <td className="px-5 py-3 text-center">
+                                  <div className="flex gap-2 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => setEditingCriterion(item)}
+                                      className="text-[11px] px-3 py-1.5 rounded-lg border border-sky-200 text-sky-700 font-semibold hover:bg-sky-50 transition-colors">
+                                      Sửa
+                                    </button>
+                                    <button onClick={() => handleDeleteCriterion(item.id, item.code)}
+                                      className="text-[11px] px-3 py-1.5 rounded-lg border border-red-200 text-red-600 font-semibold hover:bg-red-50 transition-colors">
+                                      Xóa
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                            {!(criteriaByCategory[cat.id] || []).length && (
+                              <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400 text-sm font-medium bg-gray-50/50">Chưa có tiêu chí nào trong mục này.</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
 
       {/* Edit Modal */}
       {editingCriterion && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-200 w-full max-w-lg overflow-hidden animate-fade-in">
-            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-              <h3 className="font-bold text-black">Sua tieu chi [{editingCriterion.code}]</h3>
-              <button onClick={() => setEditingCriterion(null)} className="text-gray-400 hover:text-black text-lg font-bold">X</button>
+        <div className="fixed inset-0 bg-sky-900/30 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-sky-100 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-5 border-b border-sky-50 bg-sky-50/30 flex justify-between items-center">
+              <h3 className="font-bold text-sky-800 text-lg">Sửa tiêu chí <span className="bg-sky-100 px-2 py-0.5 rounded text-sky-600">{editingCriterion.code}</span></h3>
+              <button onClick={() => setEditingCriterion(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
             </div>
             <form onSubmit={handleSaveCriterion} className="p-6">
               <div className="mb-4">
-                <label className="block text-sm font-bold text-black mb-1">Ma tieu chi</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Mã tiêu chí</label>
                 <input type="text" value={editingCriterion.code}
                   onChange={(e) => setEditingCriterion({ ...editingCriterion, code: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black" />
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-bold text-black mb-1">Noi dung</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Nội dung</label>
                 <textarea value={editingCriterion.content}
                   onChange={(e) => setEditingCriterion({ ...editingCriterion, content: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black min-h-[100px]" />
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all min-h-[120px]" />
               </div>
-              <div className="mb-6">
-                <label className="block text-sm font-bold text-black mb-1">Diem toi da</label>
+              <div className="mb-8">
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Điểm tối đa</label>
                 <input type="number" step="0.1" min="0" value={editingCriterion.max_points}
                   onChange={(e) => setEditingCriterion({ ...editingCriterion, max_points: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black font-bold" />
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all font-bold text-sky-700 bg-sky-50" />
               </div>
-              <div className="modal-footer">
-                <button type="button" onClick={() => setEditingCriterion(null)} className="btn-secondary">Hủy</button>
-                <button type="submit" className="btn-primary">Lưu thay đổi</button>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setEditingCriterion(null)} className="px-5 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">Hủy bỏ</button>
+                <button type="submit" className="px-6 py-2.5 text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700 shadow-sm rounded-xl transition-colors">Lưu thay đổi</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Category Modal */}
+      {editingCategory && (
+        <div className="fixed inset-0 bg-sky-900/30 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-sky-100 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-5 border-b border-sky-50 bg-sky-50/30 flex justify-between items-center">
+              <h3 className="font-bold text-sky-800 text-lg">Sửa mục <span className="bg-sky-100 px-2 py-0.5 rounded text-sky-600">{editingCategory.code}</span></h3>
+              <button onClick={() => setEditingCategory(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+            <form onSubmit={handleSaveCategory} className="p-6">
+              <div className="mb-4">
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Mã mục</label>
+                <input type="text" value={editingCategory.code}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, code: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Tên mục</label>
+                <input type="text" value={editingCategory.name}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
+              </div>
+              <div className="mb-8">
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Điểm tối đa</label>
+                <input type="number" step="0.1" min="0" value={editingCategory.max_score}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, max_score: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all font-bold text-sky-700 bg-sky-50" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setEditingCategory(null)} className="px-5 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">Hủy bỏ</button>
+                <button type="submit" className="px-6 py-2.5 text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700 shadow-sm rounded-xl transition-colors">Lưu thay đổi</button>
               </div>
             </form>
           </div>
