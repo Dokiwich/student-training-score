@@ -1,14 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect } from 'react';
+import { UserMenu } from '../components/UserMenu';
 import { useSession } from 'next-auth/react';
-import { useSearchParams } from 'next/navigation';
-import { DashboardLayout } from '../components/DashboardLayout';
-import { DepartmentsTab } from './DepartmentsTab';
-import { ClassesTab } from './ClassesTab';
-import { UsersTab } from './UsersTab';
-import { SemestersTab } from './SemestersTab';
-import { ListTree, Building2, GraduationCap, UserPlus, CalendarDays } from 'lucide-react';
 
 interface Category {
   id: string; code: string; name: string; max_score: number; sort_order: number;
@@ -80,8 +74,16 @@ function AdminPageInner() {
     try {
       const res = await fetch('/api/admin/criteria', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editingCriterion) });
       const data = await res.json();
-      if (res.ok) { alert(data.message); setEditingCriterion(null); fetchData(); } else { alert(data.message); }
-    } catch { alert('Lỗi khi sửa tiêu chí'); }
+      if (res.ok) {
+        alert(data.message);
+        setEditingCriterion(null);
+        fetchData();
+      } else {
+        alert(data.message);
+      }
+    } catch {
+      alert('Loi khi sua tieu chi');
+    }
   };
 
   const handleAddCriterion = async (e: React.FormEvent) => {
@@ -93,8 +95,20 @@ function AdminPageInner() {
         body: JSON.stringify({ code: newCode, content: newContent, max_points: parseFloat(newMaxPoints) || 0, parent_id: newParentId ? parseInt(newParentId) : null, category_id: newCategoryId || (categories[0]?.id || '') })
       });
       const data = await res.json();
-      if (res.ok) { alert(data.message); setNewCode(''); setNewContent(''); setNewMaxPoints('0'); setNewParentId(''); setShowAddForm(false); fetchData(); } else { alert(data.message); }
-    } catch { alert('Lỗi khi thêm tiêu chí'); }
+      if (res.ok) {
+        alert(data.message);
+        setNewCode('');
+        setNewContent('');
+        setNewMaxPoints('0');
+        setNewParentId('');
+        setShowAddForm(false);
+        fetchData();
+      } else {
+        alert(data.message);
+      }
+    } catch {
+      alert('Loi khi them tieu chi');
+    }
   };
 
   const handleDeleteCriterion = async (id: number, code: string) => {
@@ -103,7 +117,9 @@ function AdminPageInner() {
       const res = await fetch('/api/admin/criteria', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
       const data = await res.json(); alert(data.message);
       if (res.ok) fetchData();
-    } catch { alert('Lỗi khi xóa tiêu chí'); }
+    } catch {
+      alert('Loi khi xoa tieu chi');
+    }
   };
 
   const handleAddCategory = async (e: React.FormEvent) => {
@@ -115,8 +131,19 @@ function AdminPageInner() {
         body: JSON.stringify({ _type: 'category', code: newCatCode, name: newCatName, max_score: parseFloat(newCatMaxScore) || 0 })
       });
       const data = await res.json();
-      if (res.ok) { alert(data.message); setNewCatCode(''); setNewCatName(''); setNewCatMaxScore('0'); setShowAddCategoryForm(false); fetchData(); } else { alert(data.message); }
-    } catch { alert('Lỗi khi thêm mục'); }
+      if (res.ok) {
+        alert(data.message);
+        setNewCatCode('');
+        setNewCatName('');
+        setNewCatMaxScore('0');
+        setShowAddCategoryForm(false);
+        fetchData();
+      } else {
+        alert(data.message);
+      }
+    } catch {
+      alert('Loi khi them muc');
+    }
   };
 
   const handleDeleteCategory = async (id: string, name: string) => {
@@ -125,28 +152,15 @@ function AdminPageInner() {
       const res = await fetch('/api/admin/criteria', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ _type: 'category', id }) });
       const data = await res.json(); alert(data.message);
       if (res.ok) fetchData();
-    } catch { alert('Lỗi khi xóa mục'); }
+    } catch {
+      alert('Loi khi xoa muc');
+    }
   };
 
-  if (!session) {
-    return (
-      <DashboardLayout pageTitle="Quản trị hệ thống" pageSubtitle="Quản lý toàn bộ hệ thống chấm điểm">
-        <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 32 }}>Đang tải...</p>
-      </DashboardLayout>
-    );
-  }
+  if (!session) return <div className="p-8 text-center text-gray-500">Dang tai...</div>;
+  if (!isAdmin) return <div className="p-8 text-center text-black font-bold">Loi: Khong co quyen truy cap!</div>;
 
-  if (!isAdmin) {
-    return (
-      <DashboardLayout pageTitle="Quản trị hệ thống">
-        <div className="dashboard-card" style={{ textAlign: 'center', padding: 48 }}>
-          <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 16 }}>Không có quyền truy cập!</p>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8 }}>Bạn cần quyền quản trị viên để xem trang này.</p>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
+  // Group criteria by category
   const criteriaByCategory: Record<string, Criterion[]> = {};
   criteria.forEach((c) => {
     if (!criteriaByCategory[c.category_id]) criteriaByCategory[c.category_id] = [];
@@ -154,104 +168,138 @@ function AdminPageInner() {
   });
 
   return (
-    <DashboardLayout pageTitle="Quản trị hệ thống" pageSubtitle="Quản lý toàn bộ hệ thống chấm điểm">
-      {/* Tab navigation */}
-      <div className="admin-tabs">
-        {TAB_CONFIG.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`admin-tab ${activeTab === tab.id ? 'active' : ''}`}>
-            <span style={{ marginRight: 6 }}>{tab.icon}</span>{tab.label}
-          </button>
-        ))}
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-black">Trang Quan Tri He Thong</h1>
+          <p className="text-sm text-gray-500">Quan ly cau hinh tieu chi cham diem</p>
+        </div>
+        <UserMenu />
       </div>
 
-      {/* Tab content */}
-      {activeTab === 'departments' && <DepartmentsTab />}
-      {activeTab === 'classes' && <ClassesTab />}
-      {activeTab === 'users' && <UsersTab />}
-      {activeTab === 'semesters' && <SemestersTab />}
-
-      {activeTab === 'criteria' && (
-        loading ? (
-          <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Đang tải dữ liệu...</p>
+      <div className="max-w-7xl mx-auto p-6">
+        {loading ? (
+          <p className="text-gray-500 text-center py-10">Dang tai du lieu...</p>
         ) : (
           <div>
-            <div className="dashboard-card-header" style={{ marginBottom: 20 }}>
-              <h2 className="dashboard-card-title">Quản lý Tiêu Chí Chấm Điểm</h2>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setShowAddCategoryForm(!showAddCategoryForm)} className="btn-secondary">
-                  {showAddCategoryForm ? 'Đóng' : '+ Thêm mục'}
+            {/* Actions bar */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-black">Quan ly Tieu Chi Cham Diem</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowAddCategoryForm(!showAddCategoryForm)}
+                  className="px-4 py-2 text-sm font-bold border border-gray-300 text-black hover:bg-gray-50"
+                >
+                  {showAddCategoryForm ? 'Dong' : 'Them muc'}
                 </button>
-                <button onClick={() => setShowAddForm(!showAddForm)} className="btn-primary">
-                  {showAddForm ? 'Đóng' : '+ Thêm tiêu chí'}
+                <button
+                  onClick={() => setShowAddForm(!showAddForm)}
+                  className="px-4 py-2 text-sm font-bold bg-black text-white hover:bg-gray-800"
+                >
+                  {showAddForm ? 'Dong' : 'Them tieu chi'}
                 </button>
               </div>
             </div>
 
+            {/* Add category form */}
             {showAddCategoryForm && (
-              <form onSubmit={handleAddCategory} className="dashboard-card" style={{ marginBottom: 20 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Thêm mục mới</h3>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <input type="text" placeholder="Mã mục (VD: 7)" value={newCatCode} onChange={(e) => setNewCatCode(e.target.value)} className="form-input" style={{ flex: '0 0 140px' }} />
-                  <input type="text" placeholder="Tên mục" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} className="form-input" style={{ flex: 1, minWidth: 200 }} />
-                  <input type="number" step="0.1" placeholder="Điểm" value={newCatMaxScore} onChange={(e) => setNewCatMaxScore(e.target.value)} className="form-input" style={{ flex: '0 0 120px' }} />
-                  <button type="submit" className="btn-primary">Thêm</button>
+              <form onSubmit={handleAddCategory} className="mb-6 border border-gray-200 p-4 bg-gray-50">
+                <h3 className="font-bold text-sm mb-3">Them muc moi</h3>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input type="text" placeholder="Ma muc (VD: 7)" value={newCatCode} onChange={(e) => setNewCatCode(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black" />
+                  <input type="text" placeholder="Ten muc" value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 text-sm flex-1 outline-none focus:border-black" />
+                  <input type="number" step="0.1" placeholder="Diem toi da" value={newCatMaxScore} onChange={(e) => setNewCatMaxScore(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 text-sm w-32 outline-none focus:border-black" />
+                  <button type="submit" className="px-4 py-2 bg-black text-white text-sm font-bold hover:bg-gray-800">THEM</button>
                 </div>
               </form>
             )}
 
+            {/* Add criterion form */}
             {showAddForm && (
-              <form onSubmit={handleAddCriterion} className="dashboard-card" style={{ marginBottom: 20 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Thêm tiêu chí mới</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 12 }}>
-                  <input type="text" placeholder="Mã tiêu chí (VD: 1.2.3)" value={newCode} onChange={(e) => setNewCode(e.target.value)} className="form-input" />
-                  <input type="number" step="0.1" placeholder="Điểm" value={newMaxPoints} onChange={(e) => setNewMaxPoints(e.target.value)} className="form-input" />
-                  <select value={newCategoryId} onChange={(e) => setNewCategoryId(e.target.value)} className="form-select">
-                    <option value="">-- Chọn mục --</option>
-                    {categories.map((cat) => (<option key={cat.id} value={cat.id}>{cat.code} - {cat.name}</option>))}
+              <form onSubmit={handleAddCriterion} className="mb-6 border border-gray-200 p-4 bg-gray-50">
+                <h3 className="font-bold text-sm mb-3">Them tieu chi moi</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                  <input type="text" placeholder="Ma tieu chi (VD: 1.2.3)" value={newCode} onChange={(e) => setNewCode(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black" />
+                  <input type="number" step="0.1" placeholder="Diem toi da" value={newMaxPoints} onChange={(e) => setNewMaxPoints(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black" />
+                  <select value={newCategoryId} onChange={(e) => setNewCategoryId(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black">
+                    <option value="">-- Chon muc --</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.code} - {cat.name}</option>
+                    ))}
                   </select>
-                  <input type="number" placeholder="Parent ID (để trống nếu là gốc)" value={newParentId} onChange={(e) => setNewParentId(e.target.value)} className="form-input" />
+                  <input type="number" placeholder="Parent ID (de trong neu la goc)" value={newParentId} onChange={(e) => setNewParentId(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black" />
                 </div>
-                <textarea placeholder="Nội dung tiêu chí" value={newContent} onChange={(e) => setNewContent(e.target.value)} className="form-input" style={{ minHeight: 60, marginBottom: 12 }} />
-                <button type="submit" className="btn-primary">Thêm tiêu chí</button>
+                <textarea placeholder="Noi dung tieu chi" value={newContent} onChange={(e) => setNewContent(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black mb-3 min-h-[60px]" />
+                <button type="submit" className="px-4 py-2 bg-black text-white text-sm font-bold hover:bg-gray-800">THEM TIEU CHI</button>
               </form>
             )}
 
+            {/* Categories & Criteria */}
             {categories.map((cat) => (
-              <div key={cat.id} className="dashboard-card" style={{ marginBottom: 16, padding: 0, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-inset)', borderBottom: '1px solid var(--border)' }}>
+              <div key={cat.id} className="mb-6 border border-gray-200">
+                <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-200">
                   <div>
-                    <span style={{ fontWeight: 600, color: 'var(--accent)', fontSize: 13 }}>[{cat.code}]</span>
-                    <span style={{ marginLeft: 8, fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{cat.name}</span>
-                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>(Điểm: {cat.max_score} điểm)</span>
+                    <span className="font-bold text-black text-sm">[{cat.code}]</span>
+                    <span className="ml-2 text-sm text-gray-700">{cat.name}</span>
+                    <span className="ml-2 text-xs text-gray-400">(Toi da: {cat.max_score} diem)</span>
                   </div>
-                  <button onClick={() => handleDeleteCategory(cat.id, cat.name)} className="btn-danger" style={{ padding: '4px 12px', fontSize: 11 }}>Xóa mục</button>
+                  <button onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                    className="text-xs px-3 py-1 border border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-black">
+                    Xoa muc
+                  </button>
                 </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table className="dashboard-table">
-                    <thead><tr>
-                      <th style={{ width: 60 }}>ID</th><th style={{ width: 100 }}>Mã</th><th>Nội dung</th>
-                      <th style={{ width: 90, textAlign: 'center' }}>Điểm</th><th style={{ width: 80, textAlign: 'center' }}>Parent</th>
-                      <th style={{ width: 120, textAlign: 'center' }}>Thao tác</th>
-                    </tr></thead>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-white text-gray-500 text-xs uppercase border-b border-gray-200">
+                        <th className="px-4 py-2 w-16">ID</th>
+                        <th className="px-4 py-2 w-24">Ma</th>
+                        <th className="px-4 py-2">Noi dung</th>
+                        <th className="px-4 py-2 w-24 text-center">Diem max</th>
+                        <th className="px-4 py-2 w-20 text-center">Parent</th>
+                        <th className="px-4 py-2 w-32 text-center">Thao tac</th>
+                      </tr>
+                    </thead>
                     <tbody>
                       {(criteriaByCategory[cat.id] || []).map((item) => (
-                        <tr key={item.id}>
-                          <td style={{ color: 'var(--text-muted)', fontSize: 11 }}>{item.id}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>{item.code}</td>
-                          <td style={{ maxWidth: 400 }}><span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.content}</span></td>
-                          <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)' }}>{item.max_points}</td>
-                          <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{item.parent_id || '-'}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                              <button onClick={() => setEditingCriterion(item)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
-                              <button onClick={() => handleDeleteCriterion(item.id, item.code)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
+                        <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="px-4 py-2 text-gray-400 text-xs">{item.id}</td>
+                          <td className="px-4 py-2 font-mono font-bold text-black">{item.code}</td>
+                          <td className="px-4 py-2 text-gray-700 max-w-md" title={item.content}>
+                            <span className="line-clamp-2">{item.content}</span>
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <span className="font-bold text-black">{item.max_points}</span>
+                          </td>
+                          <td className="px-4 py-2 text-center text-gray-400 text-xs">
+                            {item.parent_id || '-'}
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <div className="flex gap-1 justify-center">
+                              <button onClick={() => setEditingCriterion(item)}
+                                className="text-xs px-2 py-1 border border-gray-300 text-black hover:bg-gray-100 font-bold">
+                                Sua
+                              </button>
+                              <button onClick={() => handleDeleteCriterion(item.id, item.code)}
+                                className="text-xs px-2 py-1 border border-gray-300 text-gray-600 hover:bg-gray-100">
+                                Xoa
+                              </button>
                             </div>
                           </td>
                         </tr>
                       ))}
                       {!(criteriaByCategory[cat.id] || []).length && (
-                        <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 24, fontSize: 13 }}>Chưa có tiêu chí</td></tr>
+                        <tr><td colSpan={6} className="px-4 py-4 text-center text-gray-400 text-sm">Chua co tieu chi</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -259,31 +307,35 @@ function AdminPageInner() {
               </div>
             ))}
           </div>
-        )
-      )}
+        )}
+      </div>
 
       {/* Edit Modal */}
       {editingCriterion && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 className="modal-header-title">Sửa tiêu chí [{editingCriterion.code}]</h3>
-              <button onClick={() => setEditingCriterion(null)} className="modal-close-btn">✕</button>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 w-full max-w-lg overflow-hidden animate-fade-in">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+              <h3 className="font-bold text-black">Sua tieu chi [{editingCriterion.code}]</h3>
+              <button onClick={() => setEditingCriterion(null)} className="text-gray-400 hover:text-black text-lg font-bold">X</button>
             </div>
-            <form onSubmit={handleSaveCriterion}>
-              <div className="modal-body">
-                <div style={{ marginBottom: 16 }}>
-                  <label className="form-label">Mã tiêu chí</label>
-                  <input type="text" value={editingCriterion.code} onChange={(e) => setEditingCriterion({ ...editingCriterion, code: e.target.value })} className="form-input" />
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <label className="form-label">Nội dung</label>
-                  <textarea value={editingCriterion.content} onChange={(e) => setEditingCriterion({ ...editingCriterion, content: e.target.value })} className="form-input" style={{ minHeight: 100 }} />
-                </div>
-                <div>
-                  <label className="form-label">Điểm</label>
-                  <input type="number" step="0.1" min="0" value={editingCriterion.max_points} onChange={(e) => setEditingCriterion({ ...editingCriterion, max_points: parseFloat(e.target.value) || 0 })} className="form-input" style={{ fontWeight: 600 }} />
-                </div>
+            <form onSubmit={handleSaveCriterion} className="p-6">
+              <div className="mb-4">
+                <label className="block text-sm font-bold text-black mb-1">Ma tieu chi</label>
+                <input type="text" value={editingCriterion.code}
+                  onChange={(e) => setEditingCriterion({ ...editingCriterion, code: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black" />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-bold text-black mb-1">Noi dung</label>
+                <textarea value={editingCriterion.content}
+                  onChange={(e) => setEditingCriterion({ ...editingCriterion, content: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black min-h-[100px]" />
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-black mb-1">Diem toi da</label>
+                <input type="number" step="0.1" min="0" value={editingCriterion.max_points}
+                  onChange={(e) => setEditingCriterion({ ...editingCriterion, max_points: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm outline-none focus:border-black font-bold" />
               </div>
               <div className="modal-footer">
                 <button type="button" onClick={() => setEditingCriterion(null)} className="btn-secondary">Hủy</button>

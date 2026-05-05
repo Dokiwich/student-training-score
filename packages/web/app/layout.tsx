@@ -30,7 +30,7 @@ export default function RootLayout({
       lang="vi"
       className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full" style={{ background: 'var(--bg-page)', fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+      <body className="min-h-full flex bg-white">
         <Providers>
           <main className="flex-1 min-h-screen">
             {children}

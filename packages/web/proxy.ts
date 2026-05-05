@@ -1,13 +1,6 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
-const ROLE_REDIRECTS: Record<string, string> = {
-  STUDENT: '/student',
-  CLASS_COMMITTEE: '/class-president',
-  ADVISOR: '/advisor',
-  SCHOOL_ADMIN: '/admin',
-};
-
 export default withAuth(
   function middleware(req) {
     const role = req.nextauth.token?.role as string;
@@ -20,14 +13,12 @@ export default withAuth(
     }
 
     // Admin routes
-    if (path.startsWith('/admin') && role !== 'SCHOOL_ADMIN') {
-      const destination = ROLE_REDIRECTS[role] || '/student';
-      return NextResponse.redirect(new URL(destination, req.url));
+    if (path.startsWith('/admin') && role !== 'SCHOOL_ADMIN' && role !== 'SUPER_ADMIN') {
+      return NextResponse.redirect(new URL('/', req.url));
     }
     // Class president routes
-    if (path.startsWith('/class-president') && role !== 'CLASS_COMMITTEE') {
-      const destination = ROLE_REDIRECTS[role] || '/student';
-      return NextResponse.redirect(new URL(destination, req.url));
+    if (path.startsWith('/class-president') && role !== 'CLASS_COMMITTEE' && role !== 'CLASS_PRESIDENT') {
+      return NextResponse.redirect(new URL('/', req.url));
     }
     // Advisor routes
     if (path.startsWith('/advisor') && role !== 'ADVISOR') {

@@ -406,6 +406,12 @@ export class ScoringService {
       );
     }
 
+    if (score > criteria.max_points) {
+      throw new BadRequestException(
+        `Điểm không được vượt quá ${criteria.max_points} (tiêu chí "${criteria.code}")`,
+      );
+    }
+
     return { form, criteria };
   }
 

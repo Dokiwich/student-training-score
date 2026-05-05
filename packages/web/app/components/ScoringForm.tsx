@@ -1,37 +1,24 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
-import {
-  ChevronDown,
-  ChevronRight,
-  Save,
-  Loader2,
-  Check,
-  Send,
-  AlertCircle,
-  CheckCircle2,
-  XCircle,
-  X,
-  Info,
-} from 'lucide-react';
 
 const API_BASE = '/proxy-api';
 
 const FIXED_CODES = ['1.1.1', '2.1', '4.1', '3.1.1'];
 
 const TAB_GROUPS = [
-  { id: '1', shortTitle: 'Mục 1', fullTitle: 'Đánh giá về ý thức tham gia học tập', title: 'Ý thức tham gia học tập', max: 20 },
-  { id: '2', shortTitle: 'Mục 2', fullTitle: 'Đánh giá về ý thức chấp hành Nội quy, Quy chế, Quy định trong Nhà trường', title: 'Chấp hành nội quy, quy chế', max: 20 },
-  { id: '3', shortTitle: 'Mục 3', fullTitle: 'Đánh giá về ý thức tham gia các hoạt động chính trị, xã hội, văn hóa, văn nghệ, thể thao, phòng chống tội phạm và các tệ nạn xã hội', title: 'Hoạt động chính trị, xã hội, thể thao', max: 15 },
-  { id: '4', shortTitle: 'Mục 4', fullTitle: 'Đánh giá về ý thức công dân trong quan hệ cộng đồng', title: 'Quan hệ cộng đồng', max: 20 },
-  { id: '5', shortTitle: 'Mục 5', fullTitle: 'Đánh giá về ý thức và kết quả tham gia công tác cán bộ lớp, các đoàn thể, tổ chức khác trong Nhà trường hoặc sinh viên đạt được thành tích đặc biệt trong học tập, rèn luyện', title: 'Cán bộ lớp & Thành tích đặc biệt', max: 15 },
-  { id: '6', shortTitle: 'Mục 6', fullTitle: 'Đánh giá về các thành tích xuất sắc trong học tập, rèn luyện, các hoạt động khác do Nhà trường tổ chức', title: 'Thành tích xuất sắc', max: 10 },
+  { id: '1', title: '1. Ý thức tham gia học tập', max: 20 },
+  { id: '2', title: '2. Chấp hành nội quy, quy chế', max: 20 },
+  { id: '3', title: '3. Hoạt động chính trị, xã hội, thể thao...', max: 15 },
+  { id: '4', title: '4. Quan hệ cộng đồng', max: 20 },
+  { id: '5', title: '5. Cán bộ lớp & Thành tích đặc biệt', max: 15 },
+  { id: '6', title: '6. Thành tích xuất sắc', max: 10 },
 ];
 
 const ROLE_CONFIG = {
-  STUDENT: { label: 'Sinh viên', colHeader: 'Tự Chấm' },
-  CLASS_COMMITTEE: { label: 'Ban cán sự', colHeader: 'BCS Lớp' },
+  STUDENT: { label: 'Sinh viên', colHeader: 'SV Tự Chấm' },
+  CLASS_PRESIDENT: { label: 'Ban cán sự', colHeader: 'BCS Lớp' },
   ADVISOR: { label: 'Cố vấn', colHeader: 'CVHT' },
 } as const;
 
@@ -74,25 +61,14 @@ function Toast({
   }, [message.id, onDismiss]);
 
   return (
-    <div className={`sf-toast ${message.type}`}>
-      {message.type === 'success' ? (
-        <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
-      ) : (
-        <XCircle size={16} style={{ flexShrink: 0 }} />
-      )}
-      <span style={{ flex: 1 }}>{message.text}</span>
-      <button
-        onClick={() => onDismiss(message.id)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', opacity: 0.5 }}
-      >
-        <X size={14} />
-      </button>
+    <div className={`px-4 py-3 text-sm font-medium border ${message.type === 'success' ? 'bg-white border-gray-300 text-black' : 'bg-gray-100 border-gray-400 text-black'}`}>
+      <span className="font-bold">{message.type === 'success' ? 'OK:' : 'Loi:'}</span>{' '}
+      {message.text}
     </div>
   );
 }
 
-/* ─── Hero Score Ring ─── */
-function HeroScoreRing({ value, max }: { value: number; max: number }) {
+function MiniProgress({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
   const radius = 46;
   const stroke = 6;
@@ -100,26 +76,8 @@ function HeroScoreRing({ value, max }: { value: number; max: number }) {
   const offset = circumference - (pct / 100) * circumference;
 
   return (
-    <div className="sf-hero-ring">
-      <svg style={{ transform: 'rotate(-90deg)' }} viewBox="0 0 100 100">
-        <defs>
-          <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#5e6ad2" />
-            <stop offset="100%" stopColor="#818cf8" />
-          </linearGradient>
-        </defs>
-        <circle cx="50" cy="50" r={radius} fill="none" stroke="#e5e7eb" strokeWidth={stroke} />
-        <circle
-          cx="50" cy="50" r={radius} fill="none"
-          stroke="url(#scoreGrad)" strokeWidth={stroke} strokeLinecap="round"
-          strokeDasharray={circumference} strokeDashoffset={offset}
-          style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1)' }}
-        />
-      </svg>
-      <div className="sf-hero-ring-center">
-        <span className="sf-hero-ring-value">{value}</span>
-        <span className="sf-hero-ring-max">/ {max}</span>
-      </div>
+    <div className="w-full h-1 bg-gray-200 mt-1">
+      <div className="h-full bg-black transition-all duration-500" style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -227,20 +185,15 @@ export function ScoringForm({
         const sMap: Record<number, number> = {};
         const cMap: Record<number, number> = {};
         const aMap: Record<number, number> = {};
-        const pMap: Record<number, string> = {};
-        scoresData.data.forEach((s: any) => {
-          if (s.student_score !== null && s.student_score !== undefined) sMap[s.criteria_id] = Number(s.student_score);
-          if (s.class_score !== null && s.class_score !== undefined) cMap[s.criteria_id] = Number(s.class_score);
-          if (s.advisor_score !== null && s.advisor_score !== undefined) aMap[s.criteria_id] = Number(s.advisor_score);
-          if (s.proof_url) pMap[s.criteria_id] = s.proof_url;
+
+        scoresData.data.forEach((s: ScoreDetail) => {
+          if (s.student_score !== null) sMap[s.criteria_id] = s.student_score;
+          if (s.class_score !== null) cMap[s.criteria_id] = s.class_score;
+          if (s.advisor_score !== null) aMap[s.criteria_id] = s.advisor_score;
         });
         setSavedStudentScores(sMap);
         setSavedClassScores(cMap);
         setSavedAdvisorScores(aMap);
-        setProofUrls(pMap);
-        if (scoresData.formStatusDetail) setFormStatus(scoresData.formStatusDetail);
-        if (scoresData.rejectionReason) setRejectionInfo(scoresData.rejectionReason);
-        else setRejectionInfo(null);
       }
     } finally {
       setIsLoading(false);
@@ -494,9 +447,11 @@ export function ScoringForm({
   };
 
   const handleSaveRow = async (criteriaId: number, maxPoints: number) => {
-    const raw = inputValues[criteriaId] ?? '';
-    const score = raw === '' ? 0 : parseFloat(raw);
-    if (isNaN(score)) return addToast('error', 'Vui lòng nhập số hợp lệ');
+    const raw = inputValues[criteriaId];
+    const score = parseFloat(raw);
+    if (isNaN(score)) return addToast('error', 'Vui long nhap so');
+    if (score < 0) return addToast('error', 'Khong duoc am');
+    if (score > maxPoints) return addToast('error', `Toi da ${maxPoints}d`);
 
     setSavingId(criteriaId);
     try {
@@ -508,22 +463,17 @@ export function ScoringForm({
         method: 'POST',
         credentials: 'include',
         headers: headersInit,
-        body: JSON.stringify({ criteriaId, score, role: currentRole, studentId, proofUrl: proofUrls[criteriaId], isDraft: true }),
+        body: JSON.stringify({ criteriaId, score, role: currentRole, studentId }),
       });
 
       if (response.ok) {
-        if (currentRole === 'STUDENT')
-          setSavedStudentScores((prev) => ({ ...prev, [criteriaId]: score }));
-        if (currentRole === 'CLASS_COMMITTEE')
-          setSavedClassScores((prev) => ({ ...prev, [criteriaId]: score }));
-        if (currentRole === 'ADVISOR')
-          setSavedAdvisorScores((prev) => ({ ...prev, [criteriaId]: score }));
-        addToast('success', 'Đã lưu thành công!');
-        // Đồng bộ lại dữ liệu sau khi lưu lẻ để tính toán tổng điểm mới từ server
-        await fetchData();
+        // score is already defined above
+        if (currentRole === 'STUDENT') setSavedStudentScores((prev) => ({ ...prev, [criteriaId]: score }));
+        if (currentRole === 'CLASS_PRESIDENT') setSavedClassScores((prev) => ({ ...prev, [criteriaId]: score }));
+        if (currentRole === 'ADVISOR') setSavedAdvisorScores((prev) => ({ ...prev, [criteriaId]: score }));
+        addToast('success', 'Da luu thanh cong!');
       } else {
-        const errData = await response.json().catch(() => null);
-        addToast('error', errData?.message || `Lỗi khi lưu điểm (${response.status})`);
+        addToast('error', 'Loi khi luu diem');
       }
     } finally {
       setSavingId(null);
@@ -554,48 +504,10 @@ export function ScoringForm({
 
       if (response.ok) {
         const data = await response.json();
-
-        if (currentRole === 'STUDENT') setFormStatus('STUDENT_SUBMITTED');
-        else if (currentRole === 'CLASS_COMMITTEE') setFormStatus('CLASS_REVIEWED');
-        else if (currentRole === 'ADVISOR') setFormStatus('ADVISOR_APPROVED');
-
-        setIsDirty(false);
-        addToast('success', data.message || 'Nộp phiếu thành công!');
+        addToast('success', data.message || 'Nop phieu thanh cong!');
       } else {
         const errorData = await response.json().catch(() => null);
-        addToast('error', errorData?.message || 'Lỗi khi nộp phiếu');
-      }
-    } catch {
-      addToast('error', 'Không thể kết nối máy chủ');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-
-  const doResetForm = async () => {
-    if (!window.confirm("CẢNH BÁO: Hành động này sẽ XÓA HOÀN TOÀN phiếu điểm hiện tại và mọi dữ liệu chấm điểm của sinh viên này. Sinh viên sẽ phải làm lại từ đầu. Bạn có chắc chắn muốn tiếp tục?")) return;
-
-    setIsSubmitting(true);
-    try {
-      const customJwt = (session as any)?.customJwt;
-      const headersInit: HeadersInit = { 'Content-Type': 'application/json' };
-      if (customJwt) headersInit['Authorization'] = `Bearer ${customJwt}`;
-
-      const response = await fetch(`${API_BASE}/scoring/${formId}/reject`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: headersInit,
-        body: JSON.stringify({ studentId }),
-      });
-
-      if (response.ok) {
-        addToast('success', 'Đã xóa và reset phiếu điểm thành công!');
-        // Tải lại dữ liệu - Backend sẽ tự tạo phiếu DRAFT mới hoàn toàn
-        await fetchData();
-      } else {
-        const errorData = await response.json().catch(() => null);
-        addToast('error', errorData?.message || 'Lỗi khi xóa phiếu');
+        addToast('error', errorData?.message || 'Loi khi nop phieu');
       }
     } catch {
       addToast('error', 'Không thể kết nối máy chủ');
@@ -629,280 +541,280 @@ export function ScoringForm({
     return false;
   })();
 
-  if (isLoading) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 64, gap: 12 }}>
-        <Loader2 size={28} style={{ color: '#d1d5db' }} />
-        <span style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500 }}>Đang tải dữ liệu...</span>
-      </div>
-    );
-  }
-
-  // History page: only show if form has passed all review stages
-  if (viewMode === 'history' && requiredStatuses && requiredStatuses.length > 0) {
-    if (!requiredStatuses.includes(formStatus)) {
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 64, gap: 16 }}>
-          <div style={{ fontSize: 48 }}>📋</div>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#374151', margin: 0 }}>Chưa có lịch sử đánh giá</h3>
-          <p style={{ fontSize: 13, color: '#9ca3af', margin: 0, textAlign: 'center', maxWidth: 320 }}>
-            Phiếu rèn luyện cần được duyệt qua tất cả các vòng (BCS + CVHT) trước khi xuất hiện trong lịch sử.
-          </p>
-          <p style={{ fontSize: 12, color: '#d1d5db', margin: 0 }}>
-            Trạng thái hiện tại: <strong style={{ color: '#6b7280' }}>{statusInfo.label}</strong>
-          </p>
-        </div>
-      );
-    }
-  }
+  if (isLoading) return <div className="p-8 text-center text-gray-500">Dang tai...</div>;
 
   return (
     <>
-      {/* Toast */}
       {toasts.length > 0 && (
-        <div className="sf-toast-container">
-          {toasts.map((t) => <Toast key={t.id} message={t} onDismiss={removeToast} />)}
+        <div className="fixed top-4 right-4 z-50 space-y-2">
+          {toasts.map((t) => (
+            <Toast key={t.id} message={t} onDismiss={removeToast} />
+          ))}
         </div>
       )}
 
-      {/* Confirm modal */}
-      {showConfirm && (
-        <div className="sf-modal-overlay">
-          <div className="sf-modal-card">
+      <div className="bg-white border border-gray-200 overflow-hidden flex-1 mb-0 flex flex-col">
+        {/* HEADER */}
+        <div className="bg-white px-6 pt-3 pb-2 flex flex-col items-center justify-center text-center border-b border-gray-200">
+          <h2 className="text-base font-bold text-black uppercase tracking-wide mb-1">
+            Phiếu Đánh Giá Điểm Rèn Luyện Sinh Viên Đại Học Chính Quy
+          </h2>
+          <p className="text-gray-500 text-xs mb-3">Học kỳ: I - Năm học 2025 - 2026</p>
 
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#111827', textAlign: 'center', marginBottom: 8 }}>Xác nhận nộp phiếu</h3>
-            <p style={{ fontSize: 14, color: '#6b7280', textAlign: 'center', marginBottom: 4 }}>
-              Tổng điểm tự chấm: <strong style={{ color: '#5e6ad2', fontSize: 24 }}>{totalScore}</strong> / 100
-            </p>
-            <p style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', marginBottom: 28 }}>Sau khi nộp bạn sẽ không thể chỉnh sửa.</p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button onClick={() => setShowConfirm(false)} className="btn-secondary" style={{ minWidth: 100 }}>Hủy</button>
-              <button onClick={doSubmitForm} className="sf-action-btn primary" style={{ minWidth: 120 }}>
-                <Send size={14} /> Nộp chính thức
-              </button>
-            </div>
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs border border-gray-100 px-4 py-1.5 bg-gray-50">
+            <p className="text-gray-500">Ho va ten: <strong className="text-black">{studentName || session?.user?.name || '...'}</strong></p>
+            <p className="text-gray-500">MSSV: <strong className="text-black font-mono">{studentId || (session?.user as { studentId?: string })?.studentId || '...'}</strong></p>
+            <p className="text-gray-500">Lop: <strong className="text-black">{classNameStr || '...'}</strong></p>
           </div>
-        </div>
-      )}
 
-      {/* ══════════ CARD-BASED LAYOUT ══════════ */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-        {/* 1. STATUS + STEPPER */}
-        <div className="sf-status-card">
-          <div className="sf-status-banner" style={{ background: statusInfo.bg, color: statusInfo.color, borderBottom: `1px solid ${statusInfo.border}` }}>
-            <span>{statusInfo.label}</span>
-            {isDirty && <span style={{ marginLeft: 'auto', fontSize: 12, display: 'flex', alignItems: 'center' }}><span className="sf-unsaved-dot" />Chưa lưu</span>}
-          </div>
-          {rejectionInfo && formStatus === 'DRAFT' && (
-            <div style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#991b1b', fontWeight: 500 }}>
-              {rejectionInfo}
-            </div>
-          )}
-          <div className="sf-stepper">
-            {[
-              { step: 1, label: 'SV tự chấm', active: ['STUDENT_SUBMITTED', 'CLASS_REVIEWING', 'CLASS_REVIEWED', 'ADVISOR_REVIEWING', 'ADVISOR_APPROVED', 'FINALIZED'].includes(formStatus) },
-              { step: 2, label: 'BCS duyệt', active: ['CLASS_REVIEWED', 'ADVISOR_REVIEWING', 'ADVISOR_APPROVED', 'FINALIZED'].includes(formStatus) },
-              { step: 3, label: 'CVHT duyệt', active: ['ADVISOR_APPROVED', 'FINALIZED'].includes(formStatus) },
-            ].map((s, idx) => (
-              <div key={idx} className="sf-stepper-step">
-                <div className={`sf-stepper-dot ${s.active ? 'active' : 'inactive'}`}>{s.active ? '✓' : s.step}</div>
-                <span className="sf-stepper-label" style={{ fontWeight: s.active ? 600 : 400, color: s.active ? '#111' : '#9ca3af' }}>{s.label}</span>
-                {idx < 2 && <div className="sf-stepper-line" style={{ background: s.active ? '#10b981' : '#e5e7eb' }} />}
-              </div>
-            ))}
+          <div className="mt-3 text-right self-end">
+            <p className="text-xs text-gray-400 uppercase tracking-wider font-bold">Tong diem {ROLE_CONFIG[currentRole].colHeader}</p>
+            <p className="text-2xl font-black text-black">{totalScore}<span className="text-sm text-gray-400 font-normal">/100</span></p>
+            <MiniProgress value={totalScore} max={100} />
           </div>
         </div>
 
-        {/* 2. HERO SCORE */}
-        <div className="sf-hero">
-          <HeroScoreRing value={totalScore} max={100} />
-          <div className="sf-hero-breakdown">
-            {TAB_GROUPS.map((tab) => {
-              const tabRoots = criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith(`TC_0${tab.id}`) || c.code.startsWith(`TC_${tab.id}`)));
-              const tabScore = Math.max(0, Math.min(tabRoots.reduce((sum, r) => sum + calculateAutoScore(r.id), 0), tab.max));
-              return (
-                <div key={tab.id} className="sf-hero-stat">
-                  <div className="sf-hero-stat-label">{tab.title}</div>
-                  <div className="sf-hero-stat-value">{tabScore}<span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 500 }}>/{tab.max}</span></div>
-                  <div className="sf-hero-stat-bar"><div className="sf-hero-stat-bar-fill" style={{ width: `${tab.max > 0 ? (tabScore / tab.max) * 100 : 0}%` }} /></div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 3. PILL TABS with compact "Mục X" labels + popover on click */}
-        <div className="sf-pill-tabs-row">
-          <div className="sf-pill-tabs">
-            {TAB_GROUPS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTabId(tab.id)}
-                className={`sf-pill-tab ${activeTabId === tab.id ? 'active' : ''}`}
-              >
-                {tab.shortTitle}
-                <span className="sf-pill-tab-badge">{tab.max}</span>
-              </button>
-            ))}
-          </div>
-          {/* Active tab detail popover */}
-          {(() => {
-            const activeTab = TAB_GROUPS.find(t => t.id === activeTabId);
-            if (!activeTab) return null;
-            return (
-              <div className="sf-tab-detail">
-                <Info size={14} style={{ flexShrink: 0, color: '#5e6ad2' }} />
-                <span>{activeTab.fullTitle}</span>
-                <span className="sf-tab-detail-max">Điểm: {activeTab.max} điểm</span>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* 4. CRITERIA CARDS */}
-        <div className="sf-criteria-list">
-
-          {fetchError && (
-            <div style={{ padding: 16, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#991b1b' }}>
-              <AlertCircle size={18} /> <span><strong>Lỗi:</strong> {fetchError}</span>
-            </div>
-          )}
-
-          {(() => {
-            const filtered = sortedCriteria.filter((item) => {
-              if (!isVisible(item.id)) return false;
-              const root = getRoot(item.id);
-              if (!root) return true;
-              return root.code === activeTabId || root.code.startsWith(activeTabId + '.') || root.code.startsWith(`TC_0${activeTabId}`) || root.code.startsWith(`TC_${activeTabId}`);
-            });
-            const itemsToRender = filtered.length > 0 ? filtered : sortedCriteria.filter((item) => isVisible(item.id));
-
-            if (itemsToRender.length === 0 && criteria.length === 0) {
-              return (
-                <div style={{ padding: 48, textAlign: 'center', color: '#9ca3af' }}>
-                  <AlertCircle size={24} style={{ margin: '0 auto 8px' }} />
-                  <p style={{ fontSize: 13 }}>Không có tiêu chí đánh giá nào.</p>
-                </div>
-              );
-            }
-
-            return itemsToRender.map((item) => {
-              const isParent = parentIds.has(item.id);
-              const depth = depthMap.get(item.id) || 0;
-              const isExpanded = expandedIds.has(item.id);
-              const isFixed = FIXED_CODES.includes(item.code);
-              const autoScore = calculateAutoScore(item.id);
-              const currentVal = parseFloat(inputValues[item.id] || '');
-              const activeSavedMap = getSavedMap(currentRole);
-              const isSaved = !isParent && !isFixed && activeSavedMap[item.id] !== undefined && activeSavedMap[item.id] === currentVal;
-
-              /* ── Parent Card ── */
-              if (isParent) {
-                return (
-                  <div key={item.id} className={`sf-card-parent ${depth === 0 ? 'depth-0' : ''}`} style={{ marginLeft: depth > 0 ? depth * 16 : 0 }} onClick={() => toggleExpand(item.id)}>
-                    <div className="sf-card-parent-header">
-                      <div className="sf-card-expand">{isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</div>
-                      <span className={`sf-card-code ${depth === 0 ? 'root' : 'child'}`}>{item.code}</span>
-                      <span className="sf-card-parent-content" style={{ fontWeight: depth === 0 ? 700 : 600, color: depth === 0 ? '#111' : '#374151' }}>{item.content}</span>
-                      <div className="sf-card-parent-score">
-                        <span className="sf-card-parent-score-val">{autoScore}</span>
-                        <span className="sf-card-parent-score-max">/ {item.max_points}</span>
-                      </div>
-                    </div>
-                  </div>
+        {/* BODY */}
+        <div className="flex flex-col lg:flex-row bg-white items-start">
+          {/* LEFT TABS */}
+          <div className="w-full lg:w-[250px] shrink-0 border-b lg:border-b-0 lg:border-r border-gray-200 bg-gray-50 p-2 lg:sticky lg:top-0 lg:max-h-screen lg:overflow-y-auto">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-2 hidden lg:block">
+              Danh mục
+            </h3>
+            <div className="flex lg:flex-col overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 gap-2">
+              {TAB_GROUPS.map((tab) => {
+                const isActive = activeTabId === tab.id;
+                const tabRoots = criteria.filter(
+                  (c) => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith(`TC_0${tab.id}`) || c.code.startsWith(`TC_${tab.id}`)),
                 );
-              }
+                const tabScore = Math.min(
+                  tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0),
+                  tab.max,
+                );
 
-              /* ── Leaf Card (horizontal: input left, content right) ── */
-              return (
-                <div key={item.id} className="sf-card-leaf" style={{ marginLeft: depth * 16 }}>
-                  <div className="sf-card-leaf-row">
-                    {/* LEFT: Scoring inputs */}
-                    <div className="sf-card-leaf-left">
-                      {isFixed ? (
-                        <span className="sf-card-leaf-fixed">Cố định: {item.max_points}đ</span>
-                      ) : (
-                        <>
-                          <div className="sf-card-leaf-input-group">
-                            <span className="sf-card-leaf-input-label">{ROLE_CONFIG[currentRole].colHeader}</span>
-                            <input
-                              type="number"
-                              value={inputValues[item.id] || ''}
-                              disabled={!effectiveCanEdit}
-                              onChange={(e) => handleInputChange(item.id, e.target.value)}
-                              className={isSaved ? 'saved' : ''}
-                              placeholder="0"
-                            />
-                          </div>
-                          {effectiveCanEdit && (
-                            <button
-                              onClick={() => handleSaveRow(item.id, item.max_points)}
-                              disabled={savingId === item.id || isSaved}
-                              className={`sf-card-leaf-save ${isSaved ? 'saved' : savingId === item.id ? 'saving' : 'unsaved'}`}
-                            >
-                              {savingId === item.id ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /></> : isSaved ? <><Check size={12} /></> : <><Save size={12} /></>}
-                            </button>
-                          )}
-                          {/* Show other roles' scores in history/review mode */}
-                          {visibleRoles.filter(r => r !== currentRole).map(role => {
-                            const roleMap = role === 'STUDENT' ? savedStudentScores : role === 'CLASS_COMMITTEE' ? savedClassScores : savedAdvisorScores;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTabId(tab.id)}
+                    className={`shrink-0 text-left p-3 border transition-colors min-w-[240px] lg:min-w-0 lg:w-full ${isActive ? 'border-black bg-gray-50' : 'border-transparent hover:border-gray-200 hover:bg-gray-50'
+                      }`}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <span className={`text-xs font-bold px-1.5 py-0.5 ${isActive ? 'bg-black text-white' : 'bg-gray-100 text-gray-500'}`}>
+                        Mục {tab.id}
+                      </span>
+                      <span className={`text-xs font-bold ${isActive ? 'text-black' : 'text-gray-400'}`}>
+                        {tabScore}/{tab.max}
+                      </span>
+                    </div>
+                    <p className={`text-sm line-clamp-2 ${isActive ? 'text-black font-medium' : 'text-gray-500'}`} title={tab.title}>
+                      {tab.title}
+                    </p>
+                    <MiniProgress value={tabScore} max={tab.max} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* RIGHT TABLE */}
+          <div className="flex-1 w-full min-w-0 flex flex-col">
+            <div className={`px-6 py-3 bg-white border-b border-gray-200 flex items-center justify-end sticky ${stickyTop} z-10`}>
+              <div className="flex gap-2">
+                <button onClick={expandAll} className="text-xs px-3 py-1.5 border border-gray-300 hover:bg-gray-50">Mở hết</button>
+                <button onClick={collapseAll} className="text-xs px-3 py-1.5 border border-gray-300 hover:bg-gray-50">Thu gọn</button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto bg-white flex-1 min-h-[400px]">
+              <table className="w-full text-left border-collapse min-w-full md:min-w-[700px]">
+                <thead className={`sticky ${stickyTop === 'top-0' ? 'top-12' : 'top-[128px]'} z-20`}>
+                  <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-300">
+                    <th className="p-3 w-16 text-center">Mã</th>
+                    <th className="p-3">Nội dung đánh giá</th>
+                    <th className="p-3 w-20 text-center">Điểm QĐ</th>
+                    {visibleRoles.map((role) => {
+                      const isActiveCol = role === currentRole;
+                      return (
+                        <th key={role} className={`p-3 w-24 text-center border-l border-gray-200 ${isActiveCol ? 'bg-gray-100 font-bold text-black' : ''}`}>
+                          {ROLE_CONFIG[role].colHeader}
+                          {isActiveCol && <span className="block text-[9px] mt-0.5 text-gray-400">đang sửa</span>}
+                        </th>
+                      );
+                    })}
+                    {canEdit && <th className="p-3 w-24 text-center">Thao tác</th>}
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-gray-100">
+                  {/* DEBUG INFO TO FIGURE OUT WHY TABLE IS EMPTY */}
+                  {criteria.length > 0 && (
+                    <tr className="bg-yellow-50">
+                      <td colSpan={4} className="p-2 text-[10px] text-gray-500 font-mono border-b border-yellow-200">
+                        Total items: {criteria.length}. Sorted: {sortedCriteria.length}. Tab {activeTabId} matching roots: {criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === activeTabId || c.code.startsWith(activeTabId + '.') || c.code.startsWith(`TC_0${activeTabId}`))).length}.
+                      </td>
+                    </tr>
+                  )}
+
+                  {fetchError && (
+                    <tr>
+                      <td colSpan={4} className="p-4 text-center text-red-600 bg-red-50 border border-red-200">
+                        <strong>Lỗi hệ thống:</strong> {fetchError}
+                      </td>
+                    </tr>
+                  )}
+                  {(() => {
+                    const filtered = sortedCriteria.filter((item) => {
+                      if (!isVisible(item.id)) return false;
+                      const root = getRoot(item.id);
+                      if (!root) return true; // failsafe
+                      return root.code === activeTabId || root.code.startsWith(activeTabId + '.') || root.code.startsWith(`TC_0${activeTabId}`) || root.code.startsWith(`TC_${activeTabId}`);
+                    });
+
+                    // FALLBACK: If filter blocked EVERYTHING, but there are criteria, something is wrong with matching! Render everything to save the day.
+                    const itemsToRender = filtered.length > 0 ? filtered : (sortedCriteria.length > 0 ? sortedCriteria.filter(item => isVisible(item.id)) : []);
+
+                    if (itemsToRender.length === 0 && !isLoading && criteria.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={4} className="p-8 text-center text-gray-500">
+                            Không có tiêu chí đánh giá nào. Vui lòng liên hệ quản trị viên.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return itemsToRender.map((item) => {
+                      const isParent = parentIds.has(item.id);
+                      const depth = depthMap.get(item.id) || 0;
+                      const isExpanded = expandedIds.has(item.id);
+                      const isFixed = FIXED_CODES.includes(item.code);
+
+                      const scoreByRole: Record<Role, number> = {
+                        STUDENT: currentRole === 'STUDENT' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedStudentScores),
+                        CLASS_PRESIDENT: currentRole === 'CLASS_PRESIDENT' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedClassScores),
+                        ADVISOR: currentRole === 'ADVISOR' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedAdvisorScores),
+                      };
+
+                      const currentVal = parseFloat(inputValues[item.id] || '');
+                      const activeSavedMap = getSavedMap(currentRole);
+                      const isSaved = !isParent && !isFixed && activeSavedMap[item.id] !== undefined && activeSavedMap[item.id] === currentVal;
+
+                      if (isParent) {
+                        return (
+                          <tr key={item.id} className={`cursor-pointer hover:bg-gray-50 ${depth === 0 ? 'bg-gray-50' : ''}`} onClick={() => toggleExpand(item.id)}>
+                            <td className="p-3">
+                              <span className="text-xs font-bold text-black bg-gray-200 px-2 py-1">{item.code}</span>
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center" style={{ paddingLeft: `${depth * 1.5}rem` }}>
+                                <button className="mr-2 p-1 text-gray-500 hover:text-black" onClick={(e) => { e.stopPropagation(); toggleExpand(item.id); }}>
+                                  {isExpanded ? '[-]' : '[+]'}
+                                </button>
+                                <span className={`text-sm ${depth === 0 ? 'font-bold text-black' : 'font-semibold text-gray-800'}`}>{item.content}</span>
+                              </div>
+                            </td>
+                            <td className="p-3 text-center text-xs font-bold text-gray-500">{item.max_points}</td>
+                            {visibleRoles.map((role) => {
+                              const isActiveCol = role === currentRole;
+                              return (
+                                <td key={role} className={`p-3 text-center border-l border-gray-100 ${isActiveCol ? 'bg-gray-50' : ''}`}>
+                                  <span className={`text-lg font-bold ${isActiveCol ? 'text-black' : 'text-gray-400'}`}>{scoreByRole[role]}</span>
+                                </td>
+                              );
+                            })}
+                            {canEdit && <td className="p-3 text-center"><span className="text-[10px] text-gray-400">Tự cộng</span></td>}
+                          </tr>
+                        );
+                      }
+
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="p-3">
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1">{item.code}</span>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center" style={{ paddingLeft: `${depth * 1.5}rem` }}>
+                              <div className="w-6 mr-2" />
+                              <span className={`text-sm ${isFixed ? 'text-gray-500' : 'text-gray-600'}`}>{item.content}</span>
+                              {isFixed && <span className="ml-2 text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 font-bold">Cố định</span>}
+                            </div>
+                          </td>
+                          <td className="p-3 text-center text-xs text-gray-500">{item.max_points}</td>
+
+                          {visibleRoles.map((role) => {
+                            const isActiveCol = role === currentRole;
+                            const roleMap = role === 'STUDENT' ? savedStudentScores : role === 'CLASS_PRESIDENT' ? savedClassScores : savedAdvisorScores;
+
+                            if (isFixed) {
+                              return (
+                                <td key={role} className={`p-3 text-center border-l border-gray-100 ${isActiveCol ? 'bg-gray-50' : ''}`}>
+                                  <span className="text-sm font-bold text-gray-500">{item.max_points}</span>
+                                </td>
+                              );
+                            }
+
+                            if (isActiveCol) {
+                              return (
+                                <td key={role} className="p-3 border-l border-gray-100 bg-gray-50">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={item.max_points}
+                                    value={inputValues[item.id] || ''}
+                                    disabled={!canEdit}
+                                    readOnly={!canEdit}
+                                    onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                    className={`w-full border px-2 py-1.5 text-center text-sm outline-none transition-colors ${!canEdit
+                                        ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                                        : isSaved
+                                          ? 'bg-gray-50 border-gray-400 text-black font-bold'
+                                          : 'border-gray-300 focus:border-black'
+                                      }`}
+                                  />
+                                </td>
+                              );
+                            }
+
                             const val = roleMap[item.id];
                             return (
-                              <div key={role} className="sf-card-leaf-input-group sf-card-leaf-other-role">
-                                <span className="sf-card-leaf-input-label">{ROLE_CONFIG[role].colHeader}</span>
-                                <span style={{ fontSize: 14, fontWeight: 600, color: '#6b7280', minWidth: 30, textAlign: 'center' }}>{val !== undefined ? val : '--'}</span>
-                              </div>
+                              <td key={role} className="p-3 border-l border-gray-100">
+                                <input type="text" disabled readOnly value={val !== undefined ? val : '-'} className="w-full border border-gray-200 bg-gray-100 px-2 py-1.5 text-center text-sm text-gray-400 cursor-not-allowed" />
+                              </td>
                             );
                           })}
-                        </>
-                      )}
-                    </div>
-                    {/* RIGHT: Content info */}
-                    <div className="sf-card-leaf-right">
-                      <div className="sf-card-leaf-header">
-                        <span className="sf-card-code child">{item.code}</span>
-                        <span className={`sf-card-leaf-content ${isFixed ? 'opacity-60' : ''}`}>{item.content}</span>
-                        <span className="sf-card-leaf-max">Điểm: {item.max_points}</span>
-                      </div>
-                      {!isFixed && (
-                        <div className="sf-card-leaf-proof-row">
-                          <span className="sf-card-leaf-input-label">Minh chứng</span>
-                          {currentRole === 'STUDENT' && effectiveCanEdit ? (
-                            <input type="text" placeholder="Link drive..." value={proofUrls[item.id] || ''} onChange={(e) => setProofUrls(prev => ({ ...prev, [item.id]: e.target.value }))} className="sf-card-leaf-proof" />
-                          ) : proofUrls[item.id] ? (
-                            <a href={proofUrls[item.id]} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#5e6ad2' }}>Xem MC</a>
-                          ) : <span style={{ fontSize: 11, color: '#d1d5db' }}>--</span>}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            });
-          })()}
-        </div>
 
-        {/* 5. FLOATING ACTION BAR */}
-        {effectiveCanEdit && (
-          <div className="sf-action-bar">
-            <div style={{ fontSize: 13, color: '#6b7280', fontWeight: 500 }}>
-              Tổng: <strong style={{ color: '#5e6ad2', fontSize: 18 }}>{totalScore}</strong> / 100
+                          {canEdit && (
+                            <td className="p-3 text-center">
+                              {!isFixed && (
+                                <button
+                                  onClick={() => handleSaveRow(item.id, item.max_points)}
+                                  disabled={savingId === item.id || isSaved}
+                                  className={`px-3 py-1.5 text-xs font-bold transition-colors w-full ${isSaved ? 'bg-gray-100 text-gray-500 cursor-default' : 'bg-black text-white hover:bg-gray-800'
+                                    }`}
+                                >
+                                  {savingId === item.id ? 'Đang lưu...' : isSaved ? 'Đã lưu' : 'Lưu'}
+                                </button>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
             </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              {currentRole !== 'STUDENT' && (
-                <button onClick={doResetForm} disabled={isSubmitting} className="sf-action-btn danger">Xóa & Reset</button>
-              )}
-              <button onClick={handleSaveDraft} disabled={isSavingDraft} className="sf-action-btn primary">
-                {isSavingDraft ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={16} />} Lưu nháp
-              </button>
-              <button onClick={handleSubmitForm} disabled={isSubmitting} className="sf-action-btn success">
-                {isSubmitting ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />} Nộp phiếu
-              </button>
-            </div>
+
+            {canEdit && (
+              <div className="fixed bottom-6 right-6 z-50">
+                <button onClick={handleSubmitForm} className="bg-black hover:bg-gray-800 text-white font-bold py-3 px-8 shadow-2xl transition-transform hover:scale-105 rounded border border-gray-700">
+                  CHỐT NỘP PHIẾU NÀY
+                </button>
+              </div>
+            )}
           </div>
-        )}
-
+        </div>
       </div>
     </>
   );

@@ -93,34 +93,6 @@ async function main() {
     }
   });
 
-  // Gán cố vấn vào lớp qua class_roles
-  await prisma.class_roles.upsert({
-    where: { user_id_class_id_role_type: { user_id: user3.id, class_id: classObj.id, role_type: 'ADVISOR' } },
-    update: {},
-    create: {
-      id: 'CR_ADVISOR_01',
-      user_id: user3.id,
-      class_id: classObj.id,
-      role_type: 'ADVISOR',
-      start_date: new Date('2023-09-01'),
-    }
-  });
-
-  // Admin user
-  const hashedAdmin = await bcrypt.hash('admin', 10);
-  const adminUser = await prisma.users.upsert({
-    where: { email: 'admin@edu.vn' },
-    update: { password_hash: hashedAdmin, role: 'SCHOOL_ADMIN' },
-    create: {
-      id: 'USER_ADMIN',
-      email: 'admin@edu.vn',
-      password_hash: hashedAdmin,
-      full_name: 'Quản trị viên',
-      role: 'SCHOOL_ADMIN',
-      department_id: department.id,
-    }
-  });
-
   // 2. Tạo phiên bản tiêu chí và danh mục tiêu chí
   const cv = await prisma.criteria_versions.upsert({
     where: { semester_id_version: { semester_id: semester.id, version: 1 } },

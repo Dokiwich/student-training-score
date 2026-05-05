@@ -41,8 +41,16 @@ interface ScoringDashboardProps {
 }
 
 const ROLE_META = {
-  CLASS_COMMITTEE: { title: 'Ban Cán Sự Chấm Điểm', subtitle: 'Xét duyệt rèn luyện HK1 — 2026', scoreCol: 'classTotal' as const },
-  ADVISOR: { title: 'Cố Vấn Duyệt Điểm', subtitle: 'Xét duyệt rèn luyện HK1 — 2026', scoreCol: 'advisorTotal' as const },
+  CLASS_PRESIDENT: {
+    title: 'Ban Can Su Cham Diem',
+    subtitle: 'Xet duyet ren luyen HK1 - 2026',
+    scoreCol: 'classTotal' as const,
+  },
+  ADVISOR: {
+    title: 'Co Van Duyet Diem',
+    subtitle: 'Xet duyet ren luyen HK1 - 2026',
+    scoreCol: 'advisorTotal' as const,
+  },
 };
 
 export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardProps) {
@@ -51,9 +59,6 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [isResetting, setIsResetting] = useState(false);
-  const [resetKey, setResetKey] = useState(0); // force ScoringForm remount after reset
 
   const meta = ROLE_META[role];
 
@@ -63,19 +68,12 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
       setIsLoading(true);
       setFetchError(null);
       try {
-        const customJwt = (session as any)?.customJwt;
-        const headers: HeadersInit = { 'Content-Type': 'application/json' };
-        if (customJwt) headers['Authorization'] = `Bearer ${customJwt}`;
-        const res = await fetch(`${API_BASE}/scoring/students`, { headers, credentials: 'include' });
+        const res = await fetch(`${API_BASE}/scoring/students`, { credentials: 'include' });
         if (res.ok) {
           const json = await res.json();
+          console.log('[ScoringDashboard] students:', json.data?.length, 'classId:', json.classId);
           setStudents(json.data || []);
-        } else {
-          const errText = await res.text();
-          setFetchError(`Lỗi ${res.status}: ${errText}`);
         }
-      } catch (err) {
-        setFetchError('Không thể kết nối máy chủ');
       } finally {
         setIsLoading(false);
       }
@@ -219,15 +217,9 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
             </button>
           </div>
 
-          {/* Student list */}
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {fetchError ? (
-              <div style={{ padding: 16, textAlign: 'center' }}>
-                <p style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 600, marginBottom: 4 }}>Lỗi tải danh sách</p>
-                <p style={{ fontSize: 11, color: '#ef4444', wordBreak: 'break-all' }}>{fetchError}</p>
-              </div>
-            ) : isLoading ? (
-              <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              <div className="p-3 space-y-2">
                 {[1, 2, 3, 4, 5].map((i) => (
                   <div key={i} className="skeleton" style={{ height: 48 }} />
                 ))}
@@ -290,7 +282,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
                     </button>
                   );
                 })}
-                {filtered.length === 0 && <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', padding: 24 }}>Không tìm thấy SV</p>}
+                {filtered.length === 0 && <p className="text-center text-xs text-gray-400 py-6">Khong tim thay SV</p>}
               </div>
             )}
           </div>
