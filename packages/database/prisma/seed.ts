@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../src/generated/client';
 import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
@@ -132,7 +132,12 @@ async function main() {
 
   // 4. Tạo một phiếu điểm nháp mẫu của sinh viên
   await prisma.scoring_sheets.upsert({
-    where: { id: 'PHIEU_THAT_01' },
+    where: {
+      student_id_semester_id: {
+        student_id: user1.id,
+        semester_id: semester.id,
+      },
+    },
     update: {},
     create: {
       id: 'PHIEU_THAT_01',
@@ -142,6 +147,31 @@ async function main() {
       status: 'DRAFT',
     },
   });
+
+  // 5. Tạo semester_enrollments (lưu vết user-class theo kỳ)
+  const enrollments = [
+    { id: 'ENROLL_01', user_id: user1.id, class_id: classObj.id },
+    { id: 'ENROLL_02', user_id: user2.id, class_id: classObj.id },
+  ];
+
+  for (const enroll of enrollments) {
+    await prisma.semester_enrollments.upsert({
+      where: {
+        user_id_semester_id: {
+          user_id: enroll.user_id,
+          semester_id: semester.id,
+        },
+      },
+      update: {},
+      create: {
+        id: enroll.id,
+        user_id: enroll.user_id,
+        semester_id: semester.id,
+        class_id: enroll.class_id,
+        is_active: 1,
+      },
+    });
+  }
 
   console.log('🎉 Bơm dữ liệu thành công! Kho đạn đã nạp đầy.');
 }

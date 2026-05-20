@@ -40,6 +40,7 @@ interface ScoreDetail {
   student_score: number | null;
   class_score: number | null;
   advisor_score: number | null;
+  score_entries?: Array<{ scorer_role: string; score: number }>;
 }
 
 interface ToastMessage {
@@ -178,9 +179,19 @@ export function ScoringForm({
         const aMap: Record<number, number> = {};
 
         scoresData.data.forEach((s: ScoreDetail) => {
-          if (s.student_score !== null) sMap[s.criteria_id] = s.student_score;
-          if (s.class_score !== null) cMap[s.criteria_id] = s.class_score;
-          if (s.advisor_score !== null) aMap[s.criteria_id] = s.advisor_score;
+          // Ưu tiên score_entries (bảng chuẩn hóa), fallback sang legacy columns
+          const entries = s.score_entries || [];
+          const sEntry = entries.find(e => e.scorer_role === 'STUDENT');
+          const cEntry = entries.find(e => e.scorer_role === 'CLASS_COMMITTEE');
+          const aEntry = entries.find(e => e.scorer_role === 'ADVISOR');
+
+          const studentVal = sEntry ? sEntry.score : s.student_score;
+          const classVal = cEntry ? cEntry.score : s.class_score;
+          const advisorVal = aEntry ? aEntry.score : s.advisor_score;
+
+          if (studentVal !== null && studentVal !== undefined) sMap[s.criteria_id] = Number(studentVal);
+          if (classVal !== null && classVal !== undefined) cMap[s.criteria_id] = Number(classVal);
+          if (advisorVal !== null && advisorVal !== undefined) aMap[s.criteria_id] = Number(advisorVal);
         });
         setSavedStudentScores(sMap);
         setSavedClassScores(cMap);

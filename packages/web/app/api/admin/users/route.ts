@@ -111,6 +111,33 @@ export async function POST(req: Request) {
       }
     });
 
+    // ✅ Auto-create semester_enrollment cho kỳ active
+    if (class_id) {
+      const activeSemester = await prisma.semesters.findFirst({
+        where: { is_active: 1 },
+        orderBy: { created_at: 'desc' },
+        select: { id: true },
+      });
+      if (activeSemester) {
+        await prisma.semester_enrollments.upsert({
+          where: {
+            user_id_semester_id: {
+              user_id: newUser.id,
+              semester_id: activeSemester.id,
+            },
+          },
+          update: { class_id, is_active: 1 },
+          create: {
+            id: randomUUID(),
+            user_id: newUser.id,
+            semester_id: activeSemester.id,
+            class_id,
+            is_active: 1,
+          },
+        });
+      }
+    }
+
     return NextResponse.json({ message: 'Thêm tài khoản thành công', data: { id: newUser.id } });
   } catch (err: any) {
     console.error('Add user error:', err);
@@ -140,6 +167,34 @@ export async function PUT(req: Request) {
       where: { id },
       data: updateData,
     });
+
+    // ✅ Auto-upsert enrollment khi thay đổi class_id
+    if (class_id !== undefined && class_id) {
+      const activeSemester = await prisma.semesters.findFirst({
+        where: { is_active: 1 },
+        orderBy: { created_at: 'desc' },
+        select: { id: true },
+      });
+      if (activeSemester) {
+        await prisma.semester_enrollments.upsert({
+          where: {
+            user_id_semester_id: {
+              user_id: id,
+              semester_id: activeSemester.id,
+            },
+          },
+          update: { class_id, is_active: 1 },
+          create: {
+            id: randomUUID(),
+            user_id: id,
+            semester_id: activeSemester.id,
+            class_id,
+            is_active: 1,
+          },
+        });
+      }
+    }
+
     return NextResponse.json({ message: 'Cập nhật người dùng thành công', data: user });
   } catch {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
@@ -189,10 +244,11 @@ export async function DELETE(req: Request) {
         await tx.scoring_sheets.deleteMany({ where: { id: { in: sheetIds } } });
       }
 
-      // 6. Xóa class_roles, refresh_tokens, notifications
+      // 6. Xóa class_roles, refresh_tokens, notifications, semester_enrollments
       await tx.class_roles.deleteMany({ where: { user_id: id } });
       await tx.refresh_tokens.deleteMany({ where: { user_id: id } });
       await tx.notifications.deleteMany({ where: { user_id: id } });
+      await tx.semester_enrollments.deleteMany({ where: { user_id: id } });
       
       // 7. Xóa review_actions nơi user là reviewer
       await tx.review_actions.deleteMany({ where: { reviewer_id: id } });

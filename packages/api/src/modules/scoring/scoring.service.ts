@@ -59,6 +59,41 @@ const SCORING_PERMISSIONS: Record<string, string> = {
 export class ScoringService {
 
   // =============================================
+  // HELPER: Lấy class_id từ semester_enrollments (fallback users.class_id)
+  // =============================================
+  private async resolveClassId(userId: string, semesterId: string): Promise<string | null> {
+    // 1. Tìm trong semester_enrollments trước
+    const enrollment = await prisma.semester_enrollments.findUnique({
+      where: {
+        user_id_semester_id: {
+          user_id: userId,
+          semester_id: semesterId,
+        },
+      },
+      select: { class_id: true },
+    });
+    if (enrollment) return enrollment.class_id;
+
+    // 2. Fallback: users.class_id (backward compatible)
+    const user = await prisma.users.findFirst({
+      where: { id: userId },
+      select: { class_id: true },
+    });
+    return user?.class_id || null;
+  }
+
+  // =============================================
+  // HELPER: Lấy active semester
+  // =============================================
+  private async getActiveSemester(): Promise<{ id: string } | null> {
+    return prisma.semesters.findFirst({
+      where: { is_active: 1 },
+      orderBy: { created_at: 'desc' },
+      select: { id: true },
+    });
+  }
+
+  // =============================================
   // 0. LẤY DANH SÁCH SINH VIÊN CÙNG LỚP
   // =============================================
   async getStudentListByUser(userId: string) {
@@ -72,23 +107,38 @@ export class ScoringService {
       return { message: 'Không tìm thấy người dùng', data: [] };
     }
 
-    // Xác định class_id:
-    // - Sinh viên / Lớp trưởng: lấy trực tiếp từ users.class_id
-    // - Cố vấn học tập: lấy từ bảng class_roles (vì ADVISOR không có class_id trên users)
+    // Xác định class_id qua semester_enrollments (fallback users.class_id)
     let classIds: string[] = [];
+    const activeSemester = await this.getActiveSemester();
 
-    if (currentUser.class_id) {
-      classIds = [currentUser.class_id];
-    } else {
-      // Tìm trong class_roles (cho ADVISOR hoặc các role khác không có class_id)
-      const classRoles = await prisma.class_roles.findMany({
+    if (activeSemester) {
+      // Thử enrollment trước
+      const enrollment = await prisma.semester_enrollments.findUnique({
         where: {
-          user_id: currentUser.id,
-          is_active: 1,
+          user_id_semester_id: {
+            user_id: currentUser.id,
+            semester_id: activeSemester.id,
+          },
         },
         select: { class_id: true },
       });
-      classIds = classRoles.map((cr) => cr.class_id);
+      if (enrollment) {
+        classIds = [enrollment.class_id];
+      }
+    }
+
+    // Fallback: users.class_id hoặc class_roles
+    if (classIds.length === 0) {
+      if (currentUser.class_id) {
+        classIds = [currentUser.class_id];
+      } else {
+        // Tìm trong class_roles (cho ADVISOR)
+        const classRoles = await prisma.class_roles.findMany({
+          where: { user_id: currentUser.id, is_active: 1 },
+          select: { class_id: true },
+        });
+        classIds = classRoles.map((cr) => cr.class_id);
+      }
     }
 
     if (classIds.length === 0) {
@@ -194,25 +244,14 @@ export class ScoringService {
 
     // Auto-provision: Tạo phiếu DRAFT nếu chưa có
     if (!form) {
-      // Lấy thông tin sinh viên để biết class_id
-      const student = await prisma.users.findFirst({
-        where: { id: studentId },
-        select: { class_id: true },
-      });
-
-      if (!student || !student.class_id) {
-        throw new BadRequestException('Không tìm thấy thông tin sinh viên hoặc lớp!');
-      }
-
-      // Lấy học kỳ đang active
-      const activeSemester = await prisma.semesters.findFirst({
-        where: { is_active: 1 },
-        orderBy: { created_at: 'desc' },
-        select: { id: true },
-      });
-
+      const activeSemester = await this.getActiveSemester();
       if (!activeSemester) {
         throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
+      }
+
+      const classId = await this.resolveClassId(studentId, activeSemester.id);
+      if (!classId) {
+        throw new BadRequestException('Không tìm thấy thông tin sinh viên hoặc lớp!');
       }
 
       const newSheet = await prisma.scoring_sheets.create({
@@ -220,7 +259,7 @@ export class ScoringService {
           id: randomUUID(),
           student_id: studentId,
           semester_id: activeSemester.id,
-          class_id: student.class_id,
+          class_id: classId,
           status: 'DRAFT',
           current_step: 1,
         },
@@ -241,10 +280,10 @@ export class ScoringService {
       };
     }
 
-    // Lấy chi tiết điểm
+    // Lấy chi tiết điểm (include score_entries mới)
     const scores = await prisma.score_details.findMany({
       where: { scoring_sheet_id: form.id },
-      include: { criteria: true },
+      include: { criteria: true, score_entries: true },
       orderBy: { criteria_id: 'asc' },
     });
 
@@ -302,24 +341,14 @@ export class ScoringService {
     });
 
     if (!form) {
-      // Auto-create scoring sheet if it doesn't exist yet
-      const student = await prisma.users.findFirst({
-        where: { id: studentId },
-        select: { class_id: true },
-      });
-
-      if (!student || !student.class_id) {
-        throw new BadRequestException('Không tìm thấy thông tin sinh viên hoặc lớp!');
-      }
-
-      const activeSemester = await prisma.semesters.findFirst({
-        where: { is_active: 1 },
-        orderBy: { created_at: 'desc' },
-        select: { id: true },
-      });
-
+      const activeSemester = await this.getActiveSemester();
       if (!activeSemester) {
         throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
+      }
+
+      const classId = await this.resolveClassId(studentId, activeSemester.id);
+      if (!classId) {
+        throw new BadRequestException('Không tìm thấy thông tin sinh viên hoặc lớp!');
       }
 
       // Use upsert-like pattern: try to find again (in case another parallel request just created it)
@@ -334,7 +363,7 @@ export class ScoringService {
               id: randomUUID(),
               student_id: studentId,
               semester_id: activeSemester.id,
-              class_id: student.class_id,
+              class_id: classId,
               status: 'DRAFT',
               current_step: 1,
             },
@@ -447,6 +476,23 @@ export class ScoringService {
       },
     });
 
+    // ✅ Dual-write: cũng ghi vào score_entries (bảng chuẩn hóa)
+    await prisma.score_entries.upsert({
+      where: {
+        score_detail_id_scorer_role: {
+          score_detail_id: detail.id,
+          scorer_role: 'STUDENT',
+        },
+      },
+      update: { score, scored_at: new Date() },
+      create: {
+        id: randomUUID(),
+        score_detail_id: detail.id,
+        scorer_role: 'STUDENT',
+        score,
+      },
+    });
+
     return {
       message: 'Lưu điểm sinh viên thành công',
       data: detail,
@@ -520,6 +566,24 @@ export class ScoringService {
         scoring_sheets: { connect: { id: scoreRecord.id } },
         criteria: { connect: { id: criteriaId } },
         ...updateData,
+      },
+    });
+
+    // ✅ Dual-write: cũng ghi vào score_entries (bảng chuẩn hóa)
+    const scorerRole = role as 'STUDENT' | 'CLASS_COMMITTEE' | 'ADVISOR';
+    await prisma.score_entries.upsert({
+      where: {
+        score_detail_id_scorer_role: {
+          score_detail_id: savedScore.id,
+          scorer_role: scorerRole,
+        },
+      },
+      update: { score, scored_at: new Date() },
+      create: {
+        id: randomUUID(),
+        score_detail_id: savedScore.id,
+        scorer_role: scorerRole,
+        score,
       },
     });
 
@@ -694,33 +758,35 @@ export class ScoringService {
   // 7. ✅ TÍNH TỔNG ĐIỂM TỰ ĐỘNG
   // =============================================
   private async calculateTotals(formId: string) {
+    // Lấy score_details + score_entries cho phiếu này
     const details = await prisma.score_details.findMany({
       where: { scoring_sheet_id: formId },
       select: {
         student_score: true,
         class_score: true,
         advisor_score: true,
+        score_entries: {
+          select: { scorer_role: true, score: true },
+        },
       },
     });
 
-    const studentTotal = details.reduce(
-      (sum, d) => sum + Number(d.student_score ?? 0),
-      0,
-    );
-    const classTotal = details.reduce(
-      (sum, d) => sum + Number(d.class_score ?? 0),
-      0,
-    );
-    const advisorTotal = details.reduce(
-      (sum, d) => sum + Number(d.advisor_score ?? 0),
-      0,
-    );
+    let studentTotal = 0;
+    let classTotal = 0;
+    let advisorTotal = 0;
 
-    return {
-      studentTotal,
-      classTotal,
-      advisorTotal,
-    };
+    for (const d of details) {
+      const entries = d.score_entries || [];
+      const sEntry = entries.find((e: any) => e.scorer_role === 'STUDENT');
+      const cEntry = entries.find((e: any) => e.scorer_role === 'CLASS_COMMITTEE');
+      const aEntry = entries.find((e: any) => e.scorer_role === 'ADVISOR');
+
+      studentTotal += Number(sEntry?.score ?? d.student_score ?? 0);
+      classTotal += Number(cEntry?.score ?? d.class_score ?? 0);
+      advisorTotal += Number(aEntry?.score ?? d.advisor_score ?? 0);
+    }
+
+    return { studentTotal, classTotal, advisorTotal };
   }
 
   // =============================================
