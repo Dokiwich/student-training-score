@@ -2,9 +2,7 @@ import NextAuth, { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@student-score/database";
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -29,7 +27,7 @@ export const authOptions: AuthOptions = {
             where: { email: credentials.username }
           });
         }
-
+        
         if (!user) {
           return null;
         }
@@ -42,7 +40,7 @@ export const authOptions: AuthOptions = {
         return {
           id: user.id,
           name: user.full_name,
-          email: user.student_id, // we map student_id to Auth's email field for ease
+          email: user.student_id || user.email, // we map student_id to Auth's email field for ease, fallback to actual email for DEPT/ADMIN
           role: mappedRole, 
         } as { id: string; name: string; email: string; role: string; };
       }

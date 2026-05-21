@@ -10,6 +10,7 @@ const ROLE_LABELS: Record<string, string> = {
   STUDENT: 'Sinh viên',
   CLASS_COMMITTEE: 'Ban cán sự',
   ADVISOR: 'Cố vấn học tập',
+  DEPARTMENT: 'Khoa',
   SCHOOL_ADMIN: 'Quản trị viên',
 };
 
@@ -127,6 +128,19 @@ const ROLE_NAV: Record<string, NavItem[]> = {
           <circle cx="12" cy="12" r="10" />
           <line x1="12" y1="8" x2="12" y2="12" />
           <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      ),
+    },
+  ],
+  DEPARTMENT: [
+    {
+      label: 'Bảng tổng hợp',
+      href: '/department',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <line x1="3" y1="9" x2="21" y2="9" />
+          <line x1="9" y1="21" x2="9" y2="9" />
         </svg>
       ),
     },

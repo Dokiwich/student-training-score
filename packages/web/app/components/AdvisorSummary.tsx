@@ -41,7 +41,6 @@ export function AdvisorSummary() {
   const [students, setStudents] = useState<StudentSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -70,34 +69,6 @@ export function AdvisorSummary() {
     
     return { total, submitted, unsubmitted, submittedPct, byClass, avgScore };
   }, [students]);
-
-  const exportData = (type: 'csv' | 'excel' | 'pdf') => {
-    const header = ['STT', 'MSSV', 'Họ và Tên', 'Lớp', 'Điểm SV', 'Điểm BCS', 'Điểm CVHT', 'Xếp loại', 'Ghi chú'];
-    const rows = students.map((s, i) => [i + 1, s.studentCode || '', s.name, s.className || '', s.studentTotal ?? '', s.classTotal ?? '', s.advisorTotal ?? '', s.classification ? CLASSIFICATION_LABELS[s.classification] || '' : '', notes[s.id] || '']);
-    
-    if (type === 'csv') {
-      const BOM = '\uFEFF';
-      const csv = BOM + [header, ...rows].map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'bang_tong_hop.csv'; a.click();
-      URL.revokeObjectURL(url);
-    } else if (type === 'excel') {
-      const tableHtml = `<html><head><meta charset="utf-8"></head><body><table border="1"><tr>${header.map(h => `<th>${h}</th>`).join('')}</tr>${rows.map(row => `<tr>${row.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table></body></html>`;
-      const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'bang_tong_hop.xls'; a.click();
-      URL.revokeObjectURL(url);
-    } else if (type === 'pdf') {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`<html><head><title>Bảng tổng hợp</title><style>body { font-family: sans-serif; } table { width: 100%; border-collapse: collapse; margin-top: 20px; } th, td { border: 1px solid #000; padding: 8px; text-align: left; } th { background-color: #f3f4f6; }</style></head><body><h2>Bảng tổng hợp điểm rèn luyện</h2><table><tr>${header.map(h => `<th>${h}</th>`).join('')}</tr>${rows.map(row => `<tr>${row.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table><script>window.print(); window.close();<\/script></body></html>`);
-        printWindow.document.close();
-      }
-    }
-    setShowExportMenu(false);
-  };
-
   if (isLoading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -131,23 +102,6 @@ export function AdvisorSummary() {
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Yếu/Kém</div>
           <div style={{ fontSize: 36, fontWeight: 800 }}>{(stats.byClass['WEAK'] || 0) + (stats.byClass['POOR'] || 0)}</div>
         </div>
-      </div>
-
-      {/* Export button */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', position: 'relative' }}>
-        <button onClick={() => setShowExportMenu(!showExportMenu)} className="btn-primary" id="export-csv-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          Xuất dữ liệu
-        </button>
-        {showExportMenu && (
-          <div style={{ position: 'absolute', top: 40, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', padding: 4, zIndex: 10, display: 'flex', flexDirection: 'column', minWidth: 120 }}>
-            <button onClick={() => exportData('csv')} style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, borderRadius: 4, width: '100%', fontWeight: 500 }}>CSV (.csv)</button>
-            <button onClick={() => exportData('excel')} style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, borderRadius: 4, width: '100%', fontWeight: 500 }}>Excel (.xls)</button>
-            <button onClick={() => exportData('pdf')} style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, borderRadius: 4, width: '100%', fontWeight: 500 }}>PDF (.pdf)</button>
-          </div>
-        )}
       </div>
 
       {/* Table */}

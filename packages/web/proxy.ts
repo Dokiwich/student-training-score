@@ -6,6 +6,7 @@ const ROLE_REDIRECTS: Record<string, string> = {
   CLASS_COMMITTEE: '/class-president',
   CLASS_PRESIDENT: '/class-president',
   ADVISOR: '/advisor',
+  DEPARTMENT: '/department',
   SCHOOL_ADMIN: '/admin',
   SUPER_ADMIN: '/admin',
 };
@@ -23,6 +24,10 @@ export default withAuth(
 
     // Admin routes
     if (path.startsWith('/admin') && role !== 'SCHOOL_ADMIN' && role !== 'SUPER_ADMIN') {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+    // Department routes
+    if (path.startsWith('/department') && role !== 'DEPARTMENT' && role !== 'SCHOOL_ADMIN' && role !== 'SUPER_ADMIN') {
       return NextResponse.redirect(new URL('/', req.url));
     }
     // Class president routes
@@ -52,5 +57,5 @@ export default withAuth(
 
 export const config = {
   // Protect all dashboard routes + root. Login page remains public.
-  matcher: ["/", "/admin/:path*", "/student/:path*", "/class-president/:path*", "/advisor/:path*"],
+  matcher: ["/", "/admin/:path*", "/student/:path*", "/class-president/:path*", "/advisor/:path*", "/department/:path*"],
 };

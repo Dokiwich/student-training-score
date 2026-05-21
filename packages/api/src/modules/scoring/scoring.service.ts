@@ -59,10 +59,9 @@ const SCORING_PERMISSIONS: Record<string, string> = {
 export class ScoringService {
 
   // =============================================
-  // HELPER: Lấy class_id từ semester_enrollments (fallback users.class_id)
+  // HELPER: Lấy enrollment từ semester_enrollments
   // =============================================
-  private async resolveClassId(userId: string, semesterId: string): Promise<string | null> {
-    // 1. Tìm trong semester_enrollments trước
+  private async resolveEnrollment(userId: string, semesterId: string): Promise<{ id: string; class_id: string } | null> {
     const enrollment = await prisma.semester_enrollments.findUnique({
       where: {
         user_id_semester_id: {
@@ -70,16 +69,22 @@ export class ScoringService {
           semester_id: semesterId,
         },
       },
-      select: { class_id: true },
+      select: { id: true, class_id: true },
     });
-    if (enrollment) return enrollment.class_id;
+    return enrollment || null;
+  }
 
-    // 2. Fallback: users.class_id (backward compatible)
-    const user = await prisma.users.findFirst({
-      where: { id: userId },
-      select: { class_id: true },
+  // =============================================
+  // HELPER: Tìm phiếu theo student_id (qua enrollment)
+  // =============================================
+  private async findSheetByStudent(studentId: string) {
+    return prisma.scoring_sheets.findFirst({
+      where: {
+        semester_enrollments: {
+          user_id: studentId,
+        },
+      },
     });
-    return user?.class_id || null;
   }
 
   // =============================================
@@ -100,19 +105,18 @@ export class ScoringService {
     // Tìm user đang đăng nhập
     const currentUser = await prisma.users.findFirst({
       where: { id: userId },
-      select: { id: true, class_id: true, role: true },
+      select: { id: true, role: true },
     });
 
     if (!currentUser) {
       return { message: 'Không tìm thấy người dùng', data: [] };
     }
 
-    // Xác định class_id qua semester_enrollments (fallback users.class_id)
+    // Xác định class_id qua semester_enrollments hoặc class_roles
     let classIds: string[] = [];
     const activeSemester = await this.getActiveSemester();
 
     if (activeSemester) {
-      // Thử enrollment trước
       const enrollment = await prisma.semester_enrollments.findUnique({
         where: {
           user_id_semester_id: {
@@ -127,36 +131,38 @@ export class ScoringService {
       }
     }
 
-    // Fallback: users.class_id hoặc class_roles
+    // Fallback: class_roles (cho ADVISOR)
     if (classIds.length === 0) {
-      if (currentUser.class_id) {
-        classIds = [currentUser.class_id];
-      } else {
-        // Tìm trong class_roles (cho ADVISOR)
-        const classRoles = await prisma.class_roles.findMany({
-          where: { user_id: currentUser.id, is_active: 1 },
-          select: { class_id: true },
-        });
-        classIds = classRoles.map((cr) => cr.class_id);
-      }
+      const classRoles = await prisma.class_roles.findMany({
+        where: { user_id: currentUser.id, is_active: 1 },
+        select: { class_id: true },
+      });
+      classIds = classRoles.map((cr) => cr.class_id);
     }
 
     if (classIds.length === 0) {
       return { message: 'Không tìm thấy lớp phụ trách', data: [] };
     }
 
-    // Lấy tất cả sinh viên cùng lớp (hỗ trợ nhiều lớp cho ADVISOR)
-    const students = await prisma.users.findMany({
+    // Lấy tất cả sinh viên cùng lớp qua semester_enrollments
+    const enrollments = await prisma.semester_enrollments.findMany({
       where: {
         class_id: { in: classIds },
-        role: { in: ['STUDENT', 'CLASS_COMMITTEE'] },
         is_active: 1,
+        users: {
+          role: { in: ['STUDENT', 'CLASS_COMMITTEE'] },
+          is_active: 1,
+        },
       },
       select: {
-        id: true,
-        student_id: true,
-        full_name: true,
-        email: true,
+        users: {
+          select: {
+            id: true,
+            student_id: true,
+            full_name: true,
+            email: true,
+          },
+        },
         scoring_sheets: {
           select: {
             id: true,
@@ -170,16 +176,15 @@ export class ScoringService {
             class_reviewed_at: true,
             advisor_approved_at: true,
           },
-          take: 1,
-          orderBy: { created_at: 'desc' },
         },
       },
-      orderBy: { full_name: 'asc' },
+      orderBy: { users: { full_name: 'asc' } },
     });
 
     // Map dữ liệu gọn cho frontend
-    const data = students.map((s) => {
-      const sheet = s.scoring_sheets[0] || null;
+    const data = enrollments.map((e) => {
+      const s = e.users;
+      const sheet = e.scoring_sheets || null;
       return {
         id: s.id,
         studentCode: s.student_id,
@@ -224,9 +229,13 @@ export class ScoringService {
   //    ✅ MỚI: Trả thêm formStatus để Frontend biết khóa/mở
   // =============================================
   async getScoresByFormId(formId: string, studentId: string) {
-    // Tìm phiếu theo student_id (không dùng formId cố định nữa)
+    // Tìm phiếu theo student_id qua enrollment
     let form = await prisma.scoring_sheets.findFirst({
-      where: { student_id: studentId },
+      where: {
+        semester_enrollments: {
+          user_id: studentId,
+        },
+      },
       select: {
         id: true,
         status: true,
@@ -249,17 +258,15 @@ export class ScoringService {
         throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       }
 
-      const classId = await this.resolveClassId(studentId, activeSemester.id);
-      if (!classId) {
-        throw new BadRequestException('Không tìm thấy thông tin sinh viên hoặc lớp!');
+      const enrollment = await this.resolveEnrollment(studentId, activeSemester.id);
+      if (!enrollment) {
+        throw new BadRequestException('Không tìm thấy thông tin đăng ký học kỳ của sinh viên!');
       }
 
       const newSheet = await prisma.scoring_sheets.create({
         data: {
           id: randomUUID(),
-          student_id: studentId,
-          semester_id: activeSemester.id,
-          class_id: classId,
+          enrollment_id: enrollment.id,
           status: 'DRAFT',
           current_step: 1,
         },
@@ -335,10 +342,8 @@ export class ScoringService {
     role: string,
     studentId: string,
   ) {
-    // 3a. Tìm hoặc tự tạo phiếu điểm theo student_id
-    let form = await prisma.scoring_sheets.findFirst({
-      where: { student_id: studentId },
-    });
+    // 3a. Tìm hoặc tự tạo phiếu điểm theo student_id (qua enrollment)
+    let form = await this.findSheetByStudent(studentId);
 
     if (!form) {
       const activeSemester = await this.getActiveSemester();
@@ -346,24 +351,20 @@ export class ScoringService {
         throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       }
 
-      const classId = await this.resolveClassId(studentId, activeSemester.id);
-      if (!classId) {
-        throw new BadRequestException('Không tìm thấy thông tin sinh viên hoặc lớp!');
+      const enrollment = await this.resolveEnrollment(studentId, activeSemester.id);
+      if (!enrollment) {
+        throw new BadRequestException('Không tìm thấy thông tin đăng ký học kỳ của sinh viên!');
       }
 
       // Use upsert-like pattern: try to find again (in case another parallel request just created it)
-      form = await prisma.scoring_sheets.findFirst({
-        where: { student_id: studentId },
-      });
+      form = await this.findSheetByStudent(studentId);
 
       if (!form) {
         try {
           form = await prisma.scoring_sheets.create({
             data: {
               id: randomUUID(),
-              student_id: studentId,
-              semester_id: activeSemester.id,
-              class_id: classId,
+              enrollment_id: enrollment.id,
               status: 'DRAFT',
               current_step: 1,
             },
@@ -371,9 +372,7 @@ export class ScoringService {
         } catch (createErr: any) {
           // Handle race condition: another request may have created the sheet
           if (createErr?.code === 'P2002') {
-            form = await prisma.scoring_sheets.findFirst({
-              where: { student_id: studentId },
-            });
+            form = await this.findSheetByStudent(studentId);
             if (!form) {
               throw new BadRequestException('Không thể tạo phiếu điểm!');
             }
@@ -539,9 +538,13 @@ export class ScoringService {
         );
     }
 
-    // 5c. Tìm phiếu theo student_id để lấy scoring_sheet_id thực
+    // 5c. Tìm phiếu theo student_id (qua enrollment) để lấy scoring_sheet_id thực
     const scoreRecord = await prisma.scoring_sheets.findFirst({
-      where: { student_id: studentId },
+      where: {
+        semester_enrollments: {
+          user_id: studentId,
+        },
+      },
       select: { id: true },
     });
 
@@ -599,38 +602,25 @@ export class ScoringService {
   //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
   // =============================================
   async submitForm(formId: string, role: string, studentId: string) {
-    // 6a. Tìm phiếu theo student_id
-    let form = await prisma.scoring_sheets.findFirst({
-      where: { student_id: studentId },
-    });
+    // 6a. Tìm phiếu theo student_id (qua enrollment)
+    let form = await this.findSheetByStudent(studentId);
 
     // Fix: Nếu chưa có phiếu, tự tạo DRAFT thay vì ném lỗi
     if (!form) {
-      const student = await prisma.users.findFirst({
-        where: { id: studentId },
-        select: { class_id: true },
-      });
-
-      if (!student || !student.class_id) {
-        throw new BadRequestException('Không tìm thấy thông tin sinh viên hoặc lớp!');
-      }
-
-      const activeSemester = await prisma.semesters.findFirst({
-        where: { is_active: 1 },
-        orderBy: { created_at: 'desc' },
-        select: { id: true },
-      });
-
+      const activeSemester = await this.getActiveSemester();
       if (!activeSemester) {
         throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
+      }
+
+      const enrollment = await this.resolveEnrollment(studentId, activeSemester.id);
+      if (!enrollment) {
+        throw new BadRequestException('Không tìm thấy thông tin đăng ký học kỳ của sinh viên!');
       }
 
       form = await prisma.scoring_sheets.create({
         data: {
           id: randomUUID(),
-          student_id: studentId,
-          semester_id: activeSemester.id,
-          class_id: student.class_id,
+          enrollment_id: enrollment.id,
           status: 'DRAFT',
           current_step: 1,
         },
@@ -689,22 +679,47 @@ export class ScoringService {
     // BẮN THÔNG BÁO CHO NGƯỜI NHẬN TIẾP THEO (LỚP TRƯỞNG / CỐ VẤN)
     try {
       if (role === 'STUDENT') {
-        const studentInfo = await prisma.users.findFirst({ where: { id: studentId }, select: { full_name: true, class_id: true } });
-        if (studentInfo) {
-          const classMonitors = await prisma.users.findMany({
-            where: { class_id: studentInfo.class_id, role: 'CLASS_COMMITTEE' },
-            select: { id: true }
+        // Lấy thông tin sinh viên + class_id qua enrollment
+        const sheetWithEnrollment = await prisma.scoring_sheets.findUnique({
+          where: { id: form.id },
+          select: {
+            semester_enrollments: {
+              select: {
+                class_id: true,
+                users: { select: { full_name: true } },
+              },
+            },
+          },
+        });
+        const enrollInfo = sheetWithEnrollment?.semester_enrollments;
+        if (enrollInfo) {
+          // Tìm lớp trưởng cùng lớp qua class_roles
+          const classMonitorRoles = await prisma.class_roles.findMany({
+            where: { class_id: enrollInfo.class_id, is_active: 1, role_type: 'MONITOR' },
+            select: { user_id: true },
           });
-          if (classMonitors.length > 0) {
+          // Fallback: tìm user có role CLASS_COMMITTEE trong cùng lớp
+          let monitorIds = classMonitorRoles.map(cr => cr.user_id);
+          if (monitorIds.length === 0) {
+            const classCommittee = await prisma.semester_enrollments.findMany({
+              where: {
+                class_id: enrollInfo.class_id,
+                users: { role: 'CLASS_COMMITTEE' },
+              },
+              select: { user_id: true },
+            });
+            monitorIds = classCommittee.map(c => c.user_id);
+          }
+          if (monitorIds.length > 0) {
             await prisma.notifications.createMany({
-              data: classMonitors.map(monitor => ({
+              data: monitorIds.map(uid => ({
                 id: randomUUID(),
-                user_id: monitor.id,
-                type: 'SCORE_SUBMITTED',
+                user_id: uid,
+                type: 'SCORE_SUBMITTED' as const,
                 title: 'Có phiếu rèn luyện mới gửi lên',
-                content: `Sinh viên ${studentInfo.full_name} đã nộp tự đánh giá điểm rèn luyện. Vui lòng chấm duyệt.`,
+                content: `Sinh viên ${enrollInfo.users.full_name} đã nộp tự đánh giá điểm rèn luyện. Vui lòng chấm duyệt.`,
                 is_read: 0,
-              }))
+              })),
             });
           }
         }
@@ -724,8 +739,12 @@ export class ScoringService {
   // =============================================
   async rejectForm(formId: string, role: string, studentId: string) {
     const form = await prisma.scoring_sheets.findFirst({
-      where: { student_id: studentId },
-      include: { score_details: true }
+      where: {
+        semester_enrollments: {
+          user_id: studentId,
+        },
+      },
+      include: { score_details: true },
     });
 
     if (!form) {
