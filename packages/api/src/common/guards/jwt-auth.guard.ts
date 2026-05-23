@@ -14,26 +14,28 @@ export class JwtAuthGuard implements CanActivate {
       console.log('--- JWT AUTH GUARD ---');
       const authHeader = request.headers.authorization;
       
-      let tokenValue = null;
+      let userFromBearer = null;
 
       // 1. Check for customJwt injected via Bearer Token
       if (authHeader && authHeader.startsWith('Bearer ')) {
-        tokenValue = authHeader.split(' ')[1];
-        console.log('Using Bearer Token');
-        
-        const decoded = jwt.verify(tokenValue, secret);
-        request.user = decoded; // { id, role, studentId }
+        const tokenValue = authHeader.split(' ')[1];
+        try {
+          userFromBearer = jwt.verify(tokenValue, secret);
+        } catch (err) {
+          console.error('Bearer token verify failed, falling back to cookie:', err);
+        }
+      }
+
+      if (userFromBearer) {
+        request.user = userFromBearer;
         return true;
       }
       
-      // 2. Fallback to native NextAuth getToken if no Bearer token
-      console.log('Headers cookie:', request.headers.cookie);
+      // 2. Fallback to native NextAuth getToken if no Bearer token or if Bearer failed
       const token = await getToken({ req: request, secret });
-      console.log('Decrypted token:', token);
 
       if (!token) {
-        console.error('Token null or invalid. Secret used:', secret);
-        throw new UnauthorizedException('Token trong cookie không hợp lệ, không tồn tại hoặc đã hết hạn');
+        throw new UnauthorizedException('Token không hợp lệ, không tồn tại hoặc đã hết hạn');
       }
 
       request.user = token; 

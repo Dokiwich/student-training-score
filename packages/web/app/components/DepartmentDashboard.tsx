@@ -72,8 +72,12 @@ export function DepartmentDashboard() {
       setIsLoading(true);
       try {
         const customJwt = (session as any)?.customJwt;
-        const headers: HeadersInit = { 'Content-Type': 'application/json' };
-        if (customJwt) headers['Authorization'] = `Bearer ${customJwt}`;
+        if (!customJwt) return; // Chờ cho đến khi có JWT
+
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${customJwt}`,
+        };
         
         // Fetch stats
         const statsRes = await fetch(`${API_BASE}/department/stats`, { headers, credentials: 'include' });

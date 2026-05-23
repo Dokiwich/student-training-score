@@ -32,8 +32,34 @@ export const authOptions: AuthOptions = {
           return null;
         }
 
+        if (user.locked_until && user.locked_until > new Date()) {
+          throw new Error("ACCOUNT_LOCKED");
+        }
+
         const isPasswordValid = await bcrypt.compare(credentials.password, user.password_hash);
-        if (!isPasswordValid) return null;
+        if (!isPasswordValid) {
+          const newAttempts = (user.failed_login_attempts || 0) + 1;
+          const updates: any = { failed_login_attempts: newAttempts };
+          
+          if (newAttempts >= 5) {
+            updates.locked_until = new Date(Date.now() + 30 * 60 * 1000); // Lock for 30 minutes
+          }
+          
+          await prisma.users.update({
+            where: { id: user.id },
+            data: updates
+          });
+          
+          throw new Error("INVALID_CREDENTIALS");
+        }
+
+        // Reset failed attempts on success
+        if (user.failed_login_attempts > 0 || user.locked_until) {
+          await prisma.users.update({
+            where: { id: user.id },
+            data: { failed_login_attempts: 0, locked_until: null }
+          });
+        }
 
         const mappedRole = user.role;
 
@@ -42,7 +68,8 @@ export const authOptions: AuthOptions = {
           name: user.full_name,
           email: user.student_id || user.email, // we map student_id to Auth's email field for ease, fallback to actual email for DEPT/ADMIN
           role: mappedRole, 
-        } as { id: string; name: string; email: string; role: string; };
+          session_version: user.session_version
+        } as any;
       }
     })
   ],
@@ -52,10 +79,21 @@ export const authOptions: AuthOptions = {
         token.role = (user as { role?: string }).role;
         token.id = user.id;
         token.studentId = user.email;
+        token.session_version = (user as any).session_version || 1;
+      } else if (token.id) {
+        // Validate session_version against database for subsequent requests
+        const dbUser = await prisma.users.findUnique({
+          where: { id: token.id as string },
+          select: { session_version: true }
+        });
+        if (!dbUser || dbUser.session_version !== token.session_version) {
+          return {}; // Invalidate token
+        }
       }
+
       if (!token.customJwt && token.id && token.role) {
          token.customJwt = jwt.sign(
-           { id: token.id, role: token.role, studentId: token.studentId },
+           { id: token.id, role: token.role, studentId: token.studentId, session_version: token.session_version },
            process.env.NEXTAUTH_SECRET || "super-secret-key",
            { expiresIn: '1d' }
          );

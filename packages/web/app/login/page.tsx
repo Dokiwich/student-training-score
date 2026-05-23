@@ -31,7 +31,13 @@ export default function LoginPage() {
       });
 
       if (res?.error) {
-        setError('Tài khoản hoặc mật khẩu không chính xác!');
+        if (res.error === 'ACCOUNT_LOCKED') {
+          setError('Tài khoản đã bị khóa do sai mật khẩu quá 5 lần. Vui lòng thử lại sau 30 phút!');
+        } else if (res.error === 'INVALID_CREDENTIALS') {
+          setError('Tài khoản hoặc mật khẩu không chính xác!');
+        } else {
+          setError(res.error || 'Tài khoản hoặc mật khẩu không chính xác!');
+        }
       } else {
         // Middleware will redirect to the correct dashboard based on role
         router.push('/');

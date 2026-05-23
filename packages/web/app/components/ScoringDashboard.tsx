@@ -67,19 +67,32 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
 
   useEffect(() => {
     if (!session?.user) return;
+    const customJwt = (session as any)?.customJwt;
+    if (!customJwt) return; // Chờ cho đến khi có JWT
+
     const fetchStudents = async () => {
       setIsLoading(true);
       setFetchError(null);
       try {
-        const customJwt = (session as any)?.customJwt;
-        const headers: HeadersInit = { 'Content-Type': 'application/json' };
-        if (customJwt) headers['Authorization'] = `Bearer ${customJwt}`;
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${customJwt}`,
+        };
 
         const res = await fetch(`${API_BASE}/scoring/students`, { headers, credentials: 'include' });
         if (res.ok) {
           const json = await res.json();
           console.log('[ScoringDashboard] students:', json.data?.length, 'classId:', json.classId);
           setStudents(json.data || []);
+        } else {
+          if (res.status === 401) {
+            setFetchError('Phiên đăng nhập hết hạn. Đang tải lại...');
+            const { signOut } = await import('next-auth/react');
+            setTimeout(() => { signOut({ callbackUrl: '/login' }); }, 1500);
+            return;
+          }
+          const errText = await res.text().catch(() => '');
+          setFetchError(`Lỗi ${res.status}: ${errText}`);
         }
       } finally {
         setIsLoading(false);
@@ -91,8 +104,11 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
   const refetchStudents = useCallback(async () => {
     try {
       const customJwt = (session as any)?.customJwt;
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (customJwt) headers['Authorization'] = `Bearer ${customJwt}`;
+      if (!customJwt) return;
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${customJwt}`,
+      };
       const res = await fetch(`${API_BASE}/scoring/students`, { headers, credentials: 'include' });
       if (res.ok) {
         const json = await res.json();
@@ -106,8 +122,11 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
     setIsResetting(true);
     try {
       const customJwt = (session as any)?.customJwt;
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (customJwt) headers['Authorization'] = `Bearer ${customJwt}`;
+      if (!customJwt) { alert('Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.'); return; }
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${customJwt}`,
+      };
       const res = await fetch(`${API_BASE}/scoring/reset/reject`, {
         method: 'POST', credentials: 'include', headers,
         body: JSON.stringify({ studentId }),

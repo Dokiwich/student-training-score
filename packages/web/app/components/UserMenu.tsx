@@ -100,6 +100,28 @@ export function UserMenu() {
 
           <div style={{ padding: 4 }}>
             <button
+              onClick={async () => {
+                try {
+                  await fetch('/api/auth/logout-all', { method: 'POST' });
+                  signOut({ callbackUrl: '/login' });
+                } catch (e) {
+                  console.error(e);
+                  signOut({ callbackUrl: '/login' });
+                }
+              }}
+              style={{
+                width: '100%', textAlign: 'left', padding: '8px 12px',
+                fontSize: 13, color: 'var(--text-secondary)', background: 'none',
+                border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer',
+                fontFamily: 'inherit', transition: 'background 0.1s',
+                marginBottom: 2
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              Đăng xuất mọi thiết bị
+            </button>
+            <button
               onClick={() => signOut({ callbackUrl: '/login' })}
               style={{
                 width: '100%', textAlign: 'left', padding: '8px 12px',

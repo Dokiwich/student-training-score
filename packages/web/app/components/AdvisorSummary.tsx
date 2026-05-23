@@ -44,12 +44,16 @@ export function AdvisorSummary() {
 
   useEffect(() => {
     if (!session?.user) return;
+    const customJwt = (session as any)?.customJwt;
+    if (!customJwt) return; // Chờ cho đến khi có JWT
+
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const customJwt = (session as any)?.customJwt;
-        const headers: HeadersInit = { 'Content-Type': 'application/json' };
-        if (customJwt) headers['Authorization'] = `Bearer ${customJwt}`;
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${customJwt}`,
+        };
         const res = await fetch(`${API_BASE}/scoring/students`, { headers, credentials: 'include' });
         if (res.ok) { const json = await res.json(); setStudents(json.data || []); }
       } finally { setIsLoading(false); }

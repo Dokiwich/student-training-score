@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 
 const API_BASE = '/proxy-api';
 
@@ -143,11 +143,19 @@ export function ScoringForm({
   );
 
   const fetchData = useCallback(async () => {
+    const customJwt = (session as any)?.customJwt;
+    // Guard: chỉ fetch khi session đã sẵn sàng và có JWT
+    if (!customJwt) {
+      return;
+    }
+
     setIsLoading(true);
+    setFetchError(null);
     try {
-      const customJwt = (session as any)?.customJwt;
-      const headersInit: HeadersInit = { 'Content-Type': 'application/json' };
-      if (customJwt) headersInit['Authorization'] = `Bearer ${customJwt}`;
+      const headersInit: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${customJwt}`,
+      };
 
       const [criteriaRes, scoresRes] = await Promise.all([
         fetch(`${API_BASE}/scoring/criteria`, {
@@ -168,6 +176,11 @@ export function ScoringForm({
         setCriteria(data.data || []);
         setExpandedIds(new Set(rootItems));
       } else {
+        if (criteriaRes.status === 401) {
+          addToast('error', 'Phiên đăng nhập hết hạn. Đang tải lại...');
+          setTimeout(() => { signOut({ callbackUrl: '/login' }); }, 1500);
+          return;
+        }
         const text = await criteriaRes.text();
         setFetchError(`Không thể tải tiêu chí: ${criteriaRes.status} ${text}`);
       }
@@ -196,6 +209,13 @@ export function ScoringForm({
         setSavedStudentScores(sMap);
         setSavedClassScores(cMap);
         setSavedAdvisorScores(aMap);
+
+        // ✅ Cập nhật formStatus từ API response (dùng formStatusDetail — trạng thái chi tiết)
+        if (scoresData.formStatusDetail) {
+          setFormStatus(scoresData.formStatusDetail);
+        } else if (scoresData.formStatus) {
+          setFormStatus(scoresData.formStatus);
+        }
       }
     } finally {
       setIsLoading(false);
@@ -388,8 +408,11 @@ export function ScoringForm({
     setIsSavingDraft(true);
     try {
       const customJwt = (session as any)?.customJwt;
-      const headersInit: HeadersInit = { 'Content-Type': 'application/json' };
-      if (customJwt) headersInit['Authorization'] = `Bearer ${customJwt}`;
+      if (!customJwt) { addToast('error', 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.'); return; }
+      const headersInit: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${customJwt}`,
+      };
 
       const results: { id: number; score: number }[] = [];
       let failCount = 0;
@@ -461,8 +484,11 @@ export function ScoringForm({
     setSavingId(criteriaId);
     try {
       const customJwt = (session as any)?.customJwt;
-      const headersInit: HeadersInit = { 'Content-Type': 'application/json' };
-      if (customJwt) headersInit['Authorization'] = `Bearer ${customJwt}`;
+      if (!customJwt) { addToast('error', 'Phiên đăng nhập không hợp lệ.'); return; }
+      const headersInit: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${customJwt}`,
+      };
 
       const response = await fetch(`${API_BASE}/scoring/${formId}/submit-criteria`, {
         method: 'POST',
@@ -495,8 +521,11 @@ export function ScoringForm({
       }
 
       const customJwt = (session as any)?.customJwt;
-      const headersInit: HeadersInit = { 'Content-Type': 'application/json' };
-      if (customJwt) headersInit['Authorization'] = `Bearer ${customJwt}`;
+      if (!customJwt) { addToast('error', 'Phiên đăng nhập không hợp lệ.'); setIsSubmitting(false); return; }
+      const headersInit: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${customJwt}`,
+      };
 
       const response = await fetch(`${API_BASE}/scoring/${formId}/submit`, {
         method: 'POST',
@@ -508,6 +537,8 @@ export function ScoringForm({
       if (response.ok) {
         const data = await response.json();
         addToast('success', data.message || 'Nộp phiếu thành công!');
+        // ✅ Refresh lại dữ liệu để cập nhật formStatus
+        await fetchData();
       } else {
         const errorData = await response.json().catch(() => null);
         addToast('error', errorData?.message || 'Lỗi khi nộp phiếu');
