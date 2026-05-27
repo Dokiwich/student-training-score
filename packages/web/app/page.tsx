@@ -1,6 +1,15 @@
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "./api/auth/[...nextauth]/route";
+'use client';
+
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+
+const ROLE_REDIRECTS: Record<string, string> = {
+  STUDENT: '/student',
+  CLASS_COMMITTEE: '/student',
+  ADVISOR: '/advisor',
+  SCHOOL_ADMIN: '/admin',
+};
 
 export default function HomePage() {
   const { data: session, status } = useSession();

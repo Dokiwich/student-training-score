@@ -170,8 +170,8 @@ export class DepartmentService {
 
     const total = students.length;
     const submitted = students.filter(s => s.status !== 'NO_SHEET' && s.status !== 'DRAFT').length;
-    const finalized = students.filter(s => 
-      s.status === 'ADVISOR_APPROVED' || s.status === 'FINALIZED' || 
+    const finalized = students.filter(s =>
+      s.status === 'ADVISOR_APPROVED' || s.status === 'FINALIZED' ||
       s.status === 'SCHOOL_APPROVED'
     ).length;
 

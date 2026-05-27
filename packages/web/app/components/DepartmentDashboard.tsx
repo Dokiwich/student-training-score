@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 
 const API_BASE = '/proxy-api';
 
@@ -36,6 +37,22 @@ interface DeptStudent {
   classification: string | null;
 }
 
+interface DeptClass {
+  id: string;
+  code: string;
+  name: string;
+  studentCount: number;
+}
+
+interface ClassStudent {
+  enrollmentId: string;
+  id: string;
+  student_id: string | null;
+  full_name: string;
+  email: string;
+  role: string;
+}
+
 const CLASSIFICATION_LABELS: Record<string, string> = {
   EXCELLENT: 'Xuất sắc',
   VERY_GOOD: 'Giỏi',
@@ -56,8 +73,13 @@ const CLS_COLORS: Record<string, { bg: string; color: string }> = {
 
 export function DepartmentDashboard() {
   const { data: session } = useSession();
-  const [activeTab, setActiveTab] = useState<'summary' | 'classes'>('summary');
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<'summary' | 'classes' | 'manage'>(
+    tabParam === 'manage' ? 'manage' : tabParam === 'classes' ? 'classes' : 'summary'
+  );
   const [selectedClass, setSelectedClass] = useState<string>('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [students, setStudents] = useState<DeptStudent[]>([]);
   const [stats, setStats] = useState<DepartmentStats | null>(null);
@@ -66,13 +88,34 @@ export function DepartmentDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [showExportMenu, setShowExportMenu] = useState(false);
 
+  // Tab "Quản lý sinh viên" state
+  const [deptClasses, setDeptClasses] = useState<DeptClass[]>([]);
+  const [manageClassId, setManageClassId] = useState('');
+  const [classStudents, setClassStudents] = useState<ClassStudent[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [newSvName, setNewSvName] = useState('');
+  const [newSvEmail, setNewSvEmail] = useState('');
+  const [newSvPassword, setNewSvPassword] = useState('');
+  const [newSvMssv, setNewSvMssv] = useState('');
+  const [manageSearch, setManageSearch] = useState('');
+
+  // Import Excel state (Khoa)
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importData, setImportData] = useState<{ rowIndex: number; student_id?: string; full_name: string; email: string; password: string; class_code?: string }[]>([]);
+  const [importResults, setImportResults] = useState<{ rowIndex: number; success: boolean; message: string; full_name?: string }[] | null>(null);
+  const [importStats, setImportStats] = useState<{ successCount: number; errorCount: number; total: number } | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importFileName, setImportFileName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (!session?.user) return;
     const fetchData = async () => {
       setIsLoading(true);
       try {
         const customJwt = (session as any)?.customJwt;
-        if (!customJwt) return; // Chờ cho đến khi có JWT
+        if (!customJwt) return;
 
         const headers: HeadersInit = {
           'Content-Type': 'application/json',
@@ -97,6 +140,161 @@ export function DepartmentDashboard() {
     };
     fetchData();
   }, [session]);
+
+  // Fetch department classes for manage tab
+  useEffect(() => {
+    if (activeTab === 'manage') {
+      fetch('/api/department/classes')
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(j => setDeptClasses(j.data || []))
+        .catch(() => {});
+    }
+  }, [activeTab]);
+
+  // Fetch students for selected class in manage tab
+  useEffect(() => {
+    if (activeTab === 'manage' && manageClassId) {
+      setLoadingStudents(true);
+      fetch(`/api/department/users?classId=${manageClassId}`)
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(j => setClassStudents(j.data || []))
+        .catch(() => setClassStudents([]))
+        .finally(() => setLoadingStudents(false));
+    } else {
+      setClassStudents([]);
+    }
+  }, [activeTab, manageClassId]);
+
+  const handleAddStudent = async () => {
+    if (!newSvName || !newSvEmail || !newSvPassword || !manageClassId) {
+      return alert('Vui lòng nhập đầy đủ: Họ tên, Email, Mật khẩu');
+    }
+    try {
+      const r = await fetch('/api/department/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: newSvName,
+          email: newSvEmail,
+          password: newSvPassword,
+          student_id: newSvMssv || undefined,
+          class_id: manageClassId,
+        }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        alert('Thêm sinh viên thành công');
+        setShowAddStudentModal(false);
+        setNewSvName(''); setNewSvEmail(''); setNewSvPassword(''); setNewSvMssv('');
+        // Refresh
+        const r2 = await fetch(`/api/department/users?classId=${manageClassId}`);
+        if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); }
+      } else {
+        alert(d.message);
+      }
+    } catch { alert('Lỗi kết nối'); }
+  };
+
+  const handleDeleteStudent = async (enrollment: ClassStudent) => {
+    if (!confirm(`Xác nhận xóa "${enrollment.full_name}" khỏi lớp?`)) return;
+    try {
+      const r = await fetch('/api/department/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enrollmentId: enrollment.enrollmentId }),
+      });
+      const d = await r.json();
+      alert(d.message);
+      if (r.ok) {
+        setClassStudents(prev => prev.filter(s => s.enrollmentId !== enrollment.enrollmentId));
+      }
+    } catch { alert('Lỗi kết nối'); }
+  };
+
+  // === IMPORT EXCEL (KHOA) ===
+  const downloadDeptTemplate = () => {
+    import('xlsx').then((XLSX) => {
+      const templateData = [
+        { 'MSSV': '22AV001', 'Họ tên': 'Nguyễn Văn A', 'Email': '22av001@student.edu.vn', 'Mật khẩu': '123456', 'Lớp': '' },
+        { 'MSSV': '22AV002', 'Họ tên': 'Trần Thị B', 'Email': '22av002@student.edu.vn', 'Mật khẩu': '123456', 'Lớp': '' },
+      ];
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      ws['!cols'] = [{ wch: 14 }, { wch: 22 }, { wch: 30 }, { wch: 12 }, { wch: 14 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'SinhVien');
+      XLSX.writeFile(wb, 'mau_import_sinh_vien.xlsx');
+    });
+  };
+
+  const handleImportFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFileName(file.name);
+    setImportResults(null);
+    setImportStats(null);
+
+    const XLSX = await import('xlsx');
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const jsonData = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' });
+
+    const columnMap: Record<string, string> = {
+      'MSSV': 'student_id', 'mssv': 'student_id', 'Mã SV': 'student_id',
+      'Họ tên': 'full_name', 'Ho ten': 'full_name', 'Họ và tên': 'full_name',
+      'Email': 'email', 'email': 'email',
+      'Mật khẩu': 'password', 'Mat khau': 'password', 'Password': 'password',
+      'Lớp': 'class_code', 'Mã lớp': 'class_code', 'Class': 'class_code',
+    };
+
+    const parsed = jsonData.map((row, i) => {
+      const mapped: any = { rowIndex: i + 2 };
+      for (const [key, value] of Object.entries(row)) {
+        const normalKey = columnMap[key.trim()];
+        if (normalKey) mapped[normalKey] = String(value).trim();
+      }
+      return mapped;
+    }).filter((r: any) => r.full_name || r.email);
+
+    setImportData(parsed);
+  };
+
+  const handleDeptImport = async () => {
+    if (importData.length === 0) return;
+    setIsImporting(true);
+    setImportResults(null);
+    try {
+      const r = await fetch('/api/department/bulk-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: importData, classId: manageClassId || undefined }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setImportResults(d.results || []);
+        setImportStats({ successCount: d.successCount, errorCount: d.errorCount, total: d.total });
+        // Refresh class student list if a class is selected
+        if (manageClassId) {
+          const r2 = await fetch(`/api/department/users?classId=${manageClassId}`);
+          if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); }
+        }
+      } else {
+        alert(d.message);
+      }
+    } catch {
+      alert('Lỗi kết nối khi import');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const resetDeptImport = () => {
+    setImportData([]);
+    setImportResults(null);
+    setImportStats(null);
+    setImportFileName('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const exportData = (type: 'csv' | 'excel' | 'pdf') => {
     const dataToExport = selectedClass === 'ALL' 
@@ -141,6 +339,31 @@ export function DepartmentDashboard() {
     setShowExportMenu(false);
   };
 
+  const filteredStudents = useMemo(() => {
+    let result = selectedClass === 'ALL' 
+      ? students 
+      : students.filter(s => s.classCode === selectedClass);
+      
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(s => 
+        s.name.toLowerCase().includes(term) || 
+        (s.studentCode && s.studentCode.toLowerCase().includes(term))
+      );
+    }
+    return result;
+  }, [students, selectedClass, searchTerm]);
+
+  const filteredManageStudents = useMemo(() => {
+    if (!manageSearch.trim()) return classStudents;
+    const term = manageSearch.toLowerCase();
+    return classStudents.filter(s =>
+      s.full_name.toLowerCase().includes(term) ||
+      (s.student_id && s.student_id.toLowerCase().includes(term)) ||
+      s.email.toLowerCase().includes(term)
+    );
+  }, [classStudents, manageSearch]);
+
   if (isLoading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -154,10 +377,6 @@ export function DepartmentDashboard() {
     );
   }
 
-  const filteredStudents = selectedClass === 'ALL' 
-    ? students 
-    : students.filter(s => s.classCode === selectedClass);
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Header Info */}
@@ -167,7 +386,7 @@ export function DepartmentDashboard() {
           <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14 }}>Tổng hợp kết quả đánh giá điểm rèn luyện sinh viên</p>
         </div>
         
-        {/* Export button moved from Advisor */}
+        {/* Export button */}
         <div style={{ position: 'relative' }}>
           <button onClick={() => setShowExportMenu(!showExportMenu)} className="btn-primary" id="export-csv-btn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -190,17 +409,14 @@ export function DepartmentDashboard() {
 
       {/* Tabs */}
       <div className="dashboard-tabs">
-        <button
-          onClick={() => setActiveTab('summary')}
-          className={`dashboard-tab ${activeTab === 'summary' ? 'active' : ''}`}
-        >
+        <button onClick={() => setActiveTab('summary')} className={`dashboard-tab ${activeTab === 'summary' ? 'active' : ''}`}>
           Thống kê tổng quan
         </button>
-        <button
-          onClick={() => setActiveTab('classes')}
-          className={`dashboard-tab ${activeTab === 'classes' ? 'active' : ''}`}
-        >
+        <button onClick={() => setActiveTab('classes')} className={`dashboard-tab ${activeTab === 'classes' ? 'active' : ''}`}>
           Chi tiết lớp học
+        </button>
+        <button onClick={() => setActiveTab('manage')} className={`dashboard-tab ${activeTab === 'manage' ? 'active' : ''}`}>
+          Quản lý sinh viên
         </button>
       </div>
 
@@ -245,7 +461,17 @@ export function DepartmentDashboard() {
                 </thead>
                 <tbody>
                   {stats.byClass.map((c, i) => (
-                    <tr key={c.classCode}>
+                    <tr 
+                      key={c.classCode}
+                      onClick={() => {
+                        setSelectedClass(c.classCode);
+                        setActiveTab('classes');
+                      }}
+                      style={{ cursor: 'pointer', transition: 'background 0.2s' }}
+                      onMouseOver={(e) => e.currentTarget.style.background = '#f8fafc'}
+                      onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                      title={`Xem chi tiết lớp ${c.classCode}`}
+                    >
                       <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{i + 1}</td>
                       <td>
                         <div style={{ fontWeight: 600 }}>{c.classCode}</div>
@@ -253,7 +479,7 @@ export function DepartmentDashboard() {
                       </td>
                       <td style={{ textAlign: 'center', fontWeight: 600 }}>{c.total}</td>
                       <td style={{ textAlign: 'center', color: c.submitted < c.total ? 'var(--danger)' : 'var(--success)' }}>
-                        {c.submitted} ({Math.round(c.submitted / c.total * 100)}%)
+                        {c.submitted} ({c.total > 0 ? Math.round(c.submitted / c.total * 100) : 0}%)
                       </td>
                       <td style={{ textAlign: 'center', color: c.finalized < c.total ? 'var(--warning-dark)' : 'var(--success)' }}>
                         {c.finalized}
@@ -265,6 +491,18 @@ export function DepartmentDashboard() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot style={{ background: '#f1f5f9', fontWeight: 700 }}>
+                  <tr>
+                    <td colSpan={2} style={{ textAlign: 'center', padding: '12px' }}>TỔNG CỘNG</td>
+                    <td style={{ textAlign: 'center', color: 'var(--text-primary)' }}>{stats.total}</td>
+                    <td style={{ textAlign: 'center', color: 'var(--success)' }}>{stats.submitted}</td>
+                    <td style={{ textAlign: 'center', color: 'var(--success)' }}>{stats.finalized}</td>
+                    <td style={{ textAlign: 'center', color: 'var(--accent)' }}>{stats.avgScore}</td>
+                    <td style={{ textAlign: 'center' }}>{(stats.byClassification['EXCELLENT'] || 0) + (stats.byClassification['VERY_GOOD'] || 0)}</td>
+                    <td style={{ textAlign: 'center' }}>{(stats.byClassification['GOOD'] || 0) + (stats.byClassification['AVERAGE'] || 0)}</td>
+                    <td style={{ textAlign: 'center' }}>{(stats.byClassification['WEAK'] || 0) + (stats.byClassification['POOR'] || 0)}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
@@ -280,15 +518,24 @@ export function DepartmentDashboard() {
               value={selectedClass} 
               onChange={(e) => setSelectedClass(e.target.value)}
               className="form-input" 
-              style={{ width: 250 }}
+              style={{ width: 200 }}
             >
               <option value="ALL">-- Tất cả các lớp --</option>
               {stats.byClass.map(c => (
                 <option key={c.classCode} value={c.classCode}>{c.classCode} - {c.className}</option>
               ))}
             </select>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 10 }}>
-              Hiển thị {filteredStudents.length} sinh viên
+            
+            <div style={{ position: 'relative', marginLeft: 12, flex: 1, maxWidth: 300 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}>
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input type="text" placeholder="Tìm tên hoặc MSSV..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ width: '100%', fontSize: 13, padding: '8px 10px 8px 32px', border: '1px solid var(--border)', borderRadius: 8, outline: 'none' }} />
+            </div>
+
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+              Hiển thị {filteredStudents.length} kết quả
             </span>
           </div>
 
@@ -344,6 +591,296 @@ export function DepartmentDashboard() {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Quản lý sinh viên */}
+      {activeTab === 'manage' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Filter bar */}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#f9fafb', padding: 16, borderRadius: 8, border: '1px solid var(--border)', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-secondary)' }}>Chọn lớp:</span>
+            <select
+              value={manageClassId}
+              onChange={(e) => setManageClassId(e.target.value)}
+              className="form-input"
+              style={{ width: 240 }}
+            >
+              <option value="">-- Chọn lớp --</option>
+              {deptClasses.map(c => (
+                <option key={c.id} value={c.id}>{c.code} - {c.name} ({c.studentCount} SV)</option>
+              ))}
+            </select>
+
+            {manageClassId && (
+              <>
+                <div style={{ position: 'relative', flex: 1, maxWidth: 280, minWidth: 180 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}>
+                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input type="text" placeholder="Tìm tên, MSSV..." value={manageSearch} onChange={(e) => setManageSearch(e.target.value)}
+                    style={{ width: '100%', fontSize: 13, padding: '8px 10px 8px 32px', border: '1px solid var(--border)', borderRadius: 8, outline: 'none' }} />
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                  <button
+                    onClick={() => { setShowImportModal(true); resetDeptImport(); }}
+                    style={{
+                      padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+                      border: '1px solid #e0e7ff', background: '#eef2ff', color: '#4f46e5',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseOver={e => { e.currentTarget.style.background = '#e0e7ff'; }}
+                    onMouseOut={e => { e.currentTarget.style.background = '#eef2ff'; }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Import Excel
+                  </button>
+                  <button
+                    onClick={() => setShowAddStudentModal(true)}
+                    style={{
+                      padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+                      border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.2s',
+                    }}
+                    onMouseOver={e => { e.currentTarget.style.background = '#059669'; }}
+                    onMouseOut={e => { e.currentTarget.style.background = '#10b981'; }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                    Thêm sinh viên
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Student list */}
+          {!manageClassId ? (
+            <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 14 }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 12px' }}>
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              <div>Vui lòng chọn lớp để quản lý sinh viên</div>
+            </div>
+          ) : loadingStudents ? (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải danh sách...</div>
+          ) : (
+            <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px', background: '#f8fafc', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  {filteredManageStudents.length} sinh viên
+                </span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="dashboard-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 50, textAlign: 'center' }}>STT</th>
+                      <th style={{ width: 110 }}>MSSV</th>
+                      <th>Họ và Tên</th>
+                      <th>Email</th>
+                      <th style={{ width: 80, textAlign: 'center' }}>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredManageStudents.length === 0 ? (
+                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>Chưa có sinh viên nào trong lớp</td></tr>
+                    ) : filteredManageStudents.map((s, i) => (
+                      <tr key={s.enrollmentId}>
+                        <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.student_id || '-'}</td>
+                        <td style={{ fontWeight: 500 }}>{s.full_name}</td>
+                        <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{s.email}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            onClick={() => handleDeleteStudent(s)}
+                            style={{
+                              padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6,
+                              border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626',
+                              cursor: 'pointer', transition: 'all 0.2s',
+                            }}
+                            onMouseOver={e => { e.currentTarget.style.background = '#fee2e2'; }}
+                            onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}
+                          >
+                            Xóa
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add Student Modal */}
+      {showAddStudentModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: 450 }}>
+            <div className="modal-header">
+              <h3 className="modal-header-title">Thêm sinh viên vào lớp</h3>
+              <button onClick={() => setShowAddStudentModal(false)} className="modal-close-btn">✕</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Họ tên *</label>
+                <input type="text" className="form-input" value={newSvName} onChange={e => setNewSvName(e.target.value)} placeholder="Nhập họ tên sinh viên" />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">MSSV</label>
+                <input type="text" className="form-input" value={newSvMssv} onChange={e => setNewSvMssv(e.target.value)} placeholder="Nhập mã số sinh viên" />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Email *</label>
+                <input type="email" className="form-input" value={newSvEmail} onChange={e => setNewSvEmail(e.target.value)} placeholder="Nhập email" />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Mật khẩu *</label>
+                <input type="password" className="form-input" value={newSvPassword} onChange={e => setNewSvPassword(e.target.value)} placeholder="Nhập mật khẩu" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowAddStudentModal(false)} className="btn-secondary">Hủy</button>
+              <button onClick={handleAddStudent} className="btn-primary">Thêm sinh viên</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Excel Modal (Khoa) */}
+      {showImportModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: 750, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <h3 className="modal-header-title">📥 Import sinh viên từ Excel</h3>
+              <button onClick={() => setShowImportModal(false)} className="modal-close-btn">✕</button>
+            </div>
+            <div className="modal-body" style={{ flex: 1, overflowY: 'auto' }}>
+              {!importResults && (
+                <>
+                  {manageClassId && (
+                    <div style={{ padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#15803d', fontWeight: 500 }}>
+                      ✅ Lớp đã chọn: <strong>{deptClasses.find(c => c.id === manageClassId)?.code}</strong> — Sinh viên sẽ được thêm vào lớp này (trừ khi file có cột Lớp riêng)
+                    </div>
+                  )}
+                  {!manageClassId && (
+                    <div style={{ padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#92400e', fontWeight: 500 }}>
+                      ⚠ Chưa chọn lớp — File Excel cần có cột "Lớp" (mã lớp) để xác định lớp cho từng sinh viên
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button onClick={downloadDeptTemplate}
+                      style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      Tải file mẫu (.xlsx)
+                    </button>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', border: '2px dashed #d1d5db', borderRadius: 8, cursor: 'pointer', background: importFileName ? '#f0fdf4' : '#fafafa', borderColor: importFileName ? '#86efac' : '#d1d5db', transition: 'all 0.2s' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={importFileName ? '#16a34a' : '#9ca3af'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span style={{ fontSize: 13, color: importFileName ? '#16a34a' : '#6b7280', fontWeight: 500 }}>
+                          {importFileName || 'Chọn file .xlsx hoặc .xls'}
+                        </span>
+                        <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImportFileSelect} style={{ display: 'none' }} />
+                      </label>
+                    </div>
+                  </div>
+
+                  {importData.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <p style={{ fontSize: 14, fontWeight: 600, color: '#1f2937', margin: 0 }}>Xem trước: {importData.length} dòng dữ liệu</p>
+                        <button onClick={resetDeptImport} style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Chọn file khác</button>
+                      </div>
+                      <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, maxHeight: 300 }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                          <thead>
+                            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Dòng</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>MSSV</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Họ tên</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Email</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Lớp</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importData.map((row, i) => {
+                              const hasError = !row.full_name || !row.email || !row.password;
+                              return (
+                                <tr key={i} style={{ background: hasError ? '#fef2f2' : 'transparent' }}>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#9ca3af' }}>{row.rowIndex}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', fontFamily: 'monospace' }}>{row.student_id || '-'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', fontWeight: 500, color: !row.full_name ? '#dc2626' : '#1f2937' }}>{row.full_name || '⚠ Thiếu'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: !row.email ? '#dc2626' : '#6b7280' }}>{row.email || '⚠ Thiếu'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{row.class_code || (manageClassId ? '← Lớp đã chọn' : '⚠ Chưa có')}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {importResults && importStats && (
+                <div>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                    <div style={{ flex: 1, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>{importStats.successCount}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#15803d' }}>Thành công</div>
+                    </div>
+                    <div style={{ flex: 1, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#dc2626' }}>{importStats.errorCount}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c' }}>Lỗi</div>
+                    </div>
+                    <div style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#475569' }}>{importStats.total}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>Tổng cộng</div>
+                    </div>
+                  </div>
+                  {importStats.errorCount > 0 && (
+                    <div style={{ overflowX: 'auto', border: '1px solid #fecaca', borderRadius: 8, maxHeight: 250 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ background: '#fef2f2', position: 'sticky', top: 0 }}>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #fecaca' }}>Dòng</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #fecaca' }}>Họ tên</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #fecaca' }}>Lý do lỗi</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importResults.filter(r => !r.success).map((r, i) => (
+                            <tr key={i}>
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #fee2e2', color: '#9ca3af' }}>{r.rowIndex}</td>
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #fee2e2', fontWeight: 500 }}>{r.full_name || '-'}</td>
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #fee2e2', color: '#dc2626' }}>{r.message}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              {!importResults ? (
+                <>
+                  <button onClick={() => setShowImportModal(false)} className="btn-secondary">Hủy</button>
+                  <button onClick={handleDeptImport} className="btn-primary" disabled={importData.length === 0 || isImporting} style={{ opacity: importData.length === 0 || isImporting ? 0.5 : 1 }}>
+                    {isImporting ? 'Đang nhập...' : `Nhập ${importData.length} sinh viên`}
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setShowImportModal(false)} className="btn-primary">Đóng</button>
+              )}
             </div>
           </div>
         </div>

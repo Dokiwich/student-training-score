@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@student-score/database';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
-
-const prisma = new PrismaClient();
 
 function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
@@ -27,12 +25,12 @@ export async function GET(req: Request) {
     orderBy: { created_at: 'asc' },
     include: {
       departments: { select: { id: true, name: true, code: true } },
-      _count: { select: { users: true, scoring_sheets: true } },
+      _count: { select: { semester_enrollments: true } },
     },
   });
 
   return NextResponse.json({
-    data: classes.map((c) => ({
+    data: classes.map((c: any) => ({
       id: c.id,
       code: c.code,
       name: c.name,
@@ -42,8 +40,8 @@ export async function GET(req: Request) {
       academic_year: c.academic_year,
       is_active: c.is_active,
       created_at: c.created_at,
-      studentCount: c._count.users,
-      sheetCount: c._count.scoring_sheets,
+      studentCount: c._count?.semester_enrollments || 0,
+      sheetCount: 0,
     })),
   });
 }
@@ -124,7 +122,7 @@ export async function DELETE(req: Request) {
     if (!id) return NextResponse.json({ message: 'ID lớp là bắt buộc' }, { status: 400 });
 
     // Check if has students
-    const studentCount = await prisma.users.count({ where: { class_id: id } });
+    const studentCount = await prisma.semester_enrollments.count({ where: { class_id: id } });
     if (studentCount > 0) {
       return NextResponse.json(
         { message: `Không thể xóa: Lớp này còn ${studentCount} sinh viên. Cần chuyển sinh viên trước.` },
@@ -133,7 +131,7 @@ export async function DELETE(req: Request) {
     }
 
     // Check if has scoring sheets
-    const sheetCount = await prisma.scoring_sheets.count({ where: { class_id: id } });
+    const sheetCount = await prisma.scoring_sheets.count({ where: { semester_enrollments: { class_id: id } } });
     if (sheetCount > 0) {
       return NextResponse.json(
         { message: `Không thể xóa: Lớp này có ${sheetCount} phiếu chấm điểm.` },

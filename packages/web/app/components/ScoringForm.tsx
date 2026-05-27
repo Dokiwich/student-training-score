@@ -40,6 +40,7 @@ interface ScoreDetail {
   student_score: number | null;
   class_score: number | null;
   advisor_score: number | null;
+  proof_url?: string | null;
   score_entries?: Array<{ scorer_role: string; score: number }>;
 }
 
@@ -100,7 +101,6 @@ export function ScoringForm({
   const [savedAdvisorScores, setSavedAdvisorScores] = useState<Record<number, number>>({});
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [inputValues, setInputValues] = useState<Record<number, string>>({});
-  const [proofUrls, setProofUrls] = useState<Record<number, string>>({});
   const [evidenceValues, setEvidenceValues] = useState<Record<number, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -116,6 +116,8 @@ export function ScoringForm({
   const [formStatus, setFormStatus] = useState<string>('DRAFT');
   const [isDirty, setIsDirty] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [rejectionInfo, setRejectionInfo] = useState<string | null>(null);
 
   const visibleRoles: Role[] =
@@ -144,8 +146,8 @@ export function ScoringForm({
 
   const fetchData = useCallback(async () => {
     const customJwt = (session as any)?.customJwt;
-    // Guard: chỉ fetch khi session đã sẵn sàng và có JWT
-    if (!customJwt) {
+    // Guard: chỉ fetch khi session đã sẵn sàng và có JWT, cùng với studentId
+    if (!customJwt || !studentId || studentId === 'undefined') {
       return;
     }
 
@@ -190,6 +192,7 @@ export function ScoringForm({
         const sMap: Record<number, number> = {};
         const cMap: Record<number, number> = {};
         const aMap: Record<number, number> = {};
+        const evidenceMap: Record<number, string> = {};
 
         scoresData.data.forEach((s: ScoreDetail) => {
           // Ưu tiên score_entries (bảng chuẩn hóa), fallback sang legacy columns
@@ -203,12 +206,23 @@ export function ScoringForm({
           const advisorVal = aEntry ? aEntry.score : s.advisor_score;
 
           if (studentVal !== null && studentVal !== undefined) sMap[s.criteria_id] = Number(studentVal);
+
           if (classVal !== null && classVal !== undefined) cMap[s.criteria_id] = Number(classVal);
+          else if (studentVal !== null && studentVal !== undefined) cMap[s.criteria_id] = Number(studentVal);
+
           if (advisorVal !== null && advisorVal !== undefined) aMap[s.criteria_id] = Number(advisorVal);
+          else if (classVal !== null && classVal !== undefined) aMap[s.criteria_id] = Number(classVal);
+          else if (studentVal !== null && studentVal !== undefined) aMap[s.criteria_id] = Number(studentVal);
+
+          // ✅ Extract proof_url (minh chứng) từ API response
+          if (s.proof_url) {
+            evidenceMap[s.criteria_id] = s.proof_url;
+          }
         });
         setSavedStudentScores(sMap);
         setSavedClassScores(cMap);
         setSavedAdvisorScores(aMap);
+        setEvidenceValues(evidenceMap);
 
         // ✅ Cập nhật formStatus từ API response (dùng formStatusDetail — trạng thái chi tiết)
         if (scoresData.formStatusDetail) {
@@ -352,8 +366,9 @@ export function ScoringForm({
           (acc, child) => acc + calculateScoreFromMap(child.id, scoreMap, visited),
           0,
         );
-        const cappedSum = item.max_points > 0 ? Math.min(sum, item.max_points) : sum;
-        return Math.max(0, cappedSum);
+        if (item.max_points > 0) return Math.max(0, Math.min(sum, item.max_points));
+        if (item.max_points < 0) return Math.min(0, Math.max(sum, item.max_points));
+        return sum;
       }
       return scoreMap[itemId] ?? 0;
     },
@@ -373,8 +388,9 @@ export function ScoringForm({
           (acc, child) => acc + calculateAutoScore(child.id, visited),
           0,
         );
-        const cappedSum = item.max_points > 0 ? Math.min(sum, item.max_points) : sum;
-        return Math.max(0, cappedSum);
+        if (item.max_points > 0) return Math.max(0, Math.min(sum, item.max_points));
+        if (item.max_points < 0) return Math.min(0, Math.max(sum, item.max_points));
+        return sum;
       }
       return parseFloat(inputValues[itemId]) || 0;
     },
@@ -388,8 +404,8 @@ export function ScoringForm({
           (c.parent_id === null || c.parent_id === 0) &&
           (c.code === tab.id ||
             c.code.startsWith(tab.id + '.') ||
-            c.code.startsWith(`TC_0${tab.id}`) ||
-            c.code.startsWith(`TC_${tab.id}`)),
+            c.code.startsWith('TC_0' + tab.id) ||
+            c.code.startsWith('TC_' + tab.id)),
       );
       const tabSum = tabRoots.reduce((sum, root) => sum + calculateAutoScore(root.id), 0);
       const safeTabSum = Math.max(0, Math.min(tabSum, tab.max));
@@ -426,7 +442,7 @@ export function ScoringForm({
         try {
           const r = await fetch(`${API_BASE}/scoring/${formId}/submit-criteria`, {
             method: 'POST', credentials: 'include', headers: headersInit,
-            body: JSON.stringify({ criteriaId: item.id, score, role: currentRole, studentId, proofUrl: proofUrls[item.id], isDraft: true }),
+            body: JSON.stringify({ criteriaId: item.id, score, role: currentRole, studentId, proofUrl: evidenceValues[item.id] || undefined, isDraft: true }),
           });
           if (r.ok) return { id: item.id, score };
           const errData = await r.json().catch(() => null);
@@ -478,8 +494,15 @@ export function ScoringForm({
     const raw = inputValues[criteriaId];
     const score = parseFloat(raw);
     if (isNaN(score)) return addToast('error', 'Vui lòng nhập số');
-    if (score < 0) return addToast('error', 'Không được âm');
-    if (score > maxPoints) return addToast('error', `Tối đa ${maxPoints}đ`);
+    
+    const isDeduction = maxPoints < 0;
+    if (isDeduction) {
+      if (score < maxPoints) return addToast('error', `Điểm không được thấp hơn ${maxPoints}`);
+      if (score > 0) return addToast('error', 'Điểm không được lớn hơn 0');
+    } else {
+      if (score < 0) return addToast('error', 'Không được âm');
+      // Cho phép vượt maxPoints ở nút lá để sinh viên có thể cộng dồn điểm cho nhiều hoạt động
+    }
 
     setSavingId(criteriaId);
     try {
@@ -494,7 +517,7 @@ export function ScoringForm({
         method: 'POST',
         credentials: 'include',
         headers: headersInit,
-        body: JSON.stringify({ criteriaId, score, role: currentRole, studentId }),
+        body: JSON.stringify({ criteriaId, score, role: currentRole, studentId, proofUrl: evidenceValues[criteriaId] || undefined }),
       });
 
       if (response.ok) {
@@ -551,6 +574,40 @@ export function ScoringForm({
   };
 
   const handleSubmitForm = () => setShowConfirm(true);
+
+  const doDeleteForm = async () => {
+    setShowDeleteConfirm(false);
+    setIsDeleting(true);
+    try {
+      const customJwt = (session as any)?.customJwt;
+      if (!customJwt) { addToast('error', 'Phiên đăng nhập không hợp lệ.'); setIsDeleting(false); return; }
+      const headersInit: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${customJwt}`,
+      };
+
+      const response = await fetch(`${API_BASE}/scoring/${formId}/reject`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: headersInit,
+        body: JSON.stringify({ studentId }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        addToast('success', data.message || 'Đã xóa phiếu điểm thành công!');
+        // ✅ Tải lại trang/dữ liệu để tạo phiếu DRAFT mới
+        await fetchData();
+      } else {
+        const errorData = await response.json().catch(() => null);
+        addToast('error', errorData?.message || 'Lỗi khi xóa phiếu');
+      }
+    } catch {
+      addToast('error', 'Không thể kết nối máy chủ');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const effectiveCanEdit = canEdit && (() => {
     if (currentRole === 'STUDENT') return formStatus === 'DRAFT';
@@ -626,12 +683,17 @@ export function ScoringForm({
             <div className="flex items-center gap-2 shrink-0">
               {canEdit && (
                 <>
-                  <button onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting} className="px-4 py-2 rounded-xl text-xs font-semibold text-sky-700 bg-white border border-sky-200 hover:bg-sky-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                  <button onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting || isDeleting} className="px-4 py-2 rounded-xl text-xs font-semibold text-sky-700 bg-white border border-sky-200 hover:bg-sky-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
                     {isSavingDraft ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-sky-200 border-t-sky-600 animate-spin"></span> Đang lưu...</> : 'Lưu Nháp'}
                   </button>
-                  <button onClick={handleSubmitForm} disabled={isSubmitting || isSavingDraft} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                  <button onClick={handleSubmitForm} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
                     {isSubmitting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-sky-300 border-t-white animate-spin"></span> Đang nộp...</> : <>Nộp Phiếu <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></>}
                   </button>
+                  {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
+                    <button onClick={() => setShowDeleteConfirm(true)} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-500 hover:bg-red-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ml-2">
+                      {isDeleting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> Đang xóa...</> : <>Xóa Phiếu <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></>}
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -657,7 +719,7 @@ export function ScoringForm({
             {/* Category chips */}
             <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 w-full">
               {TAB_GROUPS.map((tab, idx) => {
-                const tabRoots = criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith(`TC_0${tab.id}`) || c.code.startsWith(`TC_${tab.id}`)));
+                const tabRoots = criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
                 const tabScore = Math.min(tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0), tab.max);
                 const isFull = tabScore === tab.max;
                 const isEmpty = tabScore === 0;
@@ -675,14 +737,14 @@ export function ScoringForm({
           <div className="space-y-3 pb-8">
             {TAB_GROUPS.map((tab, idx) => {
               const isTabExpanded = expandedTabs.has(tab.id);
-              const tabRoots = criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith(`TC_0${tab.id}`) || c.code.startsWith(`TC_${tab.id}`)));
+              const tabRoots = criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
               const tabScore = Math.min(tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0), tab.max);
               const isFull = tabScore === tab.max;
               const filtered = sortedCriteria.filter(item => {
                 if (!isVisible(item.id)) return false;
                 const root = getRoot(item.id);
                 if (!root) return true;
-                return root.code === tab.id || root.code.startsWith(tab.id + '.') || root.code.startsWith(`TC_0${tab.id}`) || root.code.startsWith(`TC_${tab.id}`);
+                return root.code === tab.id || root.code.startsWith(tab.id + '.') || root.code.startsWith('TC_0' + tab.id) || root.code.startsWith('TC_' + tab.id);
               });
 
               return (
@@ -717,14 +779,20 @@ export function ScoringForm({
                             <th className="px-4 py-2.5 w-16">Mã</th>
                             <th className="px-4 py-2.5">Nội dung</th>
                             <th className="px-4 py-2.5 w-16 text-center">Điểm</th>
-                            <th className="px-4 py-2.5 w-24 text-center">Tự chấm</th>
+                            <th className="px-4 py-2.5 w-20 text-center">Sinh viên</th>
+                            {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
+                              <th className="px-4 py-2.5 w-20 text-center">BCS Lớp</th>
+                            )}
+                            {currentRole === 'ADVISOR' && (
+                              <th className="px-4 py-2.5 w-20 text-center">Cố vấn</th>
+                            )}
                             <th className="px-4 py-2.5 w-48">Minh chứng</th>
                             <th className="px-4 py-2.5 w-12 text-center"></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-sky-50">
                           {filtered.length === 0 ? (
-                            <tr><td colSpan={6} className="p-8 text-center text-sky-300 text-sm">Không có tiêu chí nào.</td></tr>
+                            <tr><td colSpan={currentRole === 'STUDENT' ? 6 : currentRole === 'CLASS_COMMITTEE' ? 7 : 8} className="p-8 text-center text-sky-300 text-sm">Không có tiêu chí nào.</td></tr>
                           ) : (
                             filtered.map((item) => {
                               const isParent = parentIds.has(item.id);
@@ -734,6 +802,10 @@ export function ScoringForm({
                               const val = inputValues[item.id] || '';
                               const evidence = evidenceValues?.[item.id] || '';
                               const isRowSaving = savingId === item.id;
+
+                              const isDeduction = item.score_type === 'DEDUCTION' || item.max_points < 0;
+                              const minVal = isDeduction ? item.max_points : 0;
+                              const maxVal = isDeduction ? 0 : 100; // Mở rộng max cho phép cộng dồn điểm
 
                               if (isParent) {
                                 return (
@@ -746,7 +818,19 @@ export function ScoringForm({
                                       </div>
                                     </td>
                                     <td className="px-4 py-2.5 text-center text-xs text-sky-400">{item.max_points}</td>
-                                    <td className="px-4 py-2.5 text-center text-xs font-semibold text-sky-600">{calculateAutoScore(item.id)}</td>
+                                    <td className="px-4 py-2.5 text-center text-xs font-semibold text-sky-600">
+                                      {currentRole === 'STUDENT' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedStudentScores)}
+                                    </td>
+                                    {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
+                                      <td className="px-4 py-2.5 text-center text-xs font-semibold text-sky-600">
+                                        {currentRole === 'CLASS_COMMITTEE' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedClassScores)}
+                                      </td>
+                                    )}
+                                    {currentRole === 'ADVISOR' && (
+                                      <td className="px-4 py-2.5 text-center text-xs font-semibold text-sky-600">
+                                        {calculateAutoScore(item.id)}
+                                      </td>
+                                    )}
                                     <td className="px-4 py-2.5"></td>
                                     <td className="px-4 py-2.5 text-center"><span className="text-[9px] uppercase font-semibold text-sky-300 bg-sky-50 px-1.5 py-0.5 rounded">Auto</span></td>
                                   </tr>
@@ -763,21 +847,59 @@ export function ScoringForm({
                                     </div>
                                   </td>
                                   <td className="px-4 py-2.5 text-center text-xs text-sky-400">{item.max_points}</td>
+                                  
+                                  {/* Student Score Column */}
                                   <td className="px-4 py-2.5 text-center">
                                     {isFixed ? (
                                       <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2 py-1 rounded-lg">{item.max_points}</span>
-                                    ) : (
+                                    ) : currentRole === 'STUDENT' ? (
                                       <div className="relative inline-block">
-                                        <input type="number" min={0} max={item.max_points} value={val} disabled={!canEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
+                                        <input type="number" min={minVal} max={maxVal} value={val} disabled={!canEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
                                         {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin bg-white"></div>}
                                       </div>
+                                    ) : (
+                                      <span className="text-xs font-medium text-sky-700">{savedStudentScores[item.id] ?? '-'}</span>
                                     )}
                                   </td>
+
+                                  {/* BCS Score Column */}
+                                  {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
+                                    <td className="px-4 py-2.5 text-center">
+                                      {isFixed ? (
+                                        <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                      ) : currentRole === 'CLASS_COMMITTEE' ? (
+                                        <div className="relative inline-block">
+                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!canEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
+                                          {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs font-medium text-sky-700">{savedClassScores[item.id] ?? '-'}</span>
+                                      )}
+                                    </td>
+                                  )}
+
+                                  {/* Advisor Score Column */}
+                                  {currentRole === 'ADVISOR' && (
+                                    <td className="px-4 py-2.5 text-center">
+                                      {isFixed ? (
+                                        <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                      ) : (
+                                        <div className="relative inline-block">
+                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!canEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
+                                          {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                        </div>
+                                      )}
+                                    </td>
+                                  )}
                                   <td className="px-4 py-2.5">
                                     {!isFixed && (
                                       <div className="relative flex items-center">
                                         <input type="text" placeholder="Link minh chứng..." value={evidence} disabled={!canEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => setEvidenceValues(prev => ({ ...prev, [item.id]: e.target.value }))} className="w-full h-8 px-3 text-[11px] text-sky-600 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all pr-8 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300 placeholder-sky-200" />
-                                        {evidence && <div className="absolute right-2 w-4 h-4 bg-sky-100 rounded-full flex items-center justify-center"><svg className="w-2.5 h-2.5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg></div>}
+                                        {evidence && (
+                                          <a href={evidence.startsWith('http') ? evidence : `https://${evidence}`} target="_blank" rel="noopener noreferrer" className="absolute right-2 w-5 h-5 bg-sky-100 hover:bg-sky-200 rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer z-10" title="Mở liên kết minh chứng">
+                                            <svg className="w-3 h-3 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                          </a>
+                                        )}
                                       </div>
                                     )}
                                   </td>
@@ -816,6 +938,25 @@ export function ScoringForm({
             <div className="flex gap-2.5">
               <button onClick={() => setShowConfirm(false)} className="flex-1 py-2.5 px-4 bg-sky-50 hover:bg-sky-100 text-sky-700 font-semibold text-sm rounded-xl transition-colors">Hủy bỏ</button>
               <button onClick={doSubmitForm} className="flex-1 py-2.5 px-4 bg-sky-500 hover:bg-sky-600 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors">Đồng ý Nộp</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl p-7 max-w-sm w-full shadow-2xl">
+            <div className="w-14 h-14 bg-red-100 text-red-600 rounded-xl flex items-center justify-center mb-5 mx-auto">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </div>
+            <h3 className="text-lg font-semibold text-center text-slate-800 mb-2">Xóa Phiếu Rèn Luyện?</h3>
+            <p className="text-center text-slate-500 text-sm mb-6 leading-relaxed">
+              Bạn có chắc chắn muốn xóa toàn bộ phiếu này? Hệ thống sẽ tạo lại một phiếu mới (DRAFT) cho sinh viên tự chấm lại. Hành động này không thể hoàn tác.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 px-4 bg-slate-50 hover:bg-slate-100 text-slate-600 font-semibold text-sm rounded-xl transition-colors">Hủy bỏ</button>
+              <button onClick={doDeleteForm} className="flex-1 py-2.5 px-4 bg-red-500 hover:bg-red-600 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm shadow-red-200">Xóa Phiếu</button>
             </div>
           </div>
         </div>

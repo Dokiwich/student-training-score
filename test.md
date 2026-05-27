@@ -12,3 +12,7 @@
 ## 2. Tài khoản dành cho Khoa / Phòng ban
 * **Email:** `khoa.cntt@university.edu.vn` (hoặc `khoa.nn@university.edu.vn`)
 * **Mật khẩu (Password):** `dept123`
+
+## 3. Tài khoản dành cho Admin
+* **Email:** `admin@edu.vn`
+* **Mật khẩu (Password):** `admin`

@@ -252,11 +252,11 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
               </div>
             ) : sidebarCollapsed ? (
               <div style={{ padding: '8px 0' }}>
-                {filtered.map((student) => {
+                {filtered.map((student, index) => {
                   const isActive = student.id === selectedStudentId;
                   const initial = student.name.split(' ').pop()?.[0] || '?';
                   return (
-                    <button key={student.id} onClick={() => handleStudentClick(student.id)}
+                    <button key={`${student.id}-${index}`} onClick={() => handleStudentClick(student.id)}
                       style={{
                         width: '100%', display: 'flex', justifyContent: 'center', padding: '6px 0', background: isActive ? 'var(--accent-light)' : 'transparent',
                         border: 'none', cursor: 'pointer', transition: 'background 0.15s'
@@ -275,12 +275,12 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
               </div>
             ) : (
               <div style={{ padding: '4px 0' }}>
-                {filtered.map((student) => {
+                {filtered.map((student, index) => {
                   const isActive = student.id === selectedStudentId;
                   const st = STATUS_MAP[student.status] || { label: student.status, color: '#6b7280', bg: '#f3f4f6' };
                   const score = student[meta.scoreCol];
                   return (
-                    <button key={student.id} onClick={() => handleStudentClick(student.id)}
+                    <button key={`${student.id}-${index}`} onClick={() => handleStudentClick(student.id)}
                       style={{
                         width: '100%', textAlign: 'left', padding: '12px 14px', background: isActive ? '#f8fafc' : 'transparent',
                         border: 'none', cursor: 'pointer', transition: 'all 0.15s', borderLeft: `3px solid ${isActive ? '#818cf8' : 'transparent'}`,

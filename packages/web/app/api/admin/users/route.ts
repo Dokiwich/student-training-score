@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@student-score/database';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
-
-const prisma = new PrismaClient();
 
 function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
@@ -20,10 +18,12 @@ export async function GET(req: Request) {
   const classId = searchParams.get('classId');
   const departmentId = searchParams.get('departmentId');
 
-  const where: Record<string, unknown> = {};
+  const where: any = {};
   if (role) where.role = role;
-  if (classId) where.class_id = classId;
   if (departmentId) where.department_id = departmentId;
+  if (classId) {
+    where.semester_enrollments = { some: { class_id: classId, is_active: 1 } };
+  }
 
   const users = await prisma.users.findMany({
     where,
@@ -36,34 +36,40 @@ export async function GET(req: Request) {
       phone: true,
       role: true,
       department_id: true,
-      class_id: true,
       is_active: true,
       created_at: true,
       last_login_at: true,
-      classes: { select: { id: true, name: true, code: true } },
       departments: { select: { id: true, name: true, code: true } },
+      semester_enrollments: {
+        where: { is_active: 1 },
+        take: 1,
+        select: { classes: { select: { id: true, name: true, code: true } } }
+      }
     },
     take: 500,
   });
 
   return NextResponse.json({
-    data: users.map((u) => ({
-      id: u.id,
-      student_id: u.student_id,
-      email: u.email,
-      full_name: u.full_name,
-      phone: u.phone,
-      role: u.role,
-      department_id: u.department_id,
-      class_id: u.class_id,
-      className: u.classes?.name || '',
-      classCode: u.classes?.code || '',
-      departmentName: u.departments?.name || '',
-      departmentCode: u.departments?.code || '',
-      is_active: u.is_active,
-      created_at: u.created_at,
-      last_login_at: u.last_login_at,
-    })),
+    data: users.map((u: any) => {
+      const activeClass = u.semester_enrollments?.[0]?.classes;
+      return {
+        id: u.id,
+        student_id: u.student_id,
+        email: u.email,
+        full_name: u.full_name,
+        phone: u.phone,
+        role: u.role,
+        department_id: u.department_id,
+        class_id: activeClass?.id || '',
+        className: activeClass?.name || '',
+        classCode: activeClass?.code || '',
+        departmentName: u.departments?.name || '',
+        departmentCode: u.departments?.code || '',
+        is_active: u.is_active,
+        created_at: u.created_at,
+        last_login_at: u.last_login_at,
+      };
+    }),
   });
 }
 
@@ -106,7 +112,6 @@ export async function POST(req: Request) {
         student_id: student_id || null,
         role,
         department_id: department_id || null,
-        class_id: class_id || null,
         is_active: 1
       }
     });
@@ -157,7 +162,6 @@ export async function PUT(req: Request) {
 
     const updateData: Record<string, unknown> = {};
     if (role !== undefined) updateData.role = role;
-    if (class_id !== undefined) updateData.class_id = class_id || null;
     if (department_id !== undefined) updateData.department_id = department_id || null;
     if (is_active !== undefined) updateData.is_active = is_active;
     if (full_name !== undefined) updateData.full_name = full_name;
@@ -215,7 +219,7 @@ export async function DELETE(req: Request) {
     await prisma.$transaction(async (tx) => {
       // 1. Tìm tất cả scoring_sheets của user
       const sheets = await tx.scoring_sheets.findMany({
-        where: { student_id: id },
+        where: { semester_enrollments: { user_id: id } },
         select: { id: true },
       });
       const sheetIds = sheets.map((s) => s.id);

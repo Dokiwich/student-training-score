@@ -1,18 +1,38 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 interface UserItem { id: string; student_id: string | null; email: string; full_name: string; phone: string | null; role: string; class_id: string | null; department_id: string | null; className: string; departmentName: string; is_active: number; }
 interface Dept { id: string; code: string; name: string; }
 interface ClassItem { id: string; code: string; name: string; }
 
-const ROLE_LABELS: Record<string, string> = { STUDENT: 'Sinh viên', CLASS_COMMITTEE: 'Ban cán sự', ADVISOR: 'Cố vấn', SCHOOL_ADMIN: 'Admin' };
+const ROLE_LABELS: Record<string, string> = { STUDENT: 'Sinh viên', CLASS_COMMITTEE: 'Ban cán sự', ADVISOR: 'Cố vấn', SCHOOL_ADMIN: 'Admin', DEPARTMENT: 'Khoa' };
 const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
   STUDENT: { bg: '#eff6ff', color: '#2563eb' },
   CLASS_COMMITTEE: { bg: '#fef3c7', color: '#d97706' },
   ADVISOR: { bg: '#ecfdf5', color: '#059669' },
   SCHOOL_ADMIN: { bg: 'var(--accent-light)', color: 'var(--accent)' },
+  DEPARTMENT: { bg: '#f3e8ff', color: '#7c3aed' },
 };
+
+interface ImportRow {
+  rowIndex: number;
+  student_id?: string;
+  full_name: string;
+  email: string;
+  password: string;
+  role: string;
+  department_code?: string;
+  class_code?: string;
+}
+
+interface ImportResult {
+  rowIndex: number;
+  success: boolean;
+  message: string;
+  student_id?: string;
+  full_name?: string;
+}
 
 export function UsersTab() {
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -37,6 +57,15 @@ export function UsersTab() {
   const [newStudentId, setNewStudentId] = useState('');
   const [newDeptId, setNewDeptId] = useState('');
   const [newClassId, setNewClassId] = useState('');
+
+  // Import Excel state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importData, setImportData] = useState<ImportRow[]>([]);
+  const [importResults, setImportResults] = useState<ImportResult[] | null>(null);
+  const [importStats, setImportStats] = useState<{ successCount: number; errorCount: number; total: number } | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importFileName, setImportFileName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -116,6 +145,128 @@ export function UsersTab() {
     } catch { alert('Lỗi kết nối'); }
   };
 
+  // === EXCEL IMPORT FUNCTIONS ===
+
+  const downloadTemplate = () => {
+    import('xlsx').then((XLSX) => {
+      const templateData = [
+        { 'MSSV': '22AV1101001', 'Họ tên': 'Nguyễn Văn A', 'Email': 'example@student.edu.vn', 'Mật khẩu': '123456', 'Vai trò': 'STUDENT', 'Khoa': 'CNTT', 'Lớp': '22AV1101' },
+        { 'MSSV': '', 'Họ tên': 'Trần Thị B', 'Email': 'cv.22av@edu.vn', 'Mật khẩu': '123456', 'Vai trò': 'ADVISOR', 'Khoa': 'CNTT', 'Lớp': '' },
+      ];
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      ws['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'DanhSach');
+      XLSX.writeFile(wb, 'mau_import_nguoi_dung.xlsx');
+    });
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFileName(file.name);
+    setImportResults(null);
+    setImportStats(null);
+
+    const XLSX = await import('xlsx');
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const jsonData = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' });
+
+    const columnMap: Record<string, string> = {
+      'MSSV': 'student_id',
+      'mssv': 'student_id',
+      'Mã SV': 'student_id',
+      'Họ tên': 'full_name',
+      'Ho ten': 'full_name',
+      'Họ và tên': 'full_name',
+      'Email': 'email',
+      'email': 'email',
+      'Mật khẩu': 'password',
+      'Mat khau': 'password',
+      'Password': 'password',
+      'Vai trò': 'role',
+      'Vai tro': 'role',
+      'Role': 'role',
+      'Khoa': 'department_code',
+      'Mã khoa': 'department_code',
+      'Department': 'department_code',
+      'Lớp': 'class_code',
+      'Mã lớp': 'class_code',
+      'Class': 'class_code',
+    };
+
+    const roleMap: Record<string, string> = {
+      'sinh viên': 'STUDENT',
+      'sv': 'STUDENT',
+      'student': 'STUDENT',
+      'ban cán sự': 'CLASS_COMMITTEE',
+      'bcs': 'CLASS_COMMITTEE',
+      'class_committee': 'CLASS_COMMITTEE',
+      'cố vấn': 'ADVISOR',
+      'cvht': 'ADVISOR',
+      'advisor': 'ADVISOR',
+      'khoa': 'DEPARTMENT',
+      'department': 'DEPARTMENT',
+      'admin': 'SCHOOL_ADMIN',
+      'school_admin': 'SCHOOL_ADMIN',
+    };
+
+    const parsed: ImportRow[] = jsonData.map((row, i) => {
+      const mapped: any = { rowIndex: i + 2 }; // +2: header=1, 0-indexed
+      for (const [key, value] of Object.entries(row)) {
+        const normalKey = columnMap[key.trim()];
+        if (normalKey) {
+          mapped[normalKey] = String(value).trim();
+        }
+      }
+      // Normalize role
+      if (mapped.role) {
+        const roleLower = mapped.role.toLowerCase();
+        mapped.role = roleMap[roleLower] || mapped.role.toUpperCase();
+      } else {
+        mapped.role = 'STUDENT';
+      }
+      return mapped as ImportRow;
+    }).filter(r => r.full_name || r.email); // Remove completely empty rows
+
+    setImportData(parsed);
+  };
+
+  const handleImport = async () => {
+    if (importData.length === 0) return;
+    setIsImporting(true);
+    setImportResults(null);
+    try {
+      const r = await fetch('/api/admin/bulk-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: importData }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setImportResults(d.results || []);
+        setImportStats({ successCount: d.successCount, errorCount: d.errorCount, total: d.total });
+        fetchAll(); // Refresh the user list
+      } else {
+        alert(d.message);
+      }
+    } catch {
+      alert('Lỗi kết nối khi import');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const resetImport = () => {
+    setImportData([]);
+    setImportResults(null);
+    setImportStats(null);
+    setImportFileName('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const filtered = users.filter(u => !search || u.full_name.toLowerCase().includes(search.toLowerCase()) || (u.student_id || '').includes(search) || u.email.includes(search));
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
@@ -127,9 +278,25 @@ export function UsersTab() {
           <h2 className="dashboard-card-title">Quản lý Người dùng</h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{filtered.length} / {users.length} người dùng</p>
         </div>
-        <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-          Thêm tài khoản
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => { setShowImportModal(true); resetImport(); }}
+            style={{
+              padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+              border: '1px solid #e0e7ff', background: '#eef2ff', color: '#4f46e5',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+              transition: 'all 0.2s',
+            }}
+            onMouseOver={e => { e.currentTarget.style.background = '#e0e7ff'; }}
+            onMouseOut={e => { e.currentTarget.style.background = '#eef2ff'; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Import Excel
+          </button>
+          <button className="btn-primary" onClick={() => setShowAddModal(true)}>
+            Thêm tài khoản
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -189,6 +356,7 @@ export function UsersTab() {
         </div>
       </div>
 
+      {/* Edit Modal */}
       {editing && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -226,6 +394,7 @@ export function UsersTab() {
         </div>
       )}
 
+      {/* Add User Modal */}
       {showAddModal && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: 500 }}>
@@ -274,6 +443,175 @@ export function UsersTab() {
             <div className="modal-footer">
               <button onClick={() => setShowAddModal(false)} className="btn-secondary">Hủy</button>
               <button onClick={handleAddUser} className="btn-primary">Thêm tài khoản</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Excel Modal */}
+      {showImportModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <h3 className="modal-header-title">📥 Import dữ liệu từ Excel</h3>
+              <button onClick={() => setShowImportModal(false)} className="modal-close-btn">✕</button>
+            </div>
+            <div className="modal-body" style={{ flex: 1, overflowY: 'auto' }}>
+              {/* Step 1: Download template + upload */}
+              {!importResults && (
+                <>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={downloadTemplate}
+                      style={{
+                        padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+                        border: '1px solid #d1d5db', background: '#fff', color: '#374151',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      Tải file mẫu (.xlsx)
+                    </button>
+
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
+                          border: '2px dashed #d1d5db', borderRadius: 8, cursor: 'pointer',
+                          background: importFileName ? '#f0fdf4' : '#fafafa',
+                          borderColor: importFileName ? '#86efac' : '#d1d5db',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={importFileName ? '#16a34a' : '#9ca3af'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span style={{ fontSize: 13, color: importFileName ? '#16a34a' : '#6b7280', fontWeight: 500 }}>
+                          {importFileName || 'Chọn file .xlsx hoặc .xls'}
+                        </span>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".xlsx,.xls"
+                          onChange={handleFileSelect}
+                          style={{ display: 'none' }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Preview data */}
+                  {importData.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <p style={{ fontSize: 14, fontWeight: 600, color: '#1f2937', margin: 0 }}>
+                          Xem trước: {importData.length} dòng dữ liệu
+                        </p>
+                        <button
+                          onClick={resetImport}
+                          style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                          Chọn file khác
+                        </button>
+                      </div>
+
+                      <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, maxHeight: 350 }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                          <thead>
+                            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Dòng</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>MSSV</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Họ tên</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Email</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Vai trò</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Khoa</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Lớp</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importData.map((row, i) => {
+                              const hasError = !row.full_name || !row.email || !row.password;
+                              return (
+                                <tr key={i} style={{ background: hasError ? '#fef2f2' : 'transparent' }}>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#9ca3af' }}>{row.rowIndex}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', fontFamily: 'monospace' }}>{row.student_id || '-'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', fontWeight: 500, color: !row.full_name ? '#dc2626' : '#1f2937' }}>{row.full_name || '⚠ Thiếu'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: !row.email ? '#dc2626' : '#6b7280' }}>{row.email || '⚠ Thiếu'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6' }}>
+                                    <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: '#f3f4f6', color: '#374151' }}>
+                                      {ROLE_LABELS[row.role] || row.role}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{row.department_code || '-'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{row.class_code || '-'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Step 2: Import results */}
+              {importResults && importStats && (
+                <div>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                    <div style={{ flex: 1, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>{importStats.successCount}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#15803d' }}>Thành công</div>
+                    </div>
+                    <div style={{ flex: 1, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#dc2626' }}>{importStats.errorCount}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c' }}>Lỗi</div>
+                    </div>
+                    <div style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#475569' }}>{importStats.total}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>Tổng cộng</div>
+                    </div>
+                  </div>
+
+                  {importStats.errorCount > 0 && (
+                    <div style={{ overflowX: 'auto', border: '1px solid #fecaca', borderRadius: 8, maxHeight: 300 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ background: '#fef2f2', position: 'sticky', top: 0 }}>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #fecaca' }}>Dòng</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #fecaca' }}>Họ tên</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #fecaca' }}>Lý do lỗi</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importResults.filter(r => !r.success).map((r, i) => (
+                            <tr key={i}>
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #fee2e2', color: '#9ca3af' }}>{r.rowIndex}</td>
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #fee2e2', fontWeight: 500 }}>{r.full_name || '-'}</td>
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #fee2e2', color: '#dc2626' }}>{r.message}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              {!importResults ? (
+                <>
+                  <button onClick={() => setShowImportModal(false)} className="btn-secondary">Hủy</button>
+                  <button
+                    onClick={handleImport}
+                    className="btn-primary"
+                    disabled={importData.length === 0 || isImporting}
+                    style={{ opacity: importData.length === 0 || isImporting ? 0.5 : 1 }}
+                  >
+                    {isImporting ? 'Đang nhập...' : `Nhập ${importData.length} dòng dữ liệu`}
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setShowImportModal(false)} className="btn-primary">Đóng</button>
+              )}
             </div>
           </div>
         </div>

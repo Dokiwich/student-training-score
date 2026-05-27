@@ -425,18 +425,30 @@ export class ScoringService {
       throw new BadRequestException('Tiêu chí này đã bị vô hiệu hóa!');
     }
 
-    // 3d. Validate điểm: không được thấp hơn min
+    // 3d. Validate điểm: không được thấp hơn min / vượt quá max
     // max_points KHÔNG giới hạn ở leaf — chỉ giới hạn bởi trần điểm mục cha (frontend tính)
-    if (score < (criteria.min_score ?? 0)) {
-      throw new BadRequestException(
-        `Điểm không được thấp hơn ${criteria.min_score} (tiêu chí "${criteria.code}")`,
-      );
-    }
-
-    if (score > criteria.max_points) {
-      throw new BadRequestException(
-        `Điểm không được vượt quá ${criteria.max_points} (tiêu chí "${criteria.code}")`,
-      );
+    if (criteria.score_type === 'DEDUCTION' || criteria.max_points < 0) {
+      // Đối với tiêu chí điểm trừ (deduction), max_points là số âm (ví dụ: -2), min_score là 0
+      // Điểm hợp lệ phải nằm trong khoảng [max_points, min_score] (ví dụ: [-2, 0])
+      if (score < criteria.max_points) {
+        throw new BadRequestException(
+          `Điểm không được thấp hơn ${criteria.max_points} (tiêu chí "${criteria.code}")`,
+        );
+      }
+      if (score > (criteria.min_score ?? 0)) {
+        throw new BadRequestException(
+          `Điểm không được vượt quá ${criteria.min_score ?? 0} (tiêu chí "${criteria.code}")`,
+        );
+      }
+    } else {
+      // Đối với tiêu chí điểm cộng thông thường
+      if (score < (criteria.min_score ?? 0)) {
+        throw new BadRequestException(
+          `Điểm không được thấp hơn ${criteria.min_score} (tiêu chí "${criteria.code}")`,
+        );
+      }
+      // Bỏ check score > criteria.max_points ở Backend vì các mục lá thường là "điểm/hoạt động" và cho phép cộng dồn.
+      // Việc cap trần điểm tổng của mục cha sẽ được xử lý ở Frontend và lúc tính tổng cuối cùng.
     }
 
     return { form, criteria };

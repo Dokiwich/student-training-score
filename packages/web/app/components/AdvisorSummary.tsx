@@ -132,7 +132,7 @@ export function AdvisorSummary() {
                 const clsLabel = student.classification ? CLASSIFICATION_LABELS[student.classification] || '' : '';
                 const clsColor = CLS_COLORS[student.classification || ''] || { bg: '#f3f4f6', color: '#6b7280' };
                 return (
-                  <tr key={student.id}>
+                  <tr key={`${student.id}-${index}`}>
                     <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{index + 1}</td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{student.studentCode || '-'}</td>
                     <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{student.name}</td>
