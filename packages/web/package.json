@@ -9,8 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.2.2",
-    "@student-score/shared": "*",
     "@types/jsonwebtoken": "^9.0.10",
     "bcrypt": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
@@ -19,7 +17,6 @@
     "next-auth": "^4.24.13",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "react-hook-form": "^7.71.2",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

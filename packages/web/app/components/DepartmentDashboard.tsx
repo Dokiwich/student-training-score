@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { DataTable } from './DataTable';
 import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 
@@ -376,6 +377,58 @@ export function DepartmentDashboard() {
       </div>
     );
   }
+  const classStatsColumns = useMemo(() => [
+    { header: 'STT', width: 60, align: 'center' as const, render: (_c: any, i: number) => <span style={{ color: 'var(--text-muted)' }}>{i + 1}</span> },
+    { header: 'Lớp', render: (c: any) => (
+        <>
+          <div style={{ fontWeight: 600 }}>{c.classCode}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.className}</div>
+        </>
+      )
+    },
+    { header: 'Sĩ số', align: 'center' as const, render: (c: any) => <span style={{ fontWeight: 600 }}>{c.total}</span> },
+    { header: 'Đã nộp', align: 'center' as const, render: (c: any) => <span style={{ color: c.submitted < c.total ? 'var(--danger)' : 'var(--success)' }}>{c.submitted} ({c.total > 0 ? Math.round(c.submitted / c.total * 100) : 0}%)</span> },
+    { header: 'Đã duyệt', align: 'center' as const, render: (c: any) => <span style={{ color: c.finalized < c.total ? 'var(--warning-dark)' : 'var(--success)' }}>{c.finalized}</span> },
+    { header: 'Điểm TB', align: 'center' as const, render: (c: any) => <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{c.avgScore}</span> },
+    { header: 'XS/Giỏi', align: 'center' as const, render: (c: any) => <span>{(c.byClassification['EXCELLENT'] || 0) + (c.byClassification['VERY_GOOD'] || 0)}</span> },
+    { header: 'Khá/TB', align: 'center' as const, render: (c: any) => <span>{(c.byClassification['GOOD'] || 0) + (c.byClassification['AVERAGE'] || 0)}</span> },
+    { header: 'Yếu/Kém', align: 'center' as const, render: (c: any) => <span>{(c.byClassification['WEAK'] || 0) + (c.byClassification['POOR'] || 0)}</span> },
+  ], []);
+
+  const classStatsFooter = stats ? (
+    <tr style={{ background: '#f1f5f9', fontWeight: 700 }}>
+      <td colSpan={2} style={{ textAlign: 'center', padding: '12px' }}>TỔNG CỘNG</td>
+      <td style={{ textAlign: 'center', color: 'var(--text-primary)' }}>{stats.total}</td>
+      <td style={{ textAlign: 'center', color: 'var(--success)' }}>{stats.submitted}</td>
+      <td style={{ textAlign: 'center', color: 'var(--success)' }}>{stats.finalized}</td>
+      <td style={{ textAlign: 'center', color: 'var(--accent)' }}>{stats.avgScore}</td>
+      <td style={{ textAlign: 'center' }}>{(stats.byClassification['EXCELLENT'] || 0) + (stats.byClassification['VERY_GOOD'] || 0)}</td>
+      <td style={{ textAlign: 'center' }}>{(stats.byClassification['GOOD'] || 0) + (stats.byClassification['AVERAGE'] || 0)}</td>
+      <td style={{ textAlign: 'center' }}>{(stats.byClassification['WEAK'] || 0) + (stats.byClassification['POOR'] || 0)}</td>
+    </tr>
+  ) : null;
+
+  const manageStudentsColumns = useMemo(() => [
+    { header: 'STT', width: 50, align: 'center' as const, render: (_s: any, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'MSSV', width: 110, render: (s: any) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.student_id || '-'}</span> },
+    { header: 'Họ và Tên', render: (s: any) => <span style={{ fontWeight: 500 }}>{s.full_name}</span> },
+    { header: 'Email', render: (s: any) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{s.email}</span> },
+    { header: 'Thao tác', width: 80, align: 'center' as const, render: (s: any) => (
+        <button
+          onClick={() => handleDeleteStudent(s)}
+          style={{
+            padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6,
+            border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626',
+            cursor: 'pointer', transition: 'all 0.2s',
+          }}
+          onMouseOver={e => { e.currentTarget.style.background = '#fee2e2'; }}
+          onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}
+        >
+          Xóa
+        </button>
+      )
+    }
+  ], []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -442,69 +495,18 @@ export function DepartmentDashboard() {
             </div>
           </div>
 
-          <h3 style={{ margin: '10px 0 0', fontSize: 18, color: 'var(--text-primary)' }}>Thống kê theo lớp</h3>
-          <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="dashboard-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 60, textAlign: 'center' }}>STT</th>
-                    <th>Lớp</th>
-                    <th style={{ textAlign: 'center' }}>Sĩ số</th>
-                    <th style={{ textAlign: 'center' }}>Đã nộp</th>
-                    <th style={{ textAlign: 'center' }}>Đã duyệt</th>
-                    <th style={{ textAlign: 'center' }}>Điểm TB</th>
-                    <th style={{ textAlign: 'center' }}>XS/Giỏi</th>
-                    <th style={{ textAlign: 'center' }}>Khá/TB</th>
-                    <th style={{ textAlign: 'center' }}>Yếu/Kém</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.byClass.map((c, i) => (
-                    <tr 
-                      key={c.classCode}
-                      onClick={() => {
-                        setSelectedClass(c.classCode);
-                        setActiveTab('classes');
-                      }}
-                      style={{ cursor: 'pointer', transition: 'background 0.2s' }}
-                      onMouseOver={(e) => e.currentTarget.style.background = '#f8fafc'}
-                      onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
-                      title={`Xem chi tiết lớp ${c.classCode}`}
-                    >
-                      <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{i + 1}</td>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{c.classCode}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.className}</div>
-                      </td>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{c.total}</td>
-                      <td style={{ textAlign: 'center', color: c.submitted < c.total ? 'var(--danger)' : 'var(--success)' }}>
-                        {c.submitted} ({c.total > 0 ? Math.round(c.submitted / c.total * 100) : 0}%)
-                      </td>
-                      <td style={{ textAlign: 'center', color: c.finalized < c.total ? 'var(--warning-dark)' : 'var(--success)' }}>
-                        {c.finalized}
-                      </td>
-                      <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--accent)' }}>{c.avgScore}</td>
-                      <td style={{ textAlign: 'center' }}>{(c.byClassification['EXCELLENT'] || 0) + (c.byClassification['VERY_GOOD'] || 0)}</td>
-                      <td style={{ textAlign: 'center' }}>{(c.byClassification['GOOD'] || 0) + (c.byClassification['AVERAGE'] || 0)}</td>
-                      <td style={{ textAlign: 'center' }}>{(c.byClassification['WEAK'] || 0) + (c.byClassification['POOR'] || 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot style={{ background: '#f1f5f9', fontWeight: 700 }}>
-                  <tr>
-                    <td colSpan={2} style={{ textAlign: 'center', padding: '12px' }}>TỔNG CỘNG</td>
-                    <td style={{ textAlign: 'center', color: 'var(--text-primary)' }}>{stats.total}</td>
-                    <td style={{ textAlign: 'center', color: 'var(--success)' }}>{stats.submitted}</td>
-                    <td style={{ textAlign: 'center', color: 'var(--success)' }}>{stats.finalized}</td>
-                    <td style={{ textAlign: 'center', color: 'var(--accent)' }}>{stats.avgScore}</td>
-                    <td style={{ textAlign: 'center' }}>{(stats.byClassification['EXCELLENT'] || 0) + (stats.byClassification['VERY_GOOD'] || 0)}</td>
-                    <td style={{ textAlign: 'center' }}>{(stats.byClassification['GOOD'] || 0) + (stats.byClassification['AVERAGE'] || 0)}</td>
-                    <td style={{ textAlign: 'center' }}>{(stats.byClassification['WEAK'] || 0) + (stats.byClassification['POOR'] || 0)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+          <div style={{ marginTop: 24 }}>
+            <DataTable
+              title="Thống kê theo lớp"
+              columns={classStatsColumns}
+              data={stats.byClass}
+              footer={classStatsFooter}
+              onRowClick={(c: any) => {
+                setSelectedClass(c.classCode);
+                setActiveTab('classes');
+              }}
+              rowTitle={(c: any) => `Xem chi tiết lớp ${c.classCode}`}
+            />
           </div>
         </div>
       )}
@@ -668,51 +670,14 @@ export function DepartmentDashboard() {
           ) : loadingStudents ? (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải danh sách...</div>
           ) : (
-            <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '12px 16px', background: '#f8fafc', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                  {filteredManageStudents.length} sinh viên
-                </span>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="dashboard-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 50, textAlign: 'center' }}>STT</th>
-                      <th style={{ width: 110 }}>MSSV</th>
-                      <th>Họ và Tên</th>
-                      <th>Email</th>
-                      <th style={{ width: 80, textAlign: 'center' }}>Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredManageStudents.length === 0 ? (
-                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>Chưa có sinh viên nào trong lớp</td></tr>
-                    ) : filteredManageStudents.map((s, i) => (
-                      <tr key={s.enrollmentId}>
-                        <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.student_id || '-'}</td>
-                        <td style={{ fontWeight: 500 }}>{s.full_name}</td>
-                        <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{s.email}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            onClick={() => handleDeleteStudent(s)}
-                            style={{
-                              padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6,
-                              border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626',
-                              cursor: 'pointer', transition: 'all 0.2s',
-                            }}
-                            onMouseOver={e => { e.currentTarget.style.background = '#fee2e2'; }}
-                            onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}
-                          >
-                            Xóa
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div style={{ marginTop: 16 }}>
+              <DataTable
+                title=""
+                subtitle={`${filteredManageStudents.length} sinh viên`}
+                columns={manageStudentsColumns}
+                data={filteredManageStudents}
+                emptyMessage="Chưa có sinh viên nào trong lớp"
+              />
             </div>
           )}
         </div>

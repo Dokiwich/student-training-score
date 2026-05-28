@@ -78,10 +78,14 @@ export class ScoringService {
   // HELPER: Tìm phiếu theo student_id (qua enrollment)
   // =============================================
   private async findSheetByStudent(studentId: string) {
+    const activeSemester = await this.getActiveSemester();
+    if (!activeSemester) return null;
+
     return prisma.scoring_sheets.findFirst({
       where: {
         semester_enrollments: {
           user_id: studentId,
+          semester_id: activeSemester.id,
         },
       },
     });
@@ -148,6 +152,7 @@ export class ScoringService {
     const enrollments = await prisma.semester_enrollments.findMany({
       where: {
         class_id: { in: classIds },
+        ...(activeSemester ? { semester_id: activeSemester.id } : {}),
         is_active: 1,
         users: {
           role: { in: ['STUDENT', 'CLASS_COMMITTEE'] },
@@ -229,11 +234,14 @@ export class ScoringService {
   //    ✅ MỚI: Trả thêm formStatus để Frontend biết khóa/mở
   // =============================================
   async getScoresByFormId(formId: string, studentId: string) {
+    const activeSemester = await this.getActiveSemester();
+
     // Tìm phiếu theo student_id qua enrollment
     let form = await prisma.scoring_sheets.findFirst({
       where: {
         semester_enrollments: {
           user_id: studentId,
+          ...(activeSemester ? { semester_id: activeSemester.id } : {}),
         },
       },
       select: {
@@ -551,10 +559,12 @@ export class ScoringService {
     }
 
     // 5c. Tìm phiếu theo student_id (qua enrollment) để lấy scoring_sheet_id thực
+    const activeSemester = await this.getActiveSemester();
     const scoreRecord = await prisma.scoring_sheets.findFirst({
       where: {
         semester_enrollments: {
           user_id: studentId,
+          ...(activeSemester ? { semester_id: activeSemester.id } : {}),
         },
       },
       select: { id: true },
@@ -750,10 +760,12 @@ export class ScoringService {
   // 6.1 ✅ XÓA VÀ LÀM MỚI PHIẾU (Thay cho chức năng Trả lại)
   // =============================================
   async rejectForm(formId: string, role: string, studentId: string) {
+    const activeSemester = await this.getActiveSemester();
     const form = await prisma.scoring_sheets.findFirst({
       where: {
         semester_enrollments: {
           user_id: studentId,
+          ...(activeSemester ? { semester_id: activeSemester.id } : {}),
         },
       },
       include: { score_details: true },

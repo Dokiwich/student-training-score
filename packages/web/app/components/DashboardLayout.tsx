@@ -45,7 +45,17 @@ const ROLE_NAV: Record<string, NavItem[]> = {
   ],
   CLASS_COMMITTEE: [
     {
-      label: 'Danh sách chấm',
+      label: 'Phiếu của bản thân',
+      href: '/student',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Tất cả sinh viên',
       href: '/class-president',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -57,7 +67,7 @@ const ROLE_NAV: Record<string, NavItem[]> = {
       ),
     },
     {
-      label: 'Đã chấm',
+      label: 'Sinh viên đã chấm',
       href: '/class-president?filter=scored',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -67,7 +77,7 @@ const ROLE_NAV: Record<string, NavItem[]> = {
       ),
     },
     {
-      label: 'Chưa chấm',
+      label: 'Sinh viên chưa chấm',
       href: '/class-president?filter=unscored',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -77,8 +87,8 @@ const ROLE_NAV: Record<string, NavItem[]> = {
       ),
     },
     {
-      label: 'Chưa nộp',
-      href: '/class-president?filter=unsubmitted',
+      label: 'Sinh viên chưa nộp',
+      href: '/class-president?filter=pending',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />
@@ -90,7 +100,7 @@ const ROLE_NAV: Record<string, NavItem[]> = {
   ],
   ADVISOR: [
     {
-      label: 'Bảng tổng hợp',
+      label: 'Tất cả sinh viên',
       href: '/advisor',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -101,7 +111,7 @@ const ROLE_NAV: Record<string, NavItem[]> = {
       ),
     },
     {
-      label: 'Đã duyệt',
+      label: 'Sinh viên đã duyệt',
       href: '/advisor?filter=scored',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -111,7 +121,7 @@ const ROLE_NAV: Record<string, NavItem[]> = {
       ),
     },
     {
-      label: 'Chưa duyệt',
+      label: 'Sinh viên chưa duyệt',
       href: '/advisor?filter=unscored',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -121,8 +131,8 @@ const ROLE_NAV: Record<string, NavItem[]> = {
       ),
     },
     {
-      label: 'Chưa nộp',
-      href: '/advisor?filter=unsubmitted',
+      label: 'Sinh viên chưa nộp',
+      href: '/advisor?filter=pending',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />

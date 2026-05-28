@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { DataTable } from '../components/DataTable';
 
 interface Dept { id: string; code: string; name: string; is_active: number; classCount: number; userCount: number; }
 
@@ -53,18 +54,32 @@ export function DepartmentsTab() {
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
 
+  const columns = [
+    { header: 'STT', width: 60, render: (_d: Dept, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'Mã khoa', width: 120, render: (d: Dept) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>{d.code}</span> },
+    { header: 'Tên khoa', render: (d: Dept) => <span style={{ fontWeight: 500 }}>{d.name}</span> },
+    { header: 'Số lớp', width: 90, align: 'center' as const, render: (d: Dept) => <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', padding: '2px 8px', borderRadius: 9999, fontSize: 12, fontWeight: 600 }}>{d.classCount}</span> },
+    { header: 'Số users', width: 90, align: 'center' as const, render: (d: Dept) => <span style={{ fontSize: 12 }}>{d.userCount}</span> },
+    { header: 'Trạng thái', width: 100, align: 'center' as const, render: (d: Dept) => (
+        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999,
+          background: d.is_active ? 'var(--success-bg)' : '#f3f4f6',
+          color: d.is_active ? 'var(--success)' : 'var(--text-muted)',
+          border: `1px solid ${d.is_active ? 'var(--success-border)' : '#e5e7eb'}` }}>
+          {d.is_active ? 'Hoạt động' : 'Ẩn'}
+        </span>
+      )
+    },
+    { header: 'Thao tác', width: 140, align: 'center' as const, render: (d: Dept) => (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <button onClick={() => startEdit(d)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
+          <button onClick={() => handleDelete(d)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
+        </div>
+      )
+    }
+  ];
+
   return (
     <div>
-      <div className="dashboard-card-header" style={{ marginBottom: 16 }}>
-        <div>
-          <h2 className="dashboard-card-title">Quản lý Khoa</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Tổng cộng {depts.length} khoa</p>
-        </div>
-        <button onClick={() => { resetForm(); setShowForm(!showForm); }} className="btn-primary">
-          {showForm ? 'Đóng' : '+ Thêm khoa'}
-        </button>
-      </div>
-
       {showForm && (
         <form onSubmit={handleSubmit} className="dashboard-card" style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>
@@ -87,50 +102,18 @@ export function DepartmentsTab() {
         </form>
       )}
 
-      <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="dashboard-table">
-          <thead>
-            <tr>
-              <th style={{ width: 60 }}>STT</th>
-              <th style={{ width: 120 }}>Mã khoa</th>
-              <th>Tên khoa</th>
-              <th style={{ width: 90, textAlign: 'center' }}>Số lớp</th>
-              <th style={{ width: 90, textAlign: 'center' }}>Số users</th>
-              <th style={{ width: 100, textAlign: 'center' }}>Trạng thái</th>
-              <th style={{ width: 140, textAlign: 'center' }}>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {depts.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Chưa có khoa nào</td></tr>
-            ) : depts.map((d, i) => (
-              <tr key={d.id}>
-                <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
-                <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>{d.code}</td>
-                <td style={{ fontWeight: 500 }}>{d.name}</td>
-                <td style={{ textAlign: 'center' }}>
-                  <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', padding: '2px 8px', borderRadius: 9999, fontSize: 12, fontWeight: 600 }}>{d.classCount}</span>
-                </td>
-                <td style={{ textAlign: 'center', fontSize: 12 }}>{d.userCount}</td>
-                <td style={{ textAlign: 'center' }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999,
-                    background: d.is_active ? 'var(--success-bg)' : '#f3f4f6',
-                    color: d.is_active ? 'var(--success)' : 'var(--text-muted)',
-                    border: `1px solid ${d.is_active ? 'var(--success-border)' : '#e5e7eb'}` }}>
-                    {d.is_active ? 'Hoạt động' : 'Ẩn'}
-                  </span>
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                    <button onClick={() => startEdit(d)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
-                    <button onClick={() => handleDelete(d)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        title="Quản lý Khoa"
+        subtitle={`Tổng cộng ${depts.length} khoa`}
+        headerActions={
+          <button onClick={() => { resetForm(); setShowForm(!showForm); }} className="btn-primary">
+            {showForm ? 'Đóng' : '+ Thêm khoa'}
+          </button>
+        }
+        columns={columns}
+        data={depts}
+        loading={loading}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { DataTable } from '../components/DataTable';
 
 interface ClassItem { id: string; code: string; name: string; department_id: string; departmentName: string; academic_year: string; is_active: number; studentCount: number; }
 interface Dept { id: string; code: string; name: string; }
@@ -59,22 +60,25 @@ export function ClassesTab() {
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
 
+  const columns = [
+    { header: 'STT', width: 50, render: (_c: ClassItem, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'Mã lớp', width: 110, render: (c: ClassItem) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>{c.code}</span> },
+    { header: 'Tên lớp', render: (c: ClassItem) => <span style={{ fontWeight: 500 }}>{c.name}</span> },
+    { header: 'Khoa', render: (c: ClassItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{c.departmentName}</span> },
+    { header: 'Năm học', width: 100, render: (c: ClassItem) => <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.academic_year}</span> },
+    { header: 'Sĩ số', width: 70, align: 'center' as const, render: (c: ClassItem) => <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', padding: '2px 8px', borderRadius: 9999, fontSize: 12, fontWeight: 600 }}>{c.studentCount}</span> },
+    { header: 'Trạng thái', width: 100, align: 'center' as const, render: (c: ClassItem) => <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: c.is_active ? 'var(--success-bg)' : '#f3f4f6', color: c.is_active ? 'var(--success)' : 'var(--text-muted)' }}>{c.is_active ? 'Hoạt động' : 'Ẩn'}</span> },
+    { header: 'Thao tác', width: 140, align: 'center' as const, render: (c: ClassItem) => (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <button onClick={() => startEdit(c)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
+          <button onClick={() => handleDelete(c)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
+        </div>
+      )
+    }
+  ];
+
   return (
     <div>
-      <div className="dashboard-card-header" style={{ marginBottom: 16 }}>
-        <div>
-          <h2 className="dashboard-card-title">Quản lý Lớp</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Tổng cộng {classes.length} lớp</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="form-select" style={{ width: 200 }}>
-            <option value="">Tất cả khoa</option>
-            {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-          <button onClick={() => { resetForm(); setShowForm(!showForm); }} className="btn-primary">{showForm ? 'Đóng' : '+ Thêm lớp'}</button>
-        </div>
-      </div>
-
       {showForm && (
         <form onSubmit={handleSubmit} className="dashboard-card" style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>
@@ -98,51 +102,22 @@ export function ClassesTab() {
         </form>
       )}
 
-      <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="dashboard-table">
-            <thead>
-              <tr>
-                <th style={{ width: 50 }}>STT</th>
-                <th style={{ width: 110 }}>Mã lớp</th>
-                <th>Tên lớp</th>
-                <th>Khoa</th>
-                <th style={{ width: 100 }}>Năm học</th>
-                <th style={{ width: 70, textAlign: 'center' }}>Sĩ số</th>
-                <th style={{ width: 100, textAlign: 'center' }}>Trạng thái</th>
-                <th style={{ width: 140, textAlign: 'center' }}>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {classes.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Chưa có lớp nào</td></tr>
-              ) : classes.map((c, i) => (
-                <tr key={c.id}>
-                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>{c.code}</td>
-                  <td style={{ fontWeight: 500 }}>{c.name}</td>
-                  <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{c.departmentName}</td>
-                  <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.academic_year}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', padding: '2px 8px', borderRadius: 9999, fontSize: 12, fontWeight: 600 }}>{c.studentCount}</span>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: c.is_active ? 'var(--success-bg)' : '#f3f4f6', color: c.is_active ? 'var(--success)' : 'var(--text-muted)' }}>
-                      {c.is_active ? 'Hoạt động' : 'Ẩn'}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                      <button onClick={() => startEdit(c)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
-                      <button onClick={() => handleDelete(c)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        title="Quản lý Lớp"
+        subtitle={`Tổng cộng ${classes.length} lớp`}
+        headerActions={
+          <>
+            <select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="form-select" style={{ width: 200 }}>
+              <option value="">Tất cả khoa</option>
+              {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <button onClick={() => { resetForm(); setShowForm(!showForm); }} className="btn-primary">{showForm ? 'Đóng' : '+ Thêm lớp'}</button>
+          </>
+        }
+        columns={columns}
+        data={classes}
+        loading={loading}
+      />
     </div>
   );
 }

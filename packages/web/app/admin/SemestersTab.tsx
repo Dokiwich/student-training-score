@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { DataTable } from '../components/DataTable';
 
 interface Semester { id: string; code: string; name: string; academic_year: string; semester_number: number; start_date: string; end_date: string; student_deadline: string; class_committee_deadline: string; advisor_deadline: string; school_deadline: string; status: string; is_active: number; }
 
@@ -61,16 +62,26 @@ export function SemestersTab() {
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
 
+  const columns = [
+    { header: 'STT', width: 50, render: (_s: Semester, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'Mã', width: 120, render: (s: Semester) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12 }}>{s.code}</span> },
+    { header: 'Tên', render: (s: Semester) => <span style={{ fontWeight: 500 }}>{s.name}</span> },
+    { header: 'Năm học', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{s.academic_year}</span> },
+    { header: 'Bắt đầu', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtDate(s.start_date)}</span> },
+    { header: 'Kết thúc', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtDate(s.end_date)}</span> },
+    { header: 'Trạng thái', width: 110, align: 'center' as const, render: (s: Semester) => {
+        const sc = STATUS_COLORS[s.status] || { bg: '#f3f4f6', color: '#6b7280' };
+        return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: sc.bg, color: sc.color }}>{STATUS_LABELS[s.status] || s.status}</span>;
+      }
+    },
+    { header: 'Thao tác', width: 80, align: 'center' as const, render: (s: Semester) => (
+        <button onClick={() => startEdit(s)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
+      )
+    }
+  ];
+
   return (
     <div>
-      <div className="dashboard-card-header" style={{ marginBottom: 16 }}>
-        <div>
-          <h2 className="dashboard-card-title">Quản lý Học kỳ</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{semesters.length} học kỳ</p>
-        </div>
-        <button onClick={() => { resetForm(); setShowForm(!showForm); }} className="btn-primary">{showForm ? 'Đóng' : '+ Thêm học kỳ'}</button>
-      </div>
-
       {showForm && (
         <form onSubmit={handleSubmit} className="dashboard-card" style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editing ? 'Sửa học kỳ' : 'Thêm học kỳ mới'}</h3>
@@ -100,47 +111,16 @@ export function SemestersTab() {
         </form>
       )}
 
-      <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="dashboard-table">
-            <thead>
-              <tr>
-                <th style={{ width: 50 }}>STT</th>
-                <th style={{ width: 120 }}>Mã</th>
-                <th>Tên</th>
-                <th style={{ width: 100 }}>Năm học</th>
-                <th style={{ width: 100 }}>Bắt đầu</th>
-                <th style={{ width: 100 }}>Kết thúc</th>
-                <th style={{ width: 110, textAlign: 'center' }}>Trạng thái</th>
-                <th style={{ width: 80, textAlign: 'center' }}>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {semesters.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Chưa có học kỳ</td></tr>
-              ) : semesters.map((s, i) => {
-                const sc = STATUS_COLORS[s.status] || { bg: '#f3f4f6', color: '#6b7280' };
-                return (
-                  <tr key={s.id}>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12 }}>{s.code}</td>
-                    <td style={{ fontWeight: 500 }}>{s.name}</td>
-                    <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{s.academic_year}</td>
-                    <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtDate(s.start_date)}</td>
-                    <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtDate(s.end_date)}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: sc.bg, color: sc.color }}>{STATUS_LABELS[s.status] || s.status}</span>
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button onClick={() => startEdit(s)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        title="Quản lý Học kỳ"
+        subtitle={`${semesters.length} học kỳ`}
+        headerActions={
+          <button onClick={() => { resetForm(); setShowForm(!showForm); }} className="btn-primary">{showForm ? 'Đóng' : '+ Thêm học kỳ'}</button>
+        }
+        columns={columns}
+        data={semesters}
+        loading={loading}
+      />
     </div>
   );
 }

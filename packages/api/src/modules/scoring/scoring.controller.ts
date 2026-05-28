@@ -30,9 +30,16 @@ export class ScoringController {
     @Body('score') score: number,
     @Body('studentId') studentId: string,
     @Req() req: any,
-    @Body('proofUrl') proofUrl?: string
+    @Body('proofUrl') proofUrl?: string,
+    @Body('role') role?: string
   ) {
-    let activeRole = req.user?.role || 'STUDENT';
+    let activeRole = role || req.user?.role || 'STUDENT';
+    // If a class committee or advisor is self-scoring, they act as STUDENT
+    if (studentId === req.user?.id && activeRole === 'STUDENT') {
+      activeRole = 'STUDENT';
+    } else if (!role) {
+      activeRole = req.user?.role || 'STUDENT';
+    }
     return this.scoringService.submitCriteria(formId, criteriaId, score, activeRole, studentId, proofUrl);
   }
 
@@ -40,9 +47,13 @@ export class ScoringController {
   async submitForm(
     @Param('formId') formId: string,
     @Body('studentId') studentId: string,
-    @Req() req: any
+    @Req() req: any,
+    @Body('role') role?: string
   ) {
-    let activeRole = req.user?.role || 'STUDENT';
+    let activeRole = role || req.user?.role || 'STUDENT';
+    if (studentId === req.user?.id && activeRole === 'STUDENT') {
+      activeRole = 'STUDENT';
+    }
     return this.scoringService.submitForm(formId, activeRole, studentId);
   }
 
@@ -50,9 +61,13 @@ export class ScoringController {
   async rejectForm(
     @Param('formId') formId: string,
     @Body('studentId') studentId: string,
-    @Req() req: any
+    @Req() req: any,
+    @Body('role') role?: string
   ) {
-    let activeRole = req.user?.role || 'STUDENT';
+    let activeRole = role || req.user?.role || 'STUDENT';
+    if (studentId === req.user?.id && activeRole === 'STUDENT') {
+      activeRole = 'STUDENT';
+    }
     return this.scoringService.rejectForm(formId, activeRole, studentId);
   }
 }

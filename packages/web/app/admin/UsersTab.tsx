@@ -1,8 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-
-interface UserItem { id: string; student_id: string | null; email: string; full_name: string; phone: string | null; role: string; class_id: string | null; department_id: string | null; className: string; departmentName: string; is_active: number; }
+import { DataTable } from '../components/DataTable';interface UserItem { id: string; student_id: string | null; email: string; full_name: string; phone: string | null; role: string; class_id: string | null; department_id: string | null; className: string; departmentName: string; is_active: number; }
 interface Dept { id: string; code: string; name: string; }
 interface ClassItem { id: string; code: string; name: string; }
 
@@ -271,90 +270,70 @@ export function UsersTab() {
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
 
+  const columns = [
+    { header: 'STT', width: 50, render: (_u: UserItem, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'MSSV', width: 100, render: (u: UserItem) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{u.student_id || '-'}</span> },
+    { header: 'Họ tên', render: (u: UserItem) => <span style={{ fontWeight: 500 }}>{u.full_name}</span> },
+    { header: 'Email', render: (u: UserItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.email}</span> },
+    { header: 'Vai trò', width: 110, render: (u: UserItem) => {
+        const rc = ROLE_COLORS[u.role] || { bg: '#f3f4f6', color: '#6b7280' };
+        return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: rc.bg, color: rc.color }}>{ROLE_LABELS[u.role] || u.role}</span>;
+      }
+    },
+    { header: 'Lớp', render: (u: UserItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.className || '-'}</span> },
+    { header: 'Khoa', render: (u: UserItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.departmentName || '-'}</span> },
+    { header: 'Thao tác', width: 80, align: 'center' as const, render: (u: UserItem) => (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <button onClick={() => startEdit(u)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
+          <button onClick={() => handleDelete(u)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
+        </div>
+      )
+    }
+  ];
+
   return (
     <div>
-      <div className="dashboard-card-header" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h2 className="dashboard-card-title">Quản lý Người dùng</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{filtered.length} / {users.length} người dùng</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => { setShowImportModal(true); resetImport(); }}
-            style={{
-              padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
-              border: '1px solid #e0e7ff', background: '#eef2ff', color: '#4f46e5',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-              transition: 'all 0.2s',
-            }}
-            onMouseOver={e => { e.currentTarget.style.background = '#e0e7ff'; }}
-            onMouseOut={e => { e.currentTarget.style.background = '#eef2ff'; }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Import Excel
-          </button>
-          <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-            Thêm tài khoản
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <input type="text" placeholder="Tìm kiếm tên, MSSV, email..." value={search} onChange={e => setSearch(e.target.value)} className="form-input" style={{ flex: 1, minWidth: 200, maxWidth: 300 }} />
-        <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="form-select" style={{ width: 160 }}>
-          <option value="">Tất cả vai trò</option>
-          {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="form-select" style={{ width: 180 }}>
-          <option value="">Tất cả khoa</option>
-          {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-      </div>
-
-      <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="dashboard-table">
-            <thead>
-              <tr>
-                <th style={{ width: 50 }}>STT</th>
-                <th style={{ width: 100 }}>MSSV</th>
-                <th>Họ tên</th>
-                <th>Email</th>
-                <th style={{ width: 110 }}>Vai trò</th>
-                <th>Lớp</th>
-                <th>Khoa</th>
-                <th style={{ width: 80, textAlign: 'center' }}>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Không tìm thấy</td></tr>
-              ) : filtered.map((u, i) => {
-                const rc = ROLE_COLORS[u.role] || { bg: '#f3f4f6', color: '#6b7280' };
-                return (
-                  <tr key={u.id}>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{u.student_id || '-'}</td>
-                    <td style={{ fontWeight: 500 }}>{u.full_name}</td>
-                    <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.email}</td>
-                    <td>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: rc.bg, color: rc.color }}>{ROLE_LABELS[u.role] || u.role}</span>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.className || '-'}</td>
-                    <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.departmentName || '-'}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                        <button onClick={() => startEdit(u)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
-                        <button onClick={() => handleDelete(u)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        title="Quản lý Người dùng"
+        subtitle={`${filtered.length} / ${users.length} người dùng`}
+        headerActions={
+          <>
+            <button
+              onClick={() => { setShowImportModal(true); resetImport(); }}
+              style={{
+                padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+                border: '1px solid #e0e7ff', background: '#eef2ff', color: '#4f46e5',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                transition: 'all 0.2s',
+              }}
+              onMouseOver={e => { e.currentTarget.style.background = '#e0e7ff'; }}
+              onMouseOut={e => { e.currentTarget.style.background = '#eef2ff'; }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Import Excel
+            </button>
+            <button className="btn-primary" onClick={() => setShowAddModal(true)}>
+              Thêm tài khoản
+            </button>
+          </>
+        }
+        filters={
+          <>
+            <input type="text" placeholder="Tìm kiếm tên, MSSV, email..." value={search} onChange={e => setSearch(e.target.value)} className="form-input" style={{ flex: 1, minWidth: 200, maxWidth: 300 }} />
+            <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="form-select" style={{ width: 160 }}>
+              <option value="">Tất cả vai trò</option>
+              {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="form-select" style={{ width: 180 }}>
+              <option value="">Tất cả khoa</option>
+              {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </>
+        }
+        columns={columns}
+        data={filtered}
+        loading={loading}
+      />
 
       {/* Edit Modal */}
       {editing && (

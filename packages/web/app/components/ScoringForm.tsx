@@ -590,7 +590,7 @@ export function ScoringForm({
         method: 'POST',
         credentials: 'include',
         headers: headersInit,
-        body: JSON.stringify({ studentId }),
+        body: JSON.stringify({ studentId, role: currentRole }),
       });
 
       if (response.ok) {
@@ -653,8 +653,8 @@ export function ScoringForm({
         </div>
       )}
 
-      <div className="bg-sky-50/40 flex-1 flex flex-col h-full overflow-y-auto p-5">
-        <div className="max-w-6xl mx-auto w-full space-y-4">
+      <div className="bg-sky-50/40 flex-1 flex flex-col h-full overflow-y-auto p-4 md:p-6">
+        <div className="w-full mx-auto space-y-4">
 
           {/* Header: Stepper + Actions — fixed layout, no scroll */}
           <div className="bg-white rounded-2xl px-6 py-4 flex flex-col md:flex-row md:items-center justify-between border border-sky-100 shadow-sm gap-3">

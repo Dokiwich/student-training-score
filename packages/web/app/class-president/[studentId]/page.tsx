@@ -1,9 +1,15 @@
 import { ScoringForm } from '../../components/ScoringForm';
+import { DashboardLayout } from '../../components/DashboardLayout';
+import Link from 'next/link';
 
 export default async function ClassPresidentScoringPage({ params }: { params: Promise<{ studentId: string }> }) {
   const { studentId } = await params;
   return (
-    <main style={{ padding: 16, maxWidth: 1280, margin: '0 auto' }}>
+    <DashboardLayout
+      pageTitle="Chấm điểm sinh viên"
+      pageSubtitle="Ban cán sự đánh giá"
+      topBarExtra={<Link href="/class-president" className="btn-secondary">Quay lại</Link>}
+    >
       <div style={{ marginBottom: 24 }}>
         <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#eef2ff', color: '#1a365d', border: '1px solid #c7d2fe' }}>
           BCS
@@ -14,6 +20,6 @@ export default async function ClassPresidentScoringPage({ params }: { params: Pr
         </p>
       </div>
       <ScoringForm forcedRole="CLASS_COMMITTEE" studentId={studentId} />
-    </main>
+    </DashboardLayout>
   );
 }

@@ -8,7 +8,6 @@ const ROLE_REDIRECTS: Record<string, string> = {
   ADVISOR: '/advisor',
   DEPARTMENT: '/department',
   SCHOOL_ADMIN: '/admin',
-  SUPER_ADMIN: '/admin',
 };
 
 export default withAuth(
@@ -23,11 +22,11 @@ export default withAuth(
     }
 
     // Admin routes
-    if (path.startsWith('/admin') && role !== 'SCHOOL_ADMIN' && role !== 'SUPER_ADMIN') {
+    if (path.startsWith('/admin') && role !== 'SCHOOL_ADMIN') {
       return NextResponse.redirect(new URL('/', req.url));
     }
     // Department routes
-    if (path.startsWith('/department') && role !== 'DEPARTMENT' && role !== 'SCHOOL_ADMIN' && role !== 'SUPER_ADMIN') {
+    if (path.startsWith('/department') && role !== 'DEPARTMENT' && role !== 'SCHOOL_ADMIN') {
       return NextResponse.redirect(new URL('/', req.url));
     }
     // Class president routes
@@ -39,8 +38,9 @@ export default withAuth(
       const destination = ROLE_REDIRECTS[role] || '/student';
       return NextResponse.redirect(new URL(destination, req.url));
     }
-    // Student routes
-    if (path.startsWith('/student') && role !== 'STUDENT') {
+    // Student routes — allow CLASS_COMMITTEE and ADVISOR to access /student
+    // for self-scoring ("Phiếu của bản thân")
+    if (path.startsWith('/student') && role !== 'STUDENT' && role !== 'CLASS_COMMITTEE') {
       const destination = ROLE_REDIRECTS[role] || '/student';
       return NextResponse.redirect(new URL(destination, req.url));
     }

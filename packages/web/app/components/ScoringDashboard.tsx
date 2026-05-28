@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { ScoringForm } from './ScoringForm';
@@ -53,22 +53,54 @@ const ROLE_META = {
   },
 };
 
+
+function useCountUp(end: number, duration: number = 1000) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTimestamp: number | null = null;
+    let animationFrame: number;
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+      setCount(Math.floor(progress * end));
+      if (progress < 1) {
+        animationFrame = window.requestAnimationFrame(step);
+      } else {
+        setCount(end);
+      }
+    };
+    animationFrame = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [end, duration]);
+
+  return count;
+}
+
 export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardProps) {
   const { data: session } = useSession();
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [resetKey, setResetKey] = useState(0);
 
+  // Drawer state
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [closingDrawer, setClosingDrawer] = useState(false);
+
   const meta = ROLE_META[role];
+  const searchParams = useSearchParams();
+  const filterParam = searchParams ? searchParams.get('filter') : null;
+  const selectedStudentId = searchParams ? searchParams.get('studentId') : null;
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!session?.user) return;
     const customJwt = (session as any)?.customJwt;
-    if (!customJwt) return; // Chờ cho đến khi có JWT
+    if (!customJwt) return;
 
     const fetchStudents = async () => {
       setIsLoading(true);
@@ -82,7 +114,6 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
         const res = await fetch(`${API_BASE}/scoring/students`, { headers, credentials: 'include' });
         if (res.ok) {
           const json = await res.json();
-          console.log('[ScoringDashboard] students:', json.data?.length, 'classId:', json.classId);
           setStudents(json.data || []);
         } else {
           if (res.status === 401) {
@@ -134,7 +165,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
       if (res.ok) {
         alert('Đã xóa phiếu thành công! Phiếu mới sẽ được tự động tạo.');
         await refetchStudents();
-        setResetKey(prev => prev + 1); // force ScoringForm remount
+        setResetKey(prev => prev + 1);
       } else {
         const err = await res.json().catch(() => null);
         alert(err?.message || 'Lỗi khi xóa phiếu');
@@ -146,18 +177,47 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
     }
   };
 
-  const searchParams = useSearchParams();
-  const filterParam = searchParams ? searchParams.get('filter') : null;
-  const selectedStudentId = searchParams ? searchParams.get('studentId') : null;
-
-  const router = useRouter();
-  const pathname = usePathname();
+  const handleCloseDrawer = useCallback(() => {
+    setClosingDrawer(true);
+    setTimeout(() => {
+      setIsDrawerOpen(false);
+      setClosingDrawer(false);
+      const params = new URLSearchParams(searchParams?.toString());
+      params.delete('studentId');
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    }, 300);
+  }, [searchParams, pathname, router]);
 
   const handleStudentClick = (id: string) => {
     const params = new URLSearchParams(searchParams?.toString());
     params.set('studentId', id);
-    router.push(`${pathname}?${params.toString()}`);
+    // Use View Transitions API if supported
+    if (document.startViewTransition) {
+      document.startViewTransition(() => {
+        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      });
+    } else {
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    }
   };
+
+  useEffect(() => {
+    if (selectedStudentId) {
+      setIsDrawerOpen(true);
+    } else {
+      setIsDrawerOpen(false);
+    }
+  }, [selectedStudentId]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isDrawerOpen) {
+        handleCloseDrawer();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDrawerOpen, handleCloseDrawer]);
 
   const filtered = useMemo(() => {
     let result = students;
@@ -177,7 +237,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
       } else {
         result = result.filter(s => s.status === 'CLASS_REVIEWED' || s.status === 'ADVISOR_REVIEWING');
       }
-    } else if (filterParam === 'unsubmitted') {
+    } else if (filterParam === 'pending') {
       result = result.filter(s => s.status === 'NO_SHEET' || s.status === 'DRAFT');
     }
 
@@ -190,6 +250,9 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
     return { total, submitted, pct: total > 0 ? Math.round((submitted / total) * 100) : 0 };
   }, [students]);
 
+  const animatedTotal = useCountUp(stats.total);
+  const animatedSubmitted = useCountUp(stats.submitted);
+
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
 
   return (
@@ -198,183 +261,153 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
       height: showHeader ? '100vh' : 'calc(100vh - 160px)',
       minHeight: 600, background: 'var(--bg-surface)', overflow: 'hidden',
       border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
+      position: 'relative'
     }}>
-      {/* Stats bar */}
-      {!showHeader && (
-        <div style={{ display: 'flex', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-inset)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-            <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', padding: '2px 8px', borderRadius: 9999, fontWeight: 700 }}>{stats.total}</span> sinh viên
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-            <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '2px 8px', borderRadius: 9999, fontWeight: 700 }}>{stats.submitted}</span> đã nộp ({stats.pct}%)
-          </div>
-        </div>
-      )}
-
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* LEFT SIDEBAR */}
-        <div style={{
-          background: 'var(--bg-surface)', borderRight: '1px solid var(--border)',
-          display: 'flex', flexDirection: 'column', flexShrink: 0,
-          transition: 'width 0.3s cubic-bezier(0.16,1,0.3,1)',
-          width: sidebarCollapsed ? 56 : 280,
-        }}>
-          {/* Search */}
-          <div style={{ padding: '12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            {!sidebarCollapsed && (
-              <div style={{ position: 'relative', flex: 1 }}>
+
+        {/* MAIN CONTENT AREA */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-page)' }}>
+          {/* Header & Stats */}
+          <div style={{ padding: '24px 32px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+              Danh sách sinh viên
+            </h2>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <div style={{ position: 'relative' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}>
                   <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
-                <input type="text" placeholder="Tìm sinh viên..." value={search} onChange={(e) => setSearch(e.target.value)}
-                  style={{ width: '100%', fontSize: 13, padding: '8px 10px 8px 32px', border: '1px solid var(--border)', borderRadius: 8, outline: 'none' }} />
+                <input type="text" placeholder="Tìm tên, MSSV..." value={search} onChange={(e) => setSearch(e.target.value)}
+                  style={{ width: 220, fontSize: 13, padding: '8px 10px 8px 32px', border: '1px solid var(--border)', borderRadius: 8, outline: 'none' }} />
               </div>
-            )}
-            <button onClick={() => setSidebarCollapsed((v) => !v)}
-              style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', cursor: 'pointer', flexShrink: 0 }}
-              title={sidebarCollapsed ? 'Mở rộng' : 'Thu gọn'}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {sidebarCollapsed ? (
-                  <polyline points="9 18 15 12 9 6" />
-                ) : (
-                  <polyline points="15 18 9 12 15 6" />
-                )}
-              </svg>
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            {isLoading ? (
-              <div className="p-3 space-y-2">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="skeleton" style={{ height: 48 }} />
-                ))}
+              <div style={{ background: '#fff', border: '1px solid var(--border)', padding: '6px 16px', borderRadius: 'var(--radius-full)', display: 'flex', gap: 16, fontSize: 13, boxShadow: 'var(--shadow-sm)' }}>
+                <div style={{ color: 'var(--text-secondary)' }}>Sĩ số: <strong style={{ color: 'var(--text-primary)' }}>{animatedTotal}</strong></div>
+                <div style={{ width: 1, background: 'var(--border)' }}></div>
+                <div style={{ color: 'var(--text-secondary)' }}>Đã nộp: <strong style={{ color: 'var(--success)' }}>{animatedSubmitted}</strong></div>
               </div>
-            ) : sidebarCollapsed ? (
-              <div style={{ padding: '8px 0' }}>
-                {filtered.map((student, index) => {
-                  const isActive = student.id === selectedStudentId;
-                  const initial = student.name.split(' ').pop()?.[0] || '?';
-                  return (
-                    <button key={`${student.id}-${index}`} onClick={() => handleStudentClick(student.id)}
-                      style={{
-                        width: '100%', display: 'flex', justifyContent: 'center', padding: '6px 0', background: isActive ? 'var(--accent-light)' : 'transparent',
-                        border: 'none', cursor: 'pointer', transition: 'background 0.15s'
-                      }}
-                      title={student.name}>
-                      <div style={{
-                        width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
-                        borderRadius: 'var(--radius)', background: isActive ? 'var(--accent)' : 'var(--bg-inset)',
-                        color: isActive ? '#fff' : 'var(--text-secondary)', border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`
-                      }}>
-                        {initial}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div style={{ padding: '4px 0' }}>
-                {filtered.map((student, index) => {
-                  const isActive = student.id === selectedStudentId;
-                  const st = STATUS_MAP[student.status] || { label: student.status, color: '#6b7280', bg: '#f3f4f6' };
-                  const score = student[meta.scoreCol];
-                  return (
-                    <button key={`${student.id}-${index}`} onClick={() => handleStudentClick(student.id)}
-                      style={{
-                        width: '100%', textAlign: 'left', padding: '12px 14px', background: isActive ? '#f8fafc' : 'transparent',
-                        border: 'none', cursor: 'pointer', transition: 'all 0.15s', borderLeft: `3px solid ${isActive ? '#818cf8' : 'transparent'}`,
-                        fontFamily: 'inherit'
-                      }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{
-                            fontSize: 14, fontWeight: isActive ? 700 : 500, color: '#0f172a',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0
-                          }}>{student.name}</p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                            <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>{student.studentCode}</span>
-                            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: st.bg, color: st.color }}>{st.label}</span>
-                          </div>
-                        </div>
-                        <div style={{ flexShrink: 0 }}>
-                          {score !== null && score !== undefined ? (
-                            <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{score}</span>
-                          ) : (
-                            <span style={{ fontSize: 13, color: '#94a3b8' }}>—</span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-                {filtered.length === 0 && <p className="text-center text-xs text-gray-400 py-6">Khong tim thay SV</p>}
-              </div>
-            )}
-          </div>
-
-          {!sidebarCollapsed && (
-            <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border-light)', textAlign: 'center' }}>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>{filtered.length}/{students.length} sinh viên</p>
             </div>
-          )}
-        </div>
+          </div>
+          
 
-        {/* RIGHT FORM */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-          {selectedStudent ? (
-            <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 80 }}>
-              {/* Student info header */}
-              <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--bg-surface)', paddingBottom: 12, marginBottom: 12 }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-                  border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-surface)'
-                }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 'var(--radius-md)', background: 'var(--accent)', color: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0
-                  }}>
-                    {selectedStudent.name.split(' ').pop()?.[0] || '?'}
-                  </div>
-                  <div>
-                    <p style={{ fontWeight: 600, color: 'var(--text-primary)', margin: 0, fontSize: 14 }}>{selectedStudent.name}</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, marginTop: 2 }}>
-                      MSSV: <span style={{ fontFamily: 'var(--font-mono)' }}>{selectedStudent.studentCode}</span>
-                      &nbsp;·&nbsp;Điểm SV: <strong style={{ color: 'var(--text-primary)' }}>{selectedStudent.studentTotal ?? '—'}</strong>
-                    </p>
-                  </div>
-                  {role === 'ADVISOR' && (
-                    <button
+          
+          <div style={{ flex: 1, padding: '0 32px 24px', overflowY: 'auto' }}>
+            {isLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[1, 2, 3, 4, 5].map(i => <div key={i} className="skeleton" style={{ height: 60, borderRadius: 8 }} />)}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Không tìm thấy sinh viên nào.</div>
+            ) : (
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-inset)', textAlign: 'left' }}>
+                      <th style={{ width: 60, padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'center' }}>STT</th>
+                      <th style={{ width: 140, padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>MSSV</th>
+                      <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Họ và Tên</th>
+                      <th style={{ width: 140, padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Trạng thái</th>
+                      <th style={{ width: 120, padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'center' }}>Điểm tổng</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((student, index) => {
+                      const st = STATUS_MAP[student.status] || { label: student.status, color: '#6b7280', bg: '#f3f4f6' };
+                      const score = student[meta.scoreCol];
+                      const isWarning = student.status === 'NO_SHEET' || student.status === 'DRAFT';
+                      
+                      return (
+                        <tr 
+                          key={`${student.id}-${index}`} 
+                          onClick={() => handleStudentClick(student.id)}
+                          className="staggered-item"
+                          style={{ 
+                            '--index': index > 20 ? 0 : index, 
+                            borderBottom: '1px solid var(--border-light)', cursor: 'pointer', transition: 'background 0.2s'
+                          } as React.CSSProperties}
+                          onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-surface-hover)'}
+                          onMouseOut={(e) => e.currentTarget.style.background = '#fff'}
+                        >
+                          <td style={{ padding: '16px', textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>{index + 1}</td>
+                          <td style={{ padding: '16px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)' }}>{student.studentCode}</td>
+                          <td style={{ padding: '16px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{student.name}</td>
+                          <td style={{ padding: '16px' }}>
+                            <span style={{ 
+                              display: 'inline-block', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 9999, 
+                              background: st.bg, color: st.color,
+                              animation: isWarning ? 'pulseWarning 2s infinite' : 'none'
+                            }}>
+                              {st.label}
+                            </span>
+                          </td>
+                          <td style={{ padding: '16px', textAlign: 'center', fontSize: 15, fontWeight: 800, color: score !== null ? 'var(--accent)' : 'var(--text-muted)' }}>
+                            {score ?? '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* DRAWER OVERLAY & CONTENT */}
+      {(isDrawerOpen || closingDrawer) && selectedStudent && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="drawer-overlay"
+            style={{ animation: closingDrawer ? 'fadeIn 0.3s reverse forwards' : 'fadeIn 0.3s forwards' }}
+            onClick={handleCloseDrawer}
+          />
+          
+          {/* Drawer */}
+          <div 
+            className="drawer-content"
+            style={{ animation: closingDrawer ? 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) reverse forwards' : 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)', background: '#fff' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                Chấm điểm: <span style={{ color: 'var(--accent)' }}>{selectedStudent.name}</span>
+              </h3>
+              <button 
+                onClick={handleCloseDrawer} 
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', transition: 'background 0.2s' }} 
+                onMouseOver={e => e.currentTarget.style.background = 'var(--bg-inset)'} 
+                onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                title="Đóng"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+            
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: 'var(--bg-page)' }}>
+               {role === 'ADVISOR' && (
+                 <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                   <button
                       onClick={() => handleResetSheet(selectedStudent.id, selectedStudent.name)}
                       disabled={isResetting}
                       style={{
-                        marginLeft: 'auto', padding: '6px 14px', fontSize: 12, fontWeight: 600,
-                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '6px 14px', fontSize: 12, fontWeight: 600,
                         borderRadius: 8, border: '1px solid #ef4444', color: '#ef4444', background: '#fff',
-                        cursor: isResetting ? 'not-allowed' : 'pointer', transition: 'all 0.2s', flexShrink: 0,
+                        cursor: isResetting ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                        display: 'flex', gap: 6, alignItems: 'center'
                       }}
                       onMouseOver={(e) => e.currentTarget.style.background = '#fef2f2'}
                       onMouseOut={(e) => e.currentTarget.style.background = '#fff'}
                     >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                       {isResetting ? 'Đang xóa...' : 'Xóa & Reset phiếu'}
                     </button>
-                  )}
-                </div>
-              </div>
-              <ScoringForm key={`${selectedStudentId}-${resetKey}`} forcedRole={role} studentId={selectedStudent.id} studentName={selectedStudent.name} stickyTop="top-[80px]" />
+                 </div>
+               )}
+               <ScoringForm key={`${selectedStudent.id}-${resetKey}`} forcedRole={role} studentId={selectedStudent.id} studentName={selectedStudent.name} stickyTop="top-0" />
             </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <div style={{ textAlign: 'center', padding: 32 }}>
-                <div style={{ margin: '0 auto 24px', display: 'flex', justifyContent: 'center' }}>
-                </div>
-                <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Chọn sinh viên để bắt đầu chấm điểm</h3>
-                <p style={{ fontSize: 14, color: '#64748b' }}>Nhấn vào tên sinh viên ở thanh bên trái để bắt đầu chấm.</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

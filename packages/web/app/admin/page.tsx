@@ -225,7 +225,7 @@ function AdminPageInner() {
 
   return (
     <DashboardLayout pageTitle="Quản trị Hệ thống" pageSubtitle="Quản lý cấu hình tiêu chí chấm điểm">
-      <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <div className="w-full px-4 md:px-6 mx-auto space-y-6">
         {activeTab === 'users' && <UsersTab />}
         {activeTab === 'departments' && <DepartmentsTab />}
         {activeTab === 'classes' && <ClassesTab />}
