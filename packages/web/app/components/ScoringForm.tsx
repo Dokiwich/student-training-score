@@ -37,9 +37,6 @@ interface Criterion {
 
 interface ScoreDetail {
   criteria_id: number;
-  student_score: number | null;
-  class_score: number | null;
-  advisor_score: number | null;
   proof_url?: string | null;
   score_entries?: Array<{ scorer_role: string; score: number }>;
 }
@@ -195,15 +192,15 @@ export function ScoringForm({
         const evidenceMap: Record<number, string> = {};
 
         scoresData.data.forEach((s: ScoreDetail) => {
-          // Ưu tiên score_entries (bảng chuẩn hóa), fallback sang legacy columns
+          // Chỉ đọc từ score_entries
           const entries = s.score_entries || [];
           const sEntry = entries.find(e => e.scorer_role === 'STUDENT');
           const cEntry = entries.find(e => e.scorer_role === 'CLASS_COMMITTEE');
           const aEntry = entries.find(e => e.scorer_role === 'ADVISOR');
 
-          const studentVal = sEntry ? sEntry.score : s.student_score;
-          const classVal = cEntry ? cEntry.score : s.class_score;
-          const advisorVal = aEntry ? aEntry.score : s.advisor_score;
+          const studentVal = sEntry ? sEntry.score : null;
+          const classVal = cEntry ? cEntry.score : null;
+          const advisorVal = aEntry ? aEntry.score : null;
 
           if (studentVal !== null && studentVal !== undefined) sMap[s.criteria_id] = Number(studentVal);
 

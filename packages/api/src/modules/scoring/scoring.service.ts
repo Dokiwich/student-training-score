@@ -474,7 +474,7 @@ export class ScoringService {
   ) {
     await this.validateBeforeScore(formId, criteriaId, score, 'STUDENT', studentId);
 
-    const updateData: Record<string, any> = { student_score: score };
+    const updateData: Record<string, any> = {};
     if (proofUrl !== undefined) {
       updateData.proof_url = proofUrl;
     }
@@ -538,18 +538,15 @@ export class ScoringService {
 
     switch (role) {
       case 'STUDENT':
-        updateData.student_score = score;
         if (proofUrl !== undefined) {
           updateData.proof_url = proofUrl;
         }
         break;
 
       case 'CLASS_COMMITTEE':
-        updateData.class_score = score;
         break;
 
       case 'ADVISOR':
-        updateData.advisor_score = score;
         break;
 
       default:
@@ -805,9 +802,6 @@ export class ScoringService {
     const details = await prisma.score_details.findMany({
       where: { scoring_sheet_id: formId },
       select: {
-        student_score: true,
-        class_score: true,
-        advisor_score: true,
         score_entries: {
           select: { scorer_role: true, score: true },
         },
@@ -824,9 +818,9 @@ export class ScoringService {
       const cEntry = entries.find((e: any) => e.scorer_role === 'CLASS_COMMITTEE');
       const aEntry = entries.find((e: any) => e.scorer_role === 'ADVISOR');
 
-      studentTotal += Number(sEntry?.score ?? d.student_score ?? 0);
-      classTotal += Number(cEntry?.score ?? d.class_score ?? 0);
-      advisorTotal += Number(aEntry?.score ?? d.advisor_score ?? 0);
+      studentTotal += Number(sEntry?.score ?? 0);
+      classTotal += Number(cEntry?.score ?? 0);
+      advisorTotal += Number(aEntry?.score ?? 0);
     }
 
     return { studentTotal, classTotal, advisorTotal };

@@ -232,9 +232,6 @@ model score_details {
   id                    String                  @id @db.VarChar(36)
   scoring_sheet_id      String                  @db.VarChar(36)
   criteria_id           Int
-  student_score         Decimal?                @db.Decimal(5, 2)
-  class_score           Decimal?                @db.Decimal(5, 2)
-  advisor_score         Decimal?                @db.Decimal(5, 2)
   created_at            DateTime                @default(now()) @db.DateTime(0)
   updated_at            DateTime                @default(now()) @db.DateTime(0)
   note                  String?                 @db.Text

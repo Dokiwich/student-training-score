@@ -289,11 +289,16 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
           </div>
           
 
-          
           <div style={{ flex: 1, padding: '0 32px 24px', overflowY: 'auto' }}>
             {isLoading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {[1, 2, 3, 4, 5].map(i => <div key={i} className="skeleton" style={{ height: 60, borderRadius: 8 }} />)}
+              </div>
+            ) : fetchError ? (
+              <div style={{ textAlign: 'center', padding: 60, color: 'var(--danger)' }}>
+                <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Lỗi tải dữ liệu</div>
+                <div style={{ marginTop: 8 }}>{fetchError}</div>
               </div>
             ) : filtered.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Không tìm thấy sinh viên nào.</div>
@@ -353,23 +358,24 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
         </div>
       </div>
 
-      {/* DRAWER OVERLAY & CONTENT */}
+      {/* MODAL OVERLAY & CONTENT */}
       {(isDrawerOpen || closingDrawer) && selectedStudent && (
-        <>
-          {/* Backdrop */}
+        <div 
+          className="modal-overlay"
+          style={{ animation: closingDrawer ? 'fadeIn 0.3s reverse forwards' : 'fadeIn 0.3s forwards' }}
+          onClick={handleCloseDrawer}
+        >
+          {/* Modal Content */}
           <div 
-            className="drawer-overlay"
-            style={{ animation: closingDrawer ? 'fadeIn 0.3s reverse forwards' : 'fadeIn 0.3s forwards' }}
-            onClick={handleCloseDrawer}
-          />
-          
-          {/* Drawer */}
-          <div 
-            className="drawer-content"
-            style={{ animation: closingDrawer ? 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) reverse forwards' : 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}
+            className="modal-content"
+            style={{ 
+              maxWidth: '1200px', width: '96vw', height: '90vh', display: 'flex', flexDirection: 'column',
+              animation: closingDrawer ? 'modalSlideUp 0.3s reverse forwards' : 'modalSlideUp 0.3s forwards' 
+            }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)', background: '#fff' }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+            <div className="modal-header">
+              <h3 className="modal-header-title">
                 Chấm điểm: <span style={{ color: 'var(--accent)' }}>{selectedStudent.name}</span>
               </h3>
               <button 
@@ -406,7 +412,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
                <ScoringForm key={`${selectedStudent.id}-${resetKey}`} forcedRole={role} studentId={selectedStudent.id} studentName={selectedStudent.name} stickyTop="top-0" />
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
