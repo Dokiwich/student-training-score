@@ -3,8 +3,91 @@
 import { useSession, signOut } from 'next-auth/react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import './dashboard.css';
+
+// ─── Trạng thái học kỳ ───────────────────────────────────────────────────────
+interface SemesterInfo {
+  id: string;
+  code: string;
+  name: string;
+  academic_year: string;
+  status: string;
+  student_deadline?: string | null;
+  class_committee_deadline?: string | null;
+  advisor_deadline?: string | null;
+  school_deadline?: string | null;
+}
+
+const SEM_STATUS_META: Record<string, { label: string; color: string; dot: string }> = {
+  UPCOMING:          { label: 'Sắp diễn ra',   color: '#60a5fa', dot: '#3b82f6' }, // blue-400
+  STUDENT_SCORING:   { label: 'SV đang chấm',   color: '#fbbf24', dot: '#f59e0b' }, // amber-400
+  CLASS_REVIEWING:   { label: 'Lớp đang xét',   color: '#fbbf24', dot: '#f59e0b' },
+  ADVISOR_REVIEWING: { label: 'CVHT đang xét',  color: '#a78bfa', dot: '#8b5cf6' }, // violet-400
+  SCHOOL_REVIEWING:  { label: 'Trường đang xét', color: '#22d3ee', dot: '#06b6d4' }, // cyan-400
+  FINALIZED:         { label: 'Đã chốt',         color: '#34d399', dot: '#10b981' }, // emerald-400
+  LOCKED:            { label: 'Đã khóa',          color: '#9ca3af', dot: '#6b7280' }, // gray-400
+};
+
+function useSemesterStatus(intervalMs = 30000) {
+  const [semester, setSemester] = useState<SemesterInfo | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchSemester = async () => {
+    try {
+      const res = await fetch('/api/semester/active', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data) {
+          setSemester(json.data);
+          setLastUpdated(new Date());
+        }
+      }
+    } catch { /* silent fail */ }
+  };
+
+  useEffect(() => {
+    fetchSemester();
+    timerRef.current = setInterval(fetchSemester, intervalMs);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [intervalMs]);
+
+  return { semester, lastUpdated, refetch: fetchSemester };
+}
+
+function SemesterBadge({ semester, collapsed }: { semester: SemesterInfo | null; collapsed: boolean }) {
+  if (!semester) return (
+    <div className="sidebar-brand-subtitle">{collapsed ? '' : 'Đang tải...'}</div>
+  );
+
+  const meta = SEM_STATUS_META[semester.status] || { label: semester.status, color: '#6b7280', dot: '#d1d5db' };
+  const isPulsing = ['STUDENT_SCORING', 'CLASS_REVIEWING', 'ADVISOR_REVIEWING', 'SCHOOL_REVIEWING'].includes(semester.status);
+
+  if (collapsed) return null;
+
+  return (
+    <div style={{ padding: '8px 0 4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {/* Semester name — avoid repeating academic_year if already in the name */}
+      <div style={{ fontSize: 11, fontWeight: 600, color: '#f8fafc', opacity: 0.9, letterSpacing: '0.02em' }}>
+        {semester.name.includes(semester.academic_year) ? semester.name : `${semester.name} — ${semester.academic_year}`}
+      </div>
+      {/* Live status badge */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: meta.dot,
+          display: 'inline-block', flexShrink: 0,
+          animation: isPulsing ? 'semPulse 1.8s ease-in-out infinite' : 'none',
+          boxShadow: isPulsing ? `0 0 0 0 ${meta.dot}` : 'none',
+        }} />
+        <span style={{ fontSize: 10, fontWeight: 700, color: meta.color, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+          {meta.label}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 const ROLE_LABELS: Record<string, string> = {
   STUDENT: 'Sinh viên',
@@ -18,6 +101,7 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ReactNode;
+  sectionLabel?: string;
 }
 
 const ROLE_NAV: Record<string, NavItem[]> = {
@@ -102,26 +186,16 @@ const ROLE_NAV: Record<string, NavItem[]> = {
     {
       label: 'Tất cả sinh viên',
       href: '/advisor',
+      sectionLabel: 'Danh sách',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          <line x1="3" y1="9" x2="21" y2="9" />
-          <line x1="9" y1="21" x2="9" y2="9" />
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
       ),
     },
+
     {
-      label: 'Sinh viên đã duyệt',
-      href: '/advisor?filter=scored',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-          <polyline points="22 4 12 14.01 9 11.01" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Sinh viên chưa duyệt',
+      label: 'Chờ duyệt',
       href: '/advisor?filter=unscored',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -131,7 +205,16 @@ const ROLE_NAV: Record<string, NavItem[]> = {
       ),
     },
     {
-      label: 'Sinh viên chưa nộp',
+      label: 'Đã duyệt',
+      href: '/advisor?filter=scored',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Chưa nộp',
       href: '/advisor?filter=pending',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -141,74 +224,85 @@ const ROLE_NAV: Record<string, NavItem[]> = {
         </svg>
       ),
     },
+    {
+      label: 'Thống kê lớp',
+      href: '/advisor?filter=summary',
+      sectionLabel: 'Tổng quan',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      ),
+    },
   ],
   DEPARTMENT: [
     {
-      label: 'Bảng tổng hợp',
+      label: 'Dashboard',
       href: '/department',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          <line x1="3" y1="9" x2="21" y2="9" />
-          <line x1="9" y1="21" x2="9" y2="9" />
+          <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
         </svg>
       ),
     },
     {
-      label: 'Quản lý sinh viên',
-      href: '/department?tab=manage',
+      label: 'Biểu đồ thống kê',
+      href: '/department?view=charts',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <line x1="19" y1="8" x2="19" y2="14" />
-          <line x1="22" y1="11" x2="16" y2="11" />
+          <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      ),
+      sectionLabel: 'Tổng quan',
+    },
+    {
+      label: 'Danh sách sinh viên',
+      href: '/department?view=students',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      ),
+      sectionLabel: 'Quản lý',
+    },
+    {
+      label: 'Quản lý lớp & SV',
+      href: '/department?view=manage',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
         </svg>
       ),
     },
   ],
   SCHOOL_ADMIN: [
     {
-      label: 'Quản lý tiêu chí',
+      label: 'Tổng quan',
+      href: '/admin?tab=dashboard',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Danh sách sinh viên',
+      href: '/admin?tab=students',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      ),
+      sectionLabel: 'Quản lý',
+    },
+    {
+      label: 'Tiêu chí chấm điểm',
       href: '/admin?tab=criteria',
+      sectionLabel: 'Cấu hình',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Quản lý khoa',
-      href: '/admin?tab=departments',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Quản lý lớp',
-      href: '/admin?tab=classes',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Quản lý Người dùng',
-      href: '/admin?tab=users',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
       ),
     },
@@ -221,6 +315,41 @@ const ROLE_NAV: Record<string, NavItem[]> = {
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
           <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Quản lý Khoa',
+      href: '/admin?tab=departments',
+      sectionLabel: 'Dữ liệu',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Quản lý Lớp',
+      href: '/admin?tab=classes',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Người dùng',
+      href: '/admin?tab=users',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
       ),
     },
@@ -252,15 +381,19 @@ function SidebarNavList({ navItems, isDesktopCollapsed }: { navItems: NavItem[],
           : pathname === item.href && !queryString;
 
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
-            title={isDesktopCollapsed ? item.label : undefined}
-          >
-            <span className="sidebar-nav-icon">{item.icon}</span>
-            <span className="sidebar-nav-item-text">{item.label}</span>
-          </Link>
+          <div key={item.href}>
+            {item.sectionLabel && !isDesktopCollapsed && (
+              <div className="sidebar-section-label" style={{ marginTop: 12 }}><span>{item.sectionLabel}</span></div>
+            )}
+            <Link
+              href={item.href}
+              className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
+              title={isDesktopCollapsed ? item.label : undefined}
+            >
+              <span className="sidebar-nav-icon">{item.icon}</span>
+              <span className="sidebar-nav-item-text">{item.label}</span>
+            </Link>
+          </div>
         );
       })}
     </>
@@ -277,6 +410,7 @@ export function DashboardLayout({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
+  const { semester: activeSemester } = useSemesterStatus(30000); // poll every 30s
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -349,13 +483,12 @@ export function DashboardLayout({
               </svg>
             </button>
           </div>
-          <div className="sidebar-brand-title">{isDesktopCollapsed ? '' : 'Hệ thống Đánh giá Rèn luyện'}</div>
-          <div className="sidebar-brand-subtitle">{isDesktopCollapsed ? '' : 'HK1 — 2025-2026'}</div>
+          {/* Live semester status — real-time polling */}
+          <SemesterBadge semester={activeSemester} collapsed={isDesktopCollapsed} />
         </div>
 
         {/* Nav */}
         <nav className="sidebar-nav">
-          <div className="sidebar-section-label"><span>Chức năng</span></div>
           <Suspense fallback={null}>
             <SidebarNavList navItems={navItems} isDesktopCollapsed={isDesktopCollapsed} />
           </Suspense>

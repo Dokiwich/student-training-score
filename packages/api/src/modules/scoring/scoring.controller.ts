@@ -14,8 +14,8 @@ export class ScoringController {
   }
 
   @Get(':formId/scores')
-  async getFormScores(@Param('formId') formId: string, @Query('studentId') studentId: string) {
-    return this.scoringService.getScoresByFormId(formId, studentId);
+  async getFormScores(@Param('formId') formId: string, @Query('studentId') studentId: string, @Query('semesterId') semesterId?: string) {
+    return this.scoringService.getScoresByFormId(formId, studentId, semesterId);
   }
 
   @Get('criteria')
@@ -31,7 +31,8 @@ export class ScoringController {
     @Body('studentId') studentId: string,
     @Req() req: any,
     @Body('proofUrl') proofUrl?: string,
-    @Body('role') role?: string
+    @Body('role') role?: string,
+    @Body('semesterId') semesterId?: string
   ) {
     let activeRole = role || req.user?.role || 'STUDENT';
     // If a class committee or advisor is self-scoring, they act as STUDENT
@@ -40,7 +41,7 @@ export class ScoringController {
     } else if (!role) {
       activeRole = req.user?.role || 'STUDENT';
     }
-    return this.scoringService.submitCriteria(formId, criteriaId, score, activeRole, studentId, proofUrl);
+    return this.scoringService.submitCriteria(formId, criteriaId, score, activeRole, studentId, proofUrl, semesterId);
   }
 
   @Post(':formId/submit')
@@ -48,13 +49,14 @@ export class ScoringController {
     @Param('formId') formId: string,
     @Body('studentId') studentId: string,
     @Req() req: any,
-    @Body('role') role?: string
+    @Body('role') role?: string,
+    @Body('semesterId') semesterId?: string
   ) {
     let activeRole = role || req.user?.role || 'STUDENT';
     if (studentId === req.user?.id && activeRole === 'STUDENT') {
       activeRole = 'STUDENT';
     }
-    return this.scoringService.submitForm(formId, activeRole, studentId);
+    return this.scoringService.submitForm(formId, activeRole, studentId, semesterId);
   }
 
   @Post(':formId/reject')
@@ -62,12 +64,13 @@ export class ScoringController {
     @Param('formId') formId: string,
     @Body('studentId') studentId: string,
     @Req() req: any,
-    @Body('role') role?: string
+    @Body('role') role?: string,
+    @Body('semesterId') semesterId?: string
   ) {
     let activeRole = role || req.user?.role || 'STUDENT';
     if (studentId === req.user?.id && activeRole === 'STUDENT') {
       activeRole = 'STUDENT';
     }
-    return this.scoringService.rejectForm(formId, activeRole, studentId);
+    return this.scoringService.rejectForm(formId, activeRole, studentId, semesterId);
   }
 }

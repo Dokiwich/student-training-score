@@ -78,6 +78,8 @@ interface ScoringFormProps {
   viewMode?: 'edit' | 'history';
   stickyTop?: string;
   requiredStatuses?: string[];
+  semesterId?: string;
+  allowResetAnytime?: boolean;
 }
 
 export function ScoringForm({
@@ -89,6 +91,8 @@ export function ScoringForm({
   viewMode = 'edit',
   stickyTop = 'top-0',
   requiredStatuses,
+  semesterId,
+  allowResetAnytime,
 }: ScoringFormProps) {
   const { data: session } = useSession();
 
@@ -161,7 +165,7 @@ export function ScoringForm({
           headers: headersInit,
           credentials: 'include',
         }),
-        fetch(`${API_BASE}/scoring/${formId}/scores?studentId=${studentId}`, {
+        fetch(`${API_BASE}/scoring/${formId}/scores?studentId=${studentId}${semesterId ? `&semesterId=${semesterId}` : ''}`, {
           headers: headersInit,
           credentials: 'include',
         }),
@@ -436,10 +440,19 @@ export function ScoringForm({
         const score = raw === '' ? 0 : parseFloat(raw);
         if (isNaN(score)) return null;
 
+        // Validate score against max_points before sending to API
+        const isDeduction = item.score_type === 'DEDUCTION' || item.max_points < 0;
+        if (isDeduction) {
+          if (score < item.max_points || score > 0) return null;
+        } else {
+          if (score < 0) return null;
+          if (item.max_points > 0 && score > item.max_points) return null;
+        }
+
         try {
           const r = await fetch(`${API_BASE}/scoring/${formId}/submit-criteria`, {
-            method: 'POST', credentials: 'include', headers: headersInit,
-            body: JSON.stringify({ criteriaId: item.id, score, role: currentRole, studentId, proofUrl: evidenceValues[item.id] || undefined, isDraft: true }),
+            method: 'POST', credentials: 'include', headers: headers,
+            body: JSON.stringify({ criteriaId: item.id, score, role: currentRole, studentId, proofUrl: evidenceValues[item.id] || undefined, isDraft: true, semesterId }),
           });
           if (r.ok) return { id: item.id, score };
           const errData = await r.json().catch(() => null);
@@ -498,14 +511,14 @@ export function ScoringForm({
       if (score > 0) return addToast('error', 'Điểm không được lớn hơn 0');
     } else {
       if (score < 0) return addToast('error', 'Không được âm');
-      // Cho phép vượt maxPoints ở nút lá để sinh viên có thể cộng dồn điểm cho nhiều hoạt động
+      if (maxPoints > 0 && score > maxPoints) return addToast('error', `Điểm không được vượt quá ${maxPoints}`);
     }
 
     setSavingId(criteriaId);
     try {
       const customJwt = (session as any)?.customJwt;
       if (!customJwt) { addToast('error', 'Phiên đăng nhập không hợp lệ.'); return; }
-      const headersInit: HeadersInit = {
+      const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${customJwt}`,
       };
@@ -513,8 +526,8 @@ export function ScoringForm({
       const response = await fetch(`${API_BASE}/scoring/${formId}/submit-criteria`, {
         method: 'POST',
         credentials: 'include',
-        headers: headersInit,
-        body: JSON.stringify({ criteriaId, score, role: currentRole, studentId, proofUrl: evidenceValues[criteriaId] || undefined }),
+        headers: headers,
+        body: JSON.stringify({ criteriaId, score, role: currentRole, studentId, proofUrl: evidenceValues[criteriaId] || undefined, semesterId }),
       });
 
       if (response.ok) {
@@ -542,7 +555,7 @@ export function ScoringForm({
 
       const customJwt = (session as any)?.customJwt;
       if (!customJwt) { addToast('error', 'Phiên đăng nhập không hợp lệ.'); setIsSubmitting(false); return; }
-      const headersInit: HeadersInit = {
+      const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${customJwt}`,
       };
@@ -550,8 +563,8 @@ export function ScoringForm({
       const response = await fetch(`${API_BASE}/scoring/${formId}/submit`, {
         method: 'POST',
         credentials: 'include',
-        headers: headersInit,
-        body: JSON.stringify({ role: currentRole, studentId }),
+        headers: headers,
+        body: JSON.stringify({ role: currentRole, studentId, semesterId }),
       });
 
       if (response.ok) {
@@ -578,7 +591,7 @@ export function ScoringForm({
     try {
       const customJwt = (session as any)?.customJwt;
       if (!customJwt) { addToast('error', 'Phiên đăng nhập không hợp lệ.'); setIsDeleting(false); return; }
-      const headersInit: HeadersInit = {
+      const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${customJwt}`,
       };
@@ -586,8 +599,8 @@ export function ScoringForm({
       const response = await fetch(`${API_BASE}/scoring/${formId}/reject`, {
         method: 'POST',
         credentials: 'include',
-        headers: headersInit,
-        body: JSON.stringify({ studentId, role: currentRole }),
+        headers: headers,
+        body: JSON.stringify({ studentId, role: currentRole, semesterId }),
       });
 
       if (response.ok) {
@@ -612,6 +625,11 @@ export function ScoringForm({
     if (currentRole === 'ADVISOR') return ['CLASS_REVIEWED', 'ADVISOR_REVIEWING'].includes(formStatus);
     return false;
   })();
+
+  const canDeleteForm = canEdit && (
+    (effectiveCanEdit && (currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR')) ||
+    allowResetAnytime
+  );
 
   if (isLoading) {
     return (
@@ -678,20 +696,20 @@ export function ScoringForm({
 
             {/* Actions */}
             <div className="flex items-center gap-2 shrink-0">
-              {canEdit && (
+              {effectiveCanEdit && (
                 <>
                   <button onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting || isDeleting} className="px-4 py-2 rounded-xl text-xs font-semibold text-sky-700 bg-white border border-sky-200 hover:bg-sky-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
                     {isSavingDraft ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-sky-200 border-t-sky-600 animate-spin"></span> Đang lưu...</> : 'Lưu Nháp'}
                   </button>
                   <button onClick={handleSubmitForm} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
-                    {isSubmitting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-sky-300 border-t-white animate-spin"></span> Đang nộp...</> : <>Nộp Phiếu <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></>}
+                    {isSubmitting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-sky-300 border-t-white animate-spin"></span> {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Đang xác nhận...' : 'Đang nộp...'}</> : <>{(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Xác nhận' : 'Nộp Phiếu'} <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></>}
                   </button>
-                  {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
-                    <button onClick={() => setShowDeleteConfirm(true)} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-500 hover:bg-red-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ml-2">
-                      {isDeleting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> Đang xóa...</> : <>Xóa Phiếu <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></>}
-                    </button>
-                  )}
                 </>
+              )}
+              {canDeleteForm && (
+                <button onClick={() => setShowDeleteConfirm(true)} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-500 hover:bg-red-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ml-2">
+                  {isDeleting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> Đang xóa...</> : <>Xóa Phiếu <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></>}
+                </button>
               )}
             </div>
           </div>
@@ -802,7 +820,7 @@ export function ScoringForm({
 
                               const isDeduction = item.score_type === 'DEDUCTION' || item.max_points < 0;
                               const minVal = isDeduction ? item.max_points : 0;
-                              const maxVal = isDeduction ? 0 : 100; // Mở rộng max cho phép cộng dồn điểm
+                              const maxVal = isDeduction ? 0 : (item.max_points > 0 ? item.max_points : 100);
 
                               if (isParent) {
                                 return (
@@ -851,7 +869,7 @@ export function ScoringForm({
                                       <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                     ) : currentRole === 'STUDENT' ? (
                                       <div className="relative inline-block">
-                                        <input type="number" min={minVal} max={maxVal} value={val} disabled={!canEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
+                                        <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
                                         {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin bg-white"></div>}
                                       </div>
                                     ) : (
@@ -866,7 +884,7 @@ export function ScoringForm({
                                         <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                       ) : currentRole === 'CLASS_COMMITTEE' ? (
                                         <div className="relative inline-block">
-                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!canEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
+                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
                                           {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin bg-white"></div>}
                                         </div>
                                       ) : (
@@ -882,7 +900,7 @@ export function ScoringForm({
                                         <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                       ) : (
                                         <div className="relative inline-block">
-                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!canEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
+                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
                                           {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin bg-white"></div>}
                                         </div>
                                       )}
@@ -891,7 +909,7 @@ export function ScoringForm({
                                   <td className="px-4 py-2.5">
                                     {!isFixed && (
                                       <div className="relative flex items-center">
-                                        <input type="text" placeholder="Link minh chứng..." value={evidence} disabled={!canEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => setEvidenceValues(prev => ({ ...prev, [item.id]: e.target.value }))} className="w-full h-8 px-3 text-[11px] text-sky-600 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all pr-8 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300 placeholder-sky-200" />
+                                        <input type="text" placeholder="Link minh chứng..." value={evidence} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => setEvidenceValues(prev => ({ ...prev, [item.id]: e.target.value }))} className="w-full h-8 px-3 text-[11px] text-sky-600 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all pr-8 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300 placeholder-sky-200" />
                                         {evidence && (
                                           <a href={evidence.startsWith('http') ? evidence : `https://${evidence}`} target="_blank" rel="noopener noreferrer" className="absolute right-2 w-5 h-5 bg-sky-100 hover:bg-sky-200 rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer z-10" title="Mở liên kết minh chứng">
                                             <svg className="w-3 h-3 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
@@ -901,7 +919,7 @@ export function ScoringForm({
                                     )}
                                   </td>
                                   <td className="px-4 py-2.5 text-center">
-                                    {!isFixed && canEdit && (
+                                    {!isFixed && effectiveCanEdit && (
                                       <button onClick={() => { handleInputChange(item.id, ''); setEvidenceValues(prev => ({ ...prev, [item.id]: '' })); }} disabled={isRowSaving || isSavingDraft || isSubmitting} className="w-6 h-6 rounded-md flex items-center justify-center text-sky-300 hover:text-red-400 hover:bg-red-50 transition-colors mx-auto opacity-0 group-hover:opacity-100 disabled:opacity-0" title="Xóa">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                       </button>
@@ -930,11 +948,17 @@ export function ScoringForm({
             <div className="w-14 h-14 bg-sky-100 text-sky-600 rounded-xl flex items-center justify-center mb-5 mx-auto">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
             </div>
-            <h3 className="text-lg font-semibold text-center text-sky-800 mb-1.5">Xác nhận nộp phiếu?</h3>
-            <p className="text-center text-sky-400 text-xs mb-6 leading-relaxed">Sau khi nộp, bạn sẽ không thể chỉnh sửa điểm. Bạn chắc chắn chứ?</p>
+            <h3 className="text-lg font-semibold text-center text-sky-800 mb-1.5">
+              {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Bạn có chắc chắn xác nhận?' : 'Xác nhận nộp phiếu?'}
+            </h3>
+            <p className="text-center text-sky-400 text-xs mb-6 leading-relaxed">
+              {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Phiếu điểm sẽ được xác nhận và chuyển sang trạng thái tiếp theo.' : 'Sau khi nộp, bạn sẽ không thể chỉnh sửa điểm. Bạn chắc chắn chứ?'}
+            </p>
             <div className="flex gap-2.5">
               <button onClick={() => setShowConfirm(false)} className="flex-1 py-2.5 px-4 bg-sky-50 hover:bg-sky-100 text-sky-700 font-semibold text-sm rounded-xl transition-colors">Hủy bỏ</button>
-              <button onClick={doSubmitForm} className="flex-1 py-2.5 px-4 bg-sky-500 hover:bg-sky-600 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors">Đồng ý Nộp</button>
+              <button onClick={doSubmitForm} className="flex-1 py-2.5 px-4 bg-sky-500 hover:bg-sky-600 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors">
+                {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Đồng ý Xác nhận' : 'Đồng ý Nộp'}
+              </button>
             </div>
           </div>
         </div>

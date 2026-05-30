@@ -6,13 +6,13 @@ interface Semester { id: string; code: string; name: string; academic_year: stri
 
 const STATUS_LABELS: Record<string, string> = { UPCOMING: 'Sắp tới', STUDENT_SCORING: 'SV chấm', CLASS_REVIEWING: 'Lớp xét', ADVISOR_REVIEWING: 'CVHT xét', SCHOOL_REVIEWING: 'Trường xét', FINALIZED: 'Đã chốt', LOCKED: 'Khóa' };
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  UPCOMING: { bg: '#eff6ff', color: '#2563eb' },
-  STUDENT_SCORING: { bg: '#fef3c7', color: '#d97706' },
-  CLASS_REVIEWING: { bg: '#fef3c7', color: '#d97706' },
-  ADVISOR_REVIEWING: { bg: '#fef3c7', color: '#d97706' },
-  SCHOOL_REVIEWING: { bg: 'var(--accent-light)', color: 'var(--accent)' },
-  FINALIZED: { bg: 'var(--success-bg)', color: 'var(--success)' },
-  LOCKED: { bg: '#f3f4f6', color: '#6b7280' },
+  UPCOMING:          { bg: '#eff6ff', color: '#3b82f6' }, // blue-50, blue-500
+  STUDENT_SCORING:   { bg: '#fffbeb', color: '#f59e0b' }, // amber-50, amber-500
+  CLASS_REVIEWING:   { bg: '#fffbeb', color: '#f59e0b' },
+  ADVISOR_REVIEWING: { bg: '#f5f3ff', color: '#8b5cf6' }, // violet-50, violet-500
+  SCHOOL_REVIEWING:  { bg: '#ecfeff', color: '#06b6d4' }, // cyan-50, cyan-500
+  FINALIZED:         { bg: '#ecfdf5', color: '#10b981' }, // emerald-50, emerald-500
+  LOCKED:            { bg: '#f3f4f6', color: '#6b7280' }, // gray-100, gray-500
 };
 
 function fmtDate(d: string) { if (!d) return '-'; return new Date(d).toLocaleDateString('vi-VN'); }
@@ -24,15 +24,19 @@ export function SemestersTab() {
   const [editing, setEditing] = useState<Semester | null>(null);
   const [form, setForm] = useState({ code: '', name: '', academic_year: '2025-2026', semester_number: '1', start_date: '', end_date: '', student_deadline: '', class_committee_deadline: '', advisor_deadline: '', school_deadline: '', status: 'UPCOMING' });
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  const fetchAll = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const r = await fetch('/api/admin/semesters');
       if (r.ok) { const j = await r.json(); setSemesters(j.data || []); }
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { 
+    fetchAll(); 
+    const timer = setInterval(() => fetchAll(true), 30000); // Tự động cập nhật mỗi 30s
+    return () => clearInterval(timer);
+  }, [fetchAll]);
 
   const resetForm = () => { setForm({ code: '', name: '', academic_year: '2025-2026', semester_number: '1', start_date: '', end_date: '', student_deadline: '', class_committee_deadline: '', advisor_deadline: '', school_deadline: '', status: 'UPCOMING' }); setShowForm(false); setEditing(null); };
 
@@ -60,6 +64,15 @@ export function SemestersTab() {
     } catch { alert('Lỗi kết nối'); }
   };
 
+  const activateSemester = async (id: string) => {
+    if (!confirm('Bạn có chắc muốn kích hoạt học kỳ này (các học kỳ khác sẽ bị vô hiệu hóa)?')) return;
+    try {
+      const r = await fetch('/api/admin/semesters', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+      const d = await r.json();
+      if (r.ok) { fetchAll(); } else { alert(d.message); }
+    } catch { alert('Lỗi kết nối'); }
+  };
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
 
   const columns = [
@@ -74,8 +87,14 @@ export function SemestersTab() {
         return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: sc.bg, color: sc.color }}>{STATUS_LABELS[s.status] || s.status}</span>;
       }
     },
-    { header: 'Thao tác', width: 80, align: 'center' as const, render: (s: Semester) => (
-        <button onClick={() => startEdit(s)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
+    { header: 'Kích hoạt', width: 80, align: 'center' as const, render: (s: Semester) => (
+        Number(s.is_active) === 1 ? <span style={{ color: '#10b981', fontWeight: 600, fontSize: 12 }}>● Active</span> : <span style={{ color: '#d1d5db', fontSize: 12 }}>○</span>
+    ) },
+    { header: 'Thao tác', width: 140, align: 'center' as const, render: (s: Semester) => (
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+          {Number(s.is_active) !== 1 && <button onClick={() => activateSemester(s.id)} className="btn-secondary" style={{ padding: '4px 8px', fontSize: 11, borderColor: '#10b981', color: '#10b981' }}>Kích hoạt</button>}
+          <button onClick={() => startEdit(s)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
+        </div>
       )
     }
   ];

@@ -1,49 +1,26 @@
 'use client';
 
 import { Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { AdvisorSummary } from '../components/AdvisorSummary';
 import { ScoringDashboard } from '../components/ScoringDashboard';
 import { DashboardLayout } from '../components/DashboardLayout';
 
 function AdvisorContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const filter = searchParams?.get('filter');
-  const tab = searchParams?.get('tab');
-  
-  // If there's a filter, we are in the list view automatically
-  const activeTab = filter || tab === 'list' ? 'list' : 'summary';
+
+  // filter=summary → trang tổng hợp, mọi filter khác → danh sách chấm
+  const isSummary = filter === 'summary';
 
   return (
-    <>
-      {/* Tabs */}
-      <div className="dashboard-tabs" style={{ marginBottom: 20 }}>
-        <button
-          onClick={() => router.push('/advisor?tab=summary')}
-          className={`dashboard-tab ${activeTab === 'summary' ? 'active' : ''}`}
-          id="tab-summary"
-        >
-          Bảng tổng hợp
-        </button>
-        <button
-          onClick={() => router.push('/advisor?tab=list')}
-          className={`dashboard-tab ${activeTab === 'list' ? 'active' : ''}`}
-          id="tab-list"
-        >
-          Danh sách chấm
-        </button>
-      </div>
-
-      {/* Content */}
-      <div style={{ flex: 1 }}>
-        {activeTab === 'summary' ? (
-          <AdvisorSummary />
-        ) : (
-          <ScoringDashboard role="ADVISOR" showHeader={false} />
-        )}
-      </div>
-    </>
+    <div style={{ flex: 1 }}>
+      {isSummary ? (
+        <AdvisorSummary />
+      ) : (
+        <ScoringDashboard role="ADVISOR" showHeader={false} />
+      )}
+    </div>
   );
 }
 

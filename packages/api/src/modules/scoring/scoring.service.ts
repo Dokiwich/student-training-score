@@ -77,15 +77,20 @@ export class ScoringService {
   // =============================================
   // HELPER: Tìm phiếu theo student_id (qua enrollment)
   // =============================================
-  private async findSheetByStudent(studentId: string) {
-    const activeSemester = await this.getActiveSemester();
-    if (!activeSemester) return null;
+  private async findSheetByStudent(studentId: string, semesterId?: string) {
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      targetSemesterId = activeSemester?.id;
+    }
+
+    if (!targetSemesterId) return null;
 
     return prisma.scoring_sheets.findFirst({
       where: {
         semester_enrollments: {
           user_id: studentId,
-          semester_id: activeSemester.id,
+          semester_id: targetSemesterId,
         },
       },
     });
@@ -233,15 +238,19 @@ export class ScoringService {
   // 2. LẤY TOÀN BỘ ĐIỂM + TRẠNG THÁI PHIẾU
   //    ✅ MỚI: Trả thêm formStatus để Frontend biết khóa/mở
   // =============================================
-  async getScoresByFormId(formId: string, studentId: string) {
-    const activeSemester = await this.getActiveSemester();
+  async getScoresByFormId(formId: string, studentId: string, semesterId?: string) {
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      targetSemesterId = activeSemester?.id;
+    }
 
     // Tìm phiếu theo student_id qua enrollment
     let form = await prisma.scoring_sheets.findFirst({
       where: {
         semester_enrollments: {
           user_id: studentId,
-          ...(activeSemester ? { semester_id: activeSemester.id } : {}),
+          ...(targetSemesterId ? { semester_id: targetSemesterId } : {}),
         },
       },
       select: {
@@ -261,12 +270,11 @@ export class ScoringService {
 
     // Auto-provision: Tạo phiếu DRAFT nếu chưa có
     if (!form) {
-      const activeSemester = await this.getActiveSemester();
-      if (!activeSemester) {
+      if (!targetSemesterId) {
         throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       }
 
-      const enrollment = await this.resolveEnrollment(studentId, activeSemester.id);
+      const enrollment = await this.resolveEnrollment(studentId, targetSemesterId);
       if (!enrollment) {
         throw new BadRequestException('Không tìm thấy thông tin đăng ký học kỳ của sinh viên!');
       }
@@ -349,23 +357,29 @@ export class ScoringService {
     score: number,
     role: string,
     studentId: string,
+    semesterId?: string,
   ) {
     // 3a. Tìm hoặc tự tạo phiếu điểm theo student_id (qua enrollment)
-    let form = await this.findSheetByStudent(studentId);
+    let form = await this.findSheetByStudent(studentId, semesterId);
 
     if (!form) {
-      const activeSemester = await this.getActiveSemester();
-      if (!activeSemester) {
+      let targetSemesterId = semesterId;
+      if (!targetSemesterId) {
+        const activeSemester = await this.getActiveSemester();
+        targetSemesterId = activeSemester?.id;
+      }
+      
+      if (!targetSemesterId) {
         throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       }
 
-      const enrollment = await this.resolveEnrollment(studentId, activeSemester.id);
+      const enrollment = await this.resolveEnrollment(studentId, targetSemesterId);
       if (!enrollment) {
         throw new BadRequestException('Không tìm thấy thông tin đăng ký học kỳ của sinh viên!');
       }
 
       // Use upsert-like pattern: try to find again (in case another parallel request just created it)
-      form = await this.findSheetByStudent(studentId);
+      form = await this.findSheetByStudent(studentId, targetSemesterId);
 
       if (!form) {
         try {
@@ -380,7 +394,7 @@ export class ScoringService {
         } catch (createErr: any) {
           // Handle race condition: another request may have created the sheet
           if (createErr?.code === 'P2002') {
-            form = await this.findSheetByStudent(studentId);
+            form = await this.findSheetByStudent(studentId, targetSemesterId);
             if (!form) {
               throw new BadRequestException('Không thể tạo phiếu điểm!');
             }
@@ -455,8 +469,13 @@ export class ScoringService {
           `Điểm không được thấp hơn ${criteria.min_score} (tiêu chí "${criteria.code}")`,
         );
       }
-      // Bỏ check score > criteria.max_points ở Backend vì các mục lá thường là "điểm/hoạt động" và cho phép cộng dồn.
-      // Việc cap trần điểm tổng của mục cha sẽ được xử lý ở Frontend và lúc tính tổng cuối cùng.
+      // ✅ FIX: Kiểm tra score không được vượt quá max_points
+      // Trước đây bỏ check ở đây dẫn đến lỗi Decimal(5,2) overflow → 500 khi nhập số quá lớn
+      if (criteria.max_points > 0 && score > criteria.max_points) {
+        throw new BadRequestException(
+          `Điểm không được vượt quá ${criteria.max_points} (tiêu chí "${criteria.code}")`,
+        );
+      }
     }
 
     return { form, criteria };
@@ -529,9 +548,10 @@ export class ScoringService {
     role: string,
     studentId: string,
     proofUrl?: string,
+    semesterId?: string,
   ) {
     // 5a. Validate (bao gồm kiểm tra quyền role)
-    await this.validateBeforeScore(formId, criteriaId, score, role, studentId);
+    await this.validateBeforeScore(formId, criteriaId, score, role, studentId, semesterId);
 
     // 5b. Phân luồng theo Role
     const updateData: Record<string, any> = {};
@@ -556,12 +576,16 @@ export class ScoringService {
     }
 
     // 5c. Tìm phiếu theo student_id (qua enrollment) để lấy scoring_sheet_id thực
-    const activeSemester = await this.getActiveSemester();
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      targetSemesterId = activeSemester?.id;
+    }
     const scoreRecord = await prisma.scoring_sheets.findFirst({
       where: {
         semester_enrollments: {
           user_id: studentId,
-          ...(activeSemester ? { semester_id: activeSemester.id } : {}),
+          ...(targetSemesterId ? { semester_id: targetSemesterId } : {}),
         },
       },
       select: { id: true },
@@ -620,18 +644,23 @@ export class ScoringService {
   //    Gộp từ cả 2 phiên bản: NestJS exceptions + Role-based transitions
   //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
   // =============================================
-  async submitForm(formId: string, role: string, studentId: string) {
+  async submitForm(formId: string, role: string, studentId: string, semesterId?: string) {
     // 6a. Tìm phiếu theo student_id (qua enrollment)
-    let form = await this.findSheetByStudent(studentId);
+    let form = await this.findSheetByStudent(studentId, semesterId);
 
     // Fix: Nếu chưa có phiếu, tự tạo DRAFT thay vì ném lỗi
     if (!form) {
-      const activeSemester = await this.getActiveSemester();
-      if (!activeSemester) {
+      let targetSemesterId = semesterId;
+      if (!targetSemesterId) {
+        const activeSemester = await this.getActiveSemester();
+        targetSemesterId = activeSemester?.id;
+      }
+
+      if (!targetSemesterId) {
         throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       }
 
-      const enrollment = await this.resolveEnrollment(studentId, activeSemester.id);
+      const enrollment = await this.resolveEnrollment(studentId, targetSemesterId);
       if (!enrollment) {
         throw new BadRequestException('Không tìm thấy thông tin đăng ký học kỳ của sinh viên!');
       }
@@ -756,13 +785,18 @@ export class ScoringService {
   // =============================================
   // 6.1 ✅ XÓA VÀ LÀM MỚI PHIẾU (Thay cho chức năng Trả lại)
   // =============================================
-  async rejectForm(formId: string, role: string, studentId: string) {
-    const activeSemester = await this.getActiveSemester();
+  async rejectForm(formId: string, role: string, studentId: string, semesterId?: string) {
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      targetSemesterId = activeSemester?.id;
+    }
+
     const form = await prisma.scoring_sheets.findFirst({
       where: {
         semester_enrollments: {
           user_id: studentId,
-          ...(activeSemester ? { semester_id: activeSemester.id } : {}),
+          ...(targetSemesterId ? { semester_id: targetSemesterId } : {}),
         },
       },
       include: { score_details: true },

@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, UseGuards, Req, Query } from '@nestjs/common';
 import { DepartmentService } from './department.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
@@ -7,21 +7,27 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 export class DepartmentController {
   constructor(private readonly departmentService: DepartmentService) {}
 
-  /**
-   * GET /api/department/students
-   * Lấy danh sách tất cả sinh viên trong khoa (tất cả lớp)
-   */
-  @Get('students')
-  async getStudents(@Req() req: any) {
-    return this.departmentService.getStudentsByDepartment(req.user?.id);
+  /** GET /api/department/semesters — Danh sách học kỳ */
+  @Get('semesters')
+  async getSemesters() {
+    return this.departmentService.getSemesters();
   }
 
-  /**
-   * GET /api/department/stats
-   * Thống kê tổng hợp cấp khoa (sĩ số, xếp loại, điểm TB theo lớp)
-   */
+  /** GET /api/department/students?semesterId=xxx */
+  @Get('students')
+  async getStudents(@Req() req: any, @Query('semesterId') semesterId?: string) {
+    return this.departmentService.getStudentsByDepartment(req.user?.id, semesterId);
+  }
+
+  /** GET /api/department/stats?semesterId=xxx */
   @Get('stats')
-  async getStats(@Req() req: any) {
-    return this.departmentService.getDepartmentStats(req.user?.id);
+  async getStats(@Req() req: any, @Query('semesterId') semesterId?: string) {
+    return this.departmentService.getDepartmentStats(req.user?.id, semesterId);
+  }
+
+  /** GET /api/department/stats/compare — So sánh 3 HK gần nhất */
+  @Get('stats/compare')
+  async getStatsComparison(@Req() req: any) {
+    return this.departmentService.getStatsComparison(req.user?.id);
   }
 }

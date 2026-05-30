@@ -8,6 +8,25 @@ function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
 }
 
+/** Tính trạng thái học kỳ theo thời gian thực */
+function computeStatus(s: {
+  start_date: Date;
+  end_date: Date;
+  student_deadline: Date;
+  class_committee_deadline: Date;
+  advisor_deadline: Date;
+  school_deadline: Date;
+}): string {
+  const now = new Date();
+  if (now < new Date(s.start_date)) return 'UPCOMING';
+  if (now < new Date(s.student_deadline)) return 'STUDENT_SCORING';
+  if (now < new Date(s.class_committee_deadline)) return 'CLASS_REVIEWING';
+  if (now < new Date(s.advisor_deadline)) return 'ADVISOR_REVIEWING';
+  if (now < new Date(s.school_deadline)) return 'SCHOOL_REVIEWING';
+  if (now <= new Date(s.end_date)) return 'FINALIZED';
+  return 'LOCKED';
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!isAdmin(session)) {
@@ -18,7 +37,29 @@ export async function GET() {
     orderBy: { start_date: 'desc' },
   });
 
-  return NextResponse.json({ data: semesters });
+  // Auto-compute & sync status cho tất cả HK
+  const updated = await Promise.all(semesters.map(async (s) => {
+    const computed = computeStatus(s);
+    const shouldDeactivate = computed === 'LOCKED' && s.is_active === 1;
+    
+    if (computed !== s.status || shouldDeactivate) {
+      await prisma.semesters.update({
+        where: { id: s.id },
+        data: { 
+          status: computed as any,
+          ...(shouldDeactivate ? { is_active: 0 } : {})
+        },
+      });
+      return { 
+        ...s, 
+        status: computed as any,
+        ...(shouldDeactivate ? { is_active: 0 } : {})
+      };
+    }
+    return s;
+  }));
+
+  return NextResponse.json({ data: updated });
 }
 
 export async function POST(req: Request) {
@@ -54,7 +95,7 @@ export async function POST(req: Request) {
         advisor_deadline: new Date(advisor_deadline || end_date),
         school_deadline: new Date(school_deadline || end_date),
         status: 'UPCOMING',
-        is_active: 1,
+        is_active: 0,
       },
     });
 
@@ -94,6 +135,42 @@ export async function PUT(req: Request) {
       data: updateData,
     });
     return NextResponse.json({ message: 'Cập nhật học kỳ thành công', data: semester });
+  } catch {
+    return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
+  }
+}
+
+/** PATCH — Kích hoạt một học kỳ (set is_active=1, tắt tất cả HK khác) */
+export async function PATCH(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!isAdmin(session)) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
+  }
+
+  try {
+    const body = await req.json();
+    const { id } = body;
+    if (!id) return NextResponse.json({ message: 'ID học kỳ là bắt buộc' }, { status: 400 });
+
+    const targetSemester = await prisma.semesters.findUnique({ where: { id } });
+    if (!targetSemester) return NextResponse.json({ message: 'Không tìm thấy học kỳ' }, { status: 404 });
+    if (targetSemester.status === 'LOCKED') {
+      return NextResponse.json({ message: 'Không thể kích hoạt học kỳ đã Khóa' }, { status: 400 });
+    }
+
+    // Tắt tất cả HK khác → chỉ kích hoạt HK được chọn
+    await prisma.$transaction([
+      prisma.semesters.updateMany({
+        where: { is_active: 1 },
+        data: { is_active: 0 },
+      }),
+      prisma.semesters.update({
+        where: { id },
+        data: { is_active: 1 },
+      }),
+    ]);
+
+    return NextResponse.json({ message: 'Đã kích hoạt học kỳ thành công' });
   } catch {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }
