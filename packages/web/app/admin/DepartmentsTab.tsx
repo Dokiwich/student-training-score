@@ -11,6 +11,7 @@ export function DepartmentsTab() {
   const [editing, setEditing] = useState<Dept | null>(null);
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
+  const [isActive, setIsActive] = useState(1);
 
   const fetch_ = useCallback(async () => {
     setLoading(true);
@@ -22,13 +23,13 @@ export function DepartmentsTab() {
 
   useEffect(() => { fetch_(); }, [fetch_]);
 
-  const resetForm = () => { setCode(''); setName(''); setShowForm(false); setEditing(null); };
+  const resetForm = () => { setCode(''); setName(''); setIsActive(1); setShowForm(false); setEditing(null); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code || !name) return alert('Nhập đầy đủ mã và tên khoa');
     const method = editing ? 'PUT' : 'POST';
-    const body = editing ? { id: editing.id, code, name } : { code, name };
+    const body = editing ? { id: editing.id, code, name, is_active: isActive } : { code, name, is_active: isActive };
     try {
       const r = await fetch('/api/admin/departments', {
         method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -50,7 +51,7 @@ export function DepartmentsTab() {
     } catch { alert('Lỗi kết nối'); }
   };
 
-  const startEdit = (dept: Dept) => { setEditing(dept); setCode(dept.code); setName(dept.name); setShowForm(true); };
+  const startEdit = (dept: Dept) => { setEditing(dept); setCode(dept.code); setName(dept.name); setIsActive(dept.is_active); setShowForm(true); };
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
 
@@ -93,6 +94,13 @@ export function DepartmentsTab() {
             <div style={{ flex: 1, minWidth: 200 }}>
               <label className="form-label">Tên khoa</label>
               <input type="text" placeholder="VD: Công nghệ thông tin" value={name} onChange={e => setName(e.target.value)} className="form-input" />
+            </div>
+            <div style={{ flex: '0 0 140px' }}>
+              <label className="form-label">Trạng thái</label>
+              <select value={isActive} onChange={e => setIsActive(Number(e.target.value))} className="form-input">
+                <option value={1}>Hoạt động</option>
+                <option value={0}>Ẩn</option>
+              </select>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" className="btn-primary">{editing ? 'Lưu' : 'Thêm'}</button>

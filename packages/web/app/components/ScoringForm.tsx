@@ -420,7 +420,7 @@ export function ScoringForm({
   };
 
   const handleSaveDraft = async () => {
-    const leafItems = criteria.filter((c) => !criteria.some((x) => x.parent_id === c.id) && !FIXED_CODES.includes(c.code));
+    const leafItems = criteria.filter((c) => !criteria.some((x) => x.parent_id === c.id));
     if (leafItems.length === 0) return;
     setIsSavingDraft(true);
     try {
@@ -436,8 +436,13 @@ export function ScoringForm({
       let lastError = '';
 
       const saveSingleItem = async (item: typeof leafItems[0]) => {
-        const raw = inputValues[item.id] ?? '';
-        const score = raw === '' ? 0 : parseFloat(raw);
+        let score = 0;
+        if (FIXED_CODES.includes(item.code)) {
+          score = item.max_points;
+        } else {
+          const raw = inputValues[item.id] ?? '';
+          score = raw === '' ? 0 : parseFloat(raw);
+        }
         if (isNaN(score)) return null;
 
         // Validate score against max_points before sending to API
@@ -626,10 +631,9 @@ export function ScoringForm({
     return false;
   })();
 
-  const canDeleteForm = canEdit && (
-    (effectiveCanEdit && (currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR')) ||
-    allowResetAnytime
-  );
+  const canDeleteForm = 
+    (canEdit && effectiveCanEdit && (currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR')) ||
+    (allowResetAnytime && ['APPROVED', 'ADVISOR_APPROVED', 'SCHOOL_APPROVED', 'FINALIZED'].includes(formStatus));
 
   if (isLoading) {
     return (

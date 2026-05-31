@@ -139,7 +139,7 @@ export function AdminStudentsTab() {
                 forcedRole="ADVISOR"
                 studentId={selectedStudentForEdit.id}
                 studentName={selectedStudentForEdit.name}
-                viewMode="edit"
+                viewMode="history"
                 stickyTop="top-0"
                 semesterId={selectedSemId}
                 allowResetAnytime={true}
