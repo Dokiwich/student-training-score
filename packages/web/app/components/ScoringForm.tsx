@@ -451,7 +451,7 @@ export function ScoringForm({
 
         try {
           const r = await fetch(`${API_BASE}/scoring/${formId}/submit-criteria`, {
-            method: 'POST', credentials: 'include', headers: headers,
+            method: 'POST', credentials: 'include', headers: headersInit,
             body: JSON.stringify({ criteriaId: item.id, score, role: currentRole, studentId, proofUrl: evidenceValues[item.id] || undefined, isDraft: true, semesterId }),
           });
           if (r.ok) return { id: item.id, score };
