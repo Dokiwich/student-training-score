@@ -91,6 +91,59 @@ export async function POST(req: Request) {
 }
 
 /**
+ * PUT /api/department/classes
+ * Sửa thông tin lớp học
+ */
+export async function PUT(req: Request) {
+  const session = await getServerSession(authOptions);
+  const deptUser = await getDepartmentUser(session);
+  if (!deptUser) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
+  }
+
+  try {
+    const { id, code, name, academic_year } = await req.json();
+
+    if (!id || !code?.trim() || !name?.trim()) {
+      return NextResponse.json({ message: 'ID, Mã lớp và Tên lớp là bắt buộc' }, { status: 400 });
+    }
+
+    // Verify class belongs to this department
+    const cls = await prisma.classes.findFirst({
+      where: { id, department_id: deptUser.department_id! },
+    });
+    if (!cls) {
+      return NextResponse.json({ message: 'Lớp không thuộc khoa của bạn' }, { status: 403 });
+    }
+
+    // Check duplicate code (if code changed)
+    if (code.trim() !== cls.code) {
+      const existing = await prisma.classes.findUnique({ where: { code: code.trim() } });
+      if (existing) {
+        return NextResponse.json({ message: `Mã lớp "${code}" đã tồn tại` }, { status: 400 });
+      }
+    }
+
+    const updatedCls = await prisma.classes.update({
+      where: { id },
+      data: {
+        code: code.trim(),
+        name: name.trim(),
+        academic_year: academic_year?.trim() || cls.academic_year,
+      },
+    });
+
+    return NextResponse.json({ message: 'Cập nhật lớp thành công', data: updatedCls });
+  } catch (err: any) {
+    console.error('Dept edit class error:', err);
+    if (err?.code === 'P2002') {
+      return NextResponse.json({ message: 'Mã lớp đã tồn tại' }, { status: 400 });
+    }
+    return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
+  }
+}
+
+/**
  * DELETE /api/department/classes
  * Xóa (soft-delete) lớp — chỉ cho phép nếu lớp chưa có sinh viên nào enrolled
  */

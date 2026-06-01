@@ -300,6 +300,7 @@ export function DepartmentDashboard() {
   const [newClassName, setNewClassName] = useState('');
   const [newClassCode, setNewClassCode] = useState('');
   const [newClassYear, setNewClassYear] = useState(new Date().getFullYear().toString());
+  const [editClassData, setEditClassData] = useState<{id: string, code: string, name: string, academic_year: string} | null>(null);
 
   // Import Excel state (Khoa)
   const [showImportModal, setShowImportModal] = useState(false);
@@ -364,16 +365,15 @@ export function DepartmentDashboard() {
       .catch(() => {});
   }, [session, activeView, getHeaders]);
 
-  // Fetch department classes for students view (merged manage + students)
+  // Fetch department classes
   useEffect(() => {
-    if (activeView === 'students' || activeView === 'manage') {
-      fetch('/api/department/classes').then(r => r.ok ? r.json() : Promise.reject()).then(j => setDeptClasses(j.data || [])).catch(() => {});
-    }
-  }, [activeView]);
+    if (!session?.user) return;
+    fetch('/api/department/classes').then(r => r.ok ? r.json() : Promise.reject()).then(j => setDeptClasses(j.data || [])).catch(() => {});
+  }, [session]);
 
-  // Fetch students for selected class in manage section
+  // Fetch students for selected class in classes view
   useEffect(() => {
-    if ((activeView === 'students' || activeView === 'manage') && manageClassId) {
+    if (activeView === 'classes' && manageClassId) {
       setLoadingStudents(true);
       fetch(`/api/department/users?classId=${manageClassId}`).then(r => r.ok ? r.json() : Promise.reject()).then(j => setClassStudents(j.data || [])).catch(() => setClassStudents([])).finally(() => setLoadingStudents(false));
     } else { setClassStudents([]); }
@@ -404,6 +404,23 @@ export function DepartmentDashboard() {
       if (r.ok) {
         alert('Thêm lớp thành công');
         setShowAddClassModal(false); setNewClassCode(''); setNewClassName(''); setNewClassYear(new Date().getFullYear().toString());
+        refreshClasses();
+      } else { alert(d.message); }
+    } catch { alert('Lỗi kết nối'); }
+  };
+
+  const handleEditClass = async () => {
+    if (!editClassData?.code?.trim() || !editClassData?.name?.trim()) return alert('Vui lòng nhập mã lớp và tên lớp');
+    try {
+      const r = await fetch('/api/department/classes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editClassData.id, code: editClassData.code.trim(), name: editClassData.name.trim(), academic_year: editClassData.academic_year?.trim() }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        alert('Cập nhật lớp thành công');
+        setEditClassData(null);
         refreshClasses();
       } else { alert(d.message); }
     } catch { alert('Lỗi kết nối'); }
@@ -584,10 +601,25 @@ export function DepartmentDashboard() {
   }, [students, selectedClass, searchTerm]);
 
   const filteredManageStudents = useMemo(() => {
-    if (!manageSearch.trim()) return classStudents;
-    const term = manageSearch.toLowerCase();
-    return classStudents.filter(s => s.full_name.toLowerCase().includes(term) || (s.student_id && s.student_id.toLowerCase().includes(term)) || s.email.toLowerCase().includes(term));
-  }, [classStudents, manageSearch]);
+    let result = classStudents;
+    if (manageSearch.trim()) {
+      const term = manageSearch.toLowerCase();
+      result = result.filter(s => s.full_name.toLowerCase().includes(term) || (s.student_id && s.student_id.toLowerCase().includes(term)) || s.email.toLowerCase().includes(term));
+    }
+    return result.map(cs => {
+      const scoreData = students.find(s => s.id === cs.id);
+      return {
+        ...cs,
+        status: scoreData?.status || 'NO_SHEET',
+        studentTotal: scoreData?.studentTotal ?? null,
+        classTotal: scoreData?.classTotal ?? null,
+        advisorTotal: scoreData?.advisorTotal ?? null,
+        classification: scoreData?.classification || null,
+        name: scoreData?.name || cs.full_name,
+        studentCode: scoreData?.studentCode || cs.student_id,
+      };
+    });
+  }, [classStudents, manageSearch, students]);
 
   if (isLoading) {
     return (
@@ -628,12 +660,28 @@ export function DepartmentDashboard() {
   ) : null;
 
   const manageStudentsColumns = [
-    { header: 'STT', width: 50, align: 'center' as const, render: (_s: any, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
-    { header: 'MSSV', width: 110, render: (s: any) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.student_id || '-'}</span> },
+    { header: 'STT', width: 40, align: 'center' as const, render: (_s: any, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'MSSV', width: 90, render: (s: any) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.student_id || '-'}</span> },
     { header: 'Họ và Tên', render: (s: any) => <span style={{ fontWeight: 500 }}>{s.full_name}</span> },
-    { header: 'Email', render: (s: any) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{s.email}</span> },
-    { header: 'Thao tác', width: 80, align: 'center' as const, render: (s: any) => (
-      <button onClick={() => handleDeleteStudent(s)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#fee2e2'; }} onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}>Xóa</button>
+    { header: 'Trạng thái', width: 90, align: 'center' as const, render: (s: any) => {
+      let statusLabel = '', statusColor = '';
+      if (s.status === 'NO_SHEET' || s.status === 'DRAFT') { statusLabel = 'Chưa nộp'; statusColor = 'var(--text-muted)'; }
+      else if (s.status === 'STUDENT_SUBMITTED') { statusLabel = 'Chờ lớp duyệt'; statusColor = 'var(--warning-dark)'; }
+      else if (s.status === 'CLASS_REVIEWED' || s.status === 'ADVISOR_REVIEWING') { statusLabel = 'Chờ CVHT'; statusColor = 'var(--accent)'; }
+      else { statusLabel = 'Hoàn tất'; statusColor = 'var(--success)'; }
+      return <span style={{ fontSize: 12, fontWeight: 500, color: statusColor }}>{statusLabel}</span>;
+    }},
+    { header: 'Điểm CVHT', width: 80, align: 'center' as const, render: (s: any) => <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{s.advisorTotal ?? '-'}</span> },
+    { header: 'Xếp loại', width: 90, align: 'center' as const, render: (s: any) => {
+      const clsLabel = s.classification ? CLASSIFICATION_LABELS[s.classification] || '' : '';
+      const clsColor = CLS_COLORS[s.classification || ''] || { bg: '#f3f4f6', color: '#6b7280' };
+      return clsLabel ? <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: clsColor.bg, color: clsColor.color }}>{clsLabel}</span> : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>-</span>;
+    }},
+    { header: 'Thao tác', width: 120, align: 'center' as const, render: (s: any) => (
+      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+        <button onClick={() => setSelectedStudentForEdit(s)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#dbeafe'; }} onMouseOut={e => { e.currentTarget.style.background = '#eff6ff'; }}>Phiếu</button>
+        <button onClick={() => handleDeleteStudent(s)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#fee2e2'; }} onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}>Xóa</button>
+      </div>
     ) },
   ];
 
@@ -714,8 +762,11 @@ export function DepartmentDashboard() {
                 data={stats.byClass}
                 footer={classStatsFooter}
                 onRowClick={(c: any) => {
-                  setSelectedClass(c.classCode);
-                  router.push(`/department?view=students&class=${c.classCode}`);
+                  const cls = deptClasses.find(x => x.code === c.classCode);
+                  if (cls) {
+                    setManageClassId(cls.id);
+                    router.push(`/department?view=classes`);
+                  }
                 }}
                 rowTitle={(c: any) => `Nhấn để xem chi tiết lớp ${c.classCode}`}
               />
@@ -753,177 +804,122 @@ export function DepartmentDashboard() {
         </div>
       )}
 
-      {/* ══════ VIEW: Manage ══════ */}
-      {activeView === 'manage' && stats && (
+      {/* ══════ VIEW: Classes (drill-down: class list → student list) ══════ */}
+      {activeView === 'classes' && stats && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* ── Section 1: Quản lý Lớp ── */}
-          <div className="dashboard-card">
-            <div className="dashboard-card-header">
-              <div>
-                <h3 className="dashboard-card-title">Quản lý Lớp học</h3>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>{deptClasses.length} lớp đang hoạt động</p>
-              </div>
-              <button onClick={() => setShowAddClassModal(true)} className="btn-primary" style={{ fontSize: 12 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                Thêm lớp
-              </button>
-            </div>
-            {deptClasses.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)', fontSize: 13 }}>Chưa có lớp nào. Nhấn "Thêm lớp" để tạo mới.</div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="dashboard-table">
-                  <thead><tr>
-                    <th style={{ width: 50, textAlign: 'center' }}>STT</th>
-                    <th style={{ width: 120 }}>Mã lớp</th>
-                    <th>Tên lớp</th>
-                    <th style={{ width: 100, textAlign: 'center' }}>Năm học</th>
-                    <th style={{ width: 80, textAlign: 'center' }}>Sĩ số</th>
-                    <th style={{ width: 80, textAlign: 'center' }}>Thao tác</th>
-                  </tr></thead>
-                  <tbody>
-                    {deptClasses.map((cls, i) => (
-                      <tr key={cls.id}>
-                        <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12 }}>{cls.code}</td>
-                        <td style={{ fontWeight: 500 }}>{cls.name}</td>
-                        <td style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-tertiary)' }}>{cls.academicYear || '-'}</td>
-                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{cls.studentCount}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            onClick={() => handleDeleteClass(cls)}
-                            className="btn-danger"
-                            style={{ padding: '4px 10px', fontSize: 11 }}
-                            disabled={cls.studentCount > 0}
-                            title={cls.studentCount > 0 ? 'Phải xóa hết SV trước' : 'Xóa lớp'}
-                          >Xóa</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
 
-          {/* ── Section 2: Quản lý Sinh viên trong lớp ── */}
-          <div className="dashboard-card" style={{ padding: 0 }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 16, borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-secondary)' }}>Sinh viên lớp:</span>
-              <select value={manageClassId} onChange={(e) => setManageClassId(e.target.value)} className="form-input" style={{ width: 240 }}>
-                <option value="">-- Chọn lớp --</option>
-                {deptClasses.map(c => (<option key={c.id} value={c.id}>{c.code} - {c.name} ({c.studentCount} SV)</option>))}
-              </select>
-              {manageClassId && (
-                <>
-                  <div style={{ position: 'relative', flex: 1, maxWidth: 280, minWidth: 180 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-                    <input type="text" placeholder="Tìm tên, MSSV..." value={manageSearch} onChange={(e) => setManageSearch(e.target.value)} style={{ width: '100%', fontSize: 13, padding: '8px 10px 8px 32px', border: '1px solid var(--border)', borderRadius: 8, outline: 'none' }} />
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-                    <button onClick={() => { setShowImportModal(true); resetDeptImport(); }} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #e0e7ff', background: '#eef2ff', color: '#4f46e5', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#e0e7ff'; }} onMouseOut={e => { e.currentTarget.style.background = '#eef2ff'; }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                      Import Excel
-                    </button>
-                    <button onClick={() => setShowAddStudentModal(true)} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#059669'; }} onMouseOut={e => { e.currentTarget.style.background = '#10b981'; }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                      Thêm sinh viên
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-            <div style={{ padding: 16 }}>
-              {!manageClassId ? (
-                <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 14 }}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 12px' }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                  <div>Vui lòng chọn lớp để quản lý sinh viên</div>
+          {/* ── Breadcrumb when viewing a class's students ── */}
+          {manageClassId && (() => {
+            const currentClass = deptClasses.find(c => c.id === manageClassId);
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+                <button
+                  onClick={() => { setManageClassId(''); setManageSearch(''); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontWeight: 600, fontSize: 13, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                  Danh sách lớp
+                </button>
+                <span style={{ color: 'var(--text-muted)' }}>›</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{currentClass ? `${currentClass.code} - ${currentClass.name}` : ''}</span>
+              </div>
+            );
+          })()}
+
+          {/* ── Class list (when no class selected) ── */}
+          {!manageClassId && (
+            <div className="dashboard-card">
+              <div className="dashboard-card-header">
+                <div>
+                  <h3 className="dashboard-card-title">Danh sách Lớp học</h3>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>{deptClasses.length} lớp đang hoạt động · Click vào lớp để quản lý sinh viên</p>
                 </div>
-              ) : loadingStudents ? (
-                <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải danh sách...</div>
+                <button onClick={() => setShowAddClassModal(true)} className="btn-primary" style={{ fontSize: 12 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                  Thêm lớp
+                </button>
+              </div>
+              {deptClasses.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)', fontSize: 13 }}>Chưa có lớp nào. Nhấn "Thêm lớp" để tạo mới.</div>
               ) : (
-                <DataTable title="" subtitle={`${filteredManageStudents.length} sinh viên`} columns={manageStudentsColumns} data={filteredManageStudents} emptyMessage="Chưa có sinh viên nào trong lớp" />
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="dashboard-table">
+                    <thead><tr>
+                      <th style={{ width: 50, textAlign: 'center' }}>STT</th>
+                      <th style={{ width: 120 }}>Mã lớp</th>
+                      <th>Tên lớp</th>
+                      <th style={{ width: 100, textAlign: 'center' }}>Năm học</th>
+                      <th style={{ width: 80, textAlign: 'center' }}>Sĩ số</th>
+                      <th style={{ width: 80, textAlign: 'center' }}>Thao tác</th>
+                    </tr></thead>
+                    <tbody>
+                      {deptClasses.map((cls, i) => (
+                        <tr
+                          key={cls.id}
+                          onClick={() => setManageClassId(cls.id)}
+                          style={{ cursor: 'pointer', transition: 'background 0.15s' }}
+                          onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover, #f0f9ff)'; }}
+                          onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = ''; }}
+                        >
+                          <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12, color: 'var(--accent)' }}>{cls.code}</td>
+                          <td style={{ fontWeight: 500 }}>{cls.name}</td>
+                          <td style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-tertiary)' }}>{cls.academicYear || '-'}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{cls.studentCount}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditClassData({ id: cls.id, code: cls.code, name: cls.name, academic_year: cls.academicYear || '' }); }}
+                                className="btn-secondary"
+                                style={{ padding: '4px 10px', fontSize: 11 }}
+                              >Sửa</button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteClass(cls); }}
+                                className="btn-danger"
+                                style={{ padding: '4px 10px', fontSize: 11 }}
+                                disabled={cls.studentCount > 0}
+                                title={cls.studentCount > 0 ? 'Phải xóa hết SV trước' : 'Xóa lớp'}
+                              >Xóa</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* ══════ VIEW: Students ══════ */}
-      {activeView === 'students' && stats && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* ── Section 3: Bảng điểm sinh viên ── */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#f9fafb', padding: 16, borderRadius: 8, border: '1px solid var(--border)' }}>
-            <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-secondary)' }}>Lọc theo lớp:</span>
-            <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)} className="form-input" style={{ width: 200 }}>
-              <option value="ALL">-- Tất cả các lớp --</option>
-              {stats.byClass.map(c => (<option key={c.classCode} value={c.classCode}>{c.classCode} - {c.className}</option>))}
-            </select>
-            <div style={{ position: 'relative', marginLeft: 12, flex: 1, maxWidth: 300 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-              <input type="text" placeholder="Tìm tên hoặc MSSV..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ width: '100%', fontSize: 13, padding: '8px 10px 8px 32px', border: '1px solid var(--border)', borderRadius: 8, outline: 'none' }} />
+          {/* ── Student management (when a class is selected) ── */}
+          {manageClassId && (
+            <div className="dashboard-card" style={{ padding: 0 }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 16, borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-secondary)' }}>Sinh viên trong lớp</span>
+                <div style={{ position: 'relative', flex: 1, maxWidth: 280, minWidth: 180 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                  <input type="text" placeholder="Tìm tên, MSSV..." value={manageSearch} onChange={(e) => setManageSearch(e.target.value)} style={{ width: '100%', fontSize: 13, padding: '8px 10px 8px 32px', border: '1px solid var(--border)', borderRadius: 8, outline: 'none' }} />
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                  <button onClick={() => { setShowImportModal(true); resetDeptImport(); }} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #e0e7ff', background: '#eef2ff', color: '#4f46e5', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#e0e7ff'; }} onMouseOut={e => { e.currentTarget.style.background = '#eef2ff'; }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Import Excel
+                  </button>
+                  <button onClick={() => setShowAddStudentModal(true)} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#059669'; }} onMouseOut={e => { e.currentTarget.style.background = '#10b981'; }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                    Thêm sinh viên
+                  </button>
+                </div>
+              </div>
+              <div style={{ padding: 16 }}>
+                {loadingStudents ? (
+                  <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải danh sách...</div>
+                ) : (
+                  <DataTable title="" subtitle={`${filteredManageStudents.length} sinh viên`} columns={manageStudentsColumns} data={filteredManageStudents} emptyMessage="Chưa có sinh viên nào trong lớp" />
+                )}
+              </div>
             </div>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 'auto' }}>Hiển thị {filteredStudents.length} kết quả</span>
-          </div>
-
-          <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="dashboard-table" style={{ minWidth: 900 }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: 50, textAlign: 'center' }}>STT</th>
-                    <th style={{ width: 100 }}>MSSV</th>
-                    <th>Họ và Tên</th>
-                    {selectedClass === 'ALL' && <th style={{ width: 90 }}>Lớp</th>}
-                    <th style={{ width: 80, textAlign: 'center' }}>Trạng thái</th>
-                    <th style={{ width: 80, textAlign: 'center' }}>Điểm SV</th>
-                    <th style={{ width: 80, textAlign: 'center' }}>Điểm BCS</th>
-                    <th style={{ width: 80, textAlign: 'center' }}>Điểm CVHT</th>
-                    <th style={{ width: 100, textAlign: 'center' }}>Xếp loại</th>
-                    <th style={{ width: 90, textAlign: 'center' }}>Phiếu</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStudents.length === 0 ? (
-                    <tr><td colSpan={selectedClass === 'ALL' ? 10 : 9} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>Chưa có dữ liệu</td></tr>
-                  ) : filteredStudents.map((student, index) => {
-                    const clsLabel = student.classification ? CLASSIFICATION_LABELS[student.classification] || '' : '';
-                    const clsColor = CLS_COLORS[student.classification || ''] || { bg: '#f3f4f6', color: '#6b7280', chart: '#ccc' };
-                    let statusLabel = '', statusColor = '';
-                    if (student.status === 'NO_SHEET' || student.status === 'DRAFT') { statusLabel = 'Chưa nộp'; statusColor = 'var(--text-muted)'; }
-                    else if (student.status === 'STUDENT_SUBMITTED') { statusLabel = 'Chờ lớp duyệt'; statusColor = 'var(--warning-dark)'; }
-                    else if (student.status === 'CLASS_REVIEWED' || student.status === 'ADVISOR_REVIEWING') { statusLabel = 'Chờ CVHT'; statusColor = 'var(--accent)'; }
-                    else { statusLabel = 'Hoàn tất'; statusColor = 'var(--success)'; }
-                    return (
-                      <tr key={student.id}>
-                        <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{index + 1}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{student.studentCode || '-'}</td>
-                        <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{student.name}</td>
-                        {selectedClass === 'ALL' && <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{student.classCode}</td>}
-                        <td style={{ textAlign: 'center', fontSize: 12, fontWeight: 500, color: statusColor }}>{statusLabel}</td>
-                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{student.studentTotal ?? '-'}</td>
-                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{student.classTotal ?? '-'}</td>
-                        <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--accent)' }}>{student.advisorTotal ?? '-'}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          {clsLabel ? (<span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: clsColor.bg, color: clsColor.color }}>{clsLabel}</span>) : (<span style={{ color: 'var(--text-muted)', fontSize: 12 }}>-</span>)}
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            onClick={() => setSelectedStudentForEdit(student)}
-                            style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap' }}
-                            onMouseOver={e => { e.currentTarget.style.background = '#dbeafe'; }}
-                            onMouseOut={e => { e.currentTarget.style.background = '#eff6ff'; }}
-                          >
-                            Xem phiếu
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -978,6 +974,21 @@ export function DepartmentDashboard() {
               <div style={{ marginBottom: 16 }}><label className="form-label">Năm học</label><input type="text" className="form-input" value={newClassYear} onChange={e => setNewClassYear(e.target.value)} placeholder="VD: 2025" /></div>
             </div>
             <div className="modal-footer"><button onClick={() => setShowAddClassModal(false)} className="btn-secondary">Hủy</button><button onClick={handleAddClass} className="btn-primary">Thêm lớp</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Class Modal */}
+      {editClassData && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: 450 }}>
+            <div className="modal-header"><h3 className="modal-header-title">Sửa lớp học</h3><button onClick={() => setEditClassData(null)} className="modal-close-btn">✕</button></div>
+            <div className="modal-body">
+              <div style={{ marginBottom: 16 }}><label className="form-label">Mã lớp *</label><input type="text" className="form-input" value={editClassData.code} onChange={e => setEditClassData({ ...editClassData, code: e.target.value })} /></div>
+              <div style={{ marginBottom: 16 }}><label className="form-label">Tên lớp *</label><input type="text" className="form-input" value={editClassData.name} onChange={e => setEditClassData({ ...editClassData, name: e.target.value })} /></div>
+              <div style={{ marginBottom: 16 }}><label className="form-label">Năm học</label><input type="text" className="form-input" value={editClassData.academic_year} onChange={e => setEditClassData({ ...editClassData, academic_year: e.target.value })} /></div>
+            </div>
+            <div className="modal-footer"><button onClick={() => setEditClassData(null)} className="btn-secondary">Hủy</button><button onClick={handleEditClass} className="btn-primary">Lưu thay đổi</button></div>
           </div>
         </div>
       )}

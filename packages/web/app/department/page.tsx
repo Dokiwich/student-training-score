@@ -11,7 +11,7 @@ function DepartmentContent() {
 export default function DepartmentPage() {
   return (
     <DashboardLayout
-      pageTitle="Ban Lãnh đạo Khoa"
+      pageTitle="Khoa"
       pageSubtitle="Quản lý và thống kê điểm rèn luyện cấp khoa"
     >
       <Suspense fallback={<p style={{ padding: 20 }}>Đang tải...</p>}>

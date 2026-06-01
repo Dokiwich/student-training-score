@@ -41,7 +41,7 @@ export class DepartmentService {
       select: { role: true, department_id: true },
     });
     if (!user) throw new BadRequestException('Không tìm thấy người dùng');
-    if (user.role !== 'DEPARTMENT') throw new ForbiddenException('Chỉ Trưởng khoa mới có quyền truy cập');
+    if (user.role !== 'DEPARTMENT') throw new ForbiddenException('Chỉ Khoa mới có quyền truy cập');
     if (!user.department_id) throw new BadRequestException('Tài khoản chưa được gắn với khoa nào');
     return user.department_id;
   }

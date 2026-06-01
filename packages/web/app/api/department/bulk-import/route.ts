@@ -37,7 +37,7 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   const deptUser = await getDepartmentUser(session);
   if (!deptUser) {
-    return NextResponse.json({ message: 'Unauthorized – chỉ role Khoa mới được import' }, { status: 403 });
+    return NextResponse.json({ message: ' Chỉ role Khoa mới được import' }, { status: 403 });
   }
 
   try {
