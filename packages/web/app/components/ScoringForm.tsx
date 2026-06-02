@@ -632,8 +632,9 @@ export function ScoringForm({
   })();
 
   const canDeleteForm = 
-    (canEdit && effectiveCanEdit && (currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR')) ||
-    (allowResetAnytime && ['APPROVED', 'ADVISOR_APPROVED', 'SCHOOL_APPROVED', 'FINALIZED'].includes(formStatus));
+    (currentRole === 'CLASS_COMMITTEE' && !['NOT_CREATED', 'DRAFT'].includes(formStatus)) ||
+    (currentRole === 'ADVISOR' && !['NOT_CREATED', 'DRAFT'].includes(formStatus)) ||
+    (allowResetAnytime && !['NOT_CREATED'].includes(formStatus));
 
   if (isLoading) {
     return (

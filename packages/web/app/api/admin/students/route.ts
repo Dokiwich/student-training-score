@@ -15,6 +15,7 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const semesterId = searchParams.get('semesterId');
+  const classId = searchParams.get('classId');
 
   let semester;
   if (semesterId) {
@@ -28,7 +29,10 @@ export async function GET(req: Request) {
   }
 
   const enrollments = await prisma.semester_enrollments.findMany({
-    where: { semester_id: semester.id },
+    where: { 
+      semester_id: semester.id,
+      ...(classId ? { class_id: classId } : {})
+    },
     include: {
       users: true,
       classes: {

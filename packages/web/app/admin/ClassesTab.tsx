@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { DataTable } from '../components/DataTable';
+import { AdminStudentsTab } from './AdminStudentsTab';
 
 interface ClassItem { id: string; code: string; name: string; department_id: string; departmentName: string; academic_year: string; is_active: number; studentCount: number; }
 interface Dept { id: string; code: string; name: string; }
@@ -11,6 +12,7 @@ export function ClassesTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<ClassItem | null>(null);
+  const [selectedClassForStudents, setSelectedClassForStudents] = useState<ClassItem | null>(null);
   const [filterDept, setFilterDept] = useState('');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -68,14 +70,25 @@ export function ClassesTab() {
     { header: 'Năm học', width: 100, render: (c: ClassItem) => <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.academic_year}</span> },
     { header: 'Sĩ số', width: 70, align: 'center' as const, render: (c: ClassItem) => <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', padding: '2px 8px', borderRadius: 9999, fontSize: 12, fontWeight: 600 }}>{c.studentCount}</span> },
     { header: 'Trạng thái', width: 100, align: 'center' as const, render: (c: ClassItem) => <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: c.is_active ? 'var(--success-bg)' : '#f3f4f6', color: c.is_active ? 'var(--success)' : 'var(--text-muted)' }}>{c.is_active ? 'Hoạt động' : 'Ẩn'}</span> },
-    { header: 'Thao tác', width: 140, align: 'center' as const, render: (c: ClassItem) => (
+    { header: 'Thao tác', width: 200, align: 'center' as const, render: (c: ClassItem) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <button onClick={() => setSelectedClassForStudents(c)} className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>Xem SV</button>
           <button onClick={() => startEdit(c)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
           <button onClick={() => handleDelete(c)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
         </div>
       )
     }
   ];
+
+  if (selectedClassForStudents) {
+    return (
+      <AdminStudentsTab 
+        classId={selectedClassForStudents.id} 
+        classNameStr={selectedClassForStudents.name} 
+        onBack={() => setSelectedClassForStudents(null)} 
+      />
+    );
+  }
 
   return (
     <div>

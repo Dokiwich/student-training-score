@@ -10,7 +10,6 @@ import { SemestersTab } from './SemestersTab';
 import { DepartmentsTab } from './DepartmentsTab';
 import { ClassesTab } from './ClassesTab';
 import { AdminDashboardTab } from './AdminDashboardTab';
-import { AdminStudentsTab } from './AdminStudentsTab';
 
 interface Category {
   id: string; code: string; name: string; max_score: number; sort_order: number;
@@ -20,7 +19,7 @@ interface Criterion {
   id: number; code: string; content: string; max_points: number; parent_id: number | null; category_id: string; is_active: number;
 }
 
-type AdminTab = 'criteria' | 'departments' | 'classes' | 'users' | 'semesters' | 'dashboard' | 'students';
+type AdminTab = 'criteria' | 'departments' | 'classes' | 'users' | 'semesters' | 'dashboard';
 
 export default function AdminPage() {
   return (
@@ -151,7 +150,6 @@ function AdminPageInner() {
     <DashboardLayout pageTitle="Quản trị Hệ thống" pageSubtitle="Quản lý cấu hình hệ thống đánh giá rèn luyện">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {activeTab === 'dashboard' && <AdminDashboardTab />}
-        {activeTab === 'students' && <AdminStudentsTab />}
         {activeTab === 'users' && <UsersTab />}
         {activeTab === 'departments' && <DepartmentsTab />}
         {activeTab === 'classes' && <ClassesTab />}

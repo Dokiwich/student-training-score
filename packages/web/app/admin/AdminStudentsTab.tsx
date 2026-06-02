@@ -3,14 +3,19 @@ import React, { useState, useEffect } from 'react';
 import { DataTable } from '../components/DataTable';
 import { ScoringForm } from '../components/ScoringForm';
 
-export function AdminStudentsTab() {
+interface AdminStudentsTabProps {
+  classId?: string;
+  classNameStr?: string;
+  onBack?: () => void;
+}
+
+export function AdminStudentsTab({ classId, classNameStr, onBack }: AdminStudentsTabProps) {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [semesters, setSemesters] = useState<{id: string, name: string, is_active: number}[]>([]);
   const [selectedSemId, setSelectedSemId] = useState('');
   
   const [search, setSearch] = useState('');
-  const [deptFilter, setDeptFilter] = useState('');
   
   const [selectedStudentForEdit, setSelectedStudentForEdit] = useState<any | null>(null);
 
@@ -27,7 +32,11 @@ export function AdminStudentsTab() {
   const fetchStudents = () => {
     if (!selectedSemId) return;
     setLoading(true);
-    fetch(`/api/admin/students?semesterId=${selectedSemId}`)
+    let url = `/api/admin/students?semesterId=${selectedSemId}`;
+    if (classId) {
+      url += `&classId=${classId}`;
+    }
+    fetch(url)
       .then(r => r.json())
       .then(d => {
         setStudents(d.data || []);
@@ -37,23 +46,18 @@ export function AdminStudentsTab() {
 
   useEffect(() => {
     fetchStudents();
-  }, [selectedSemId]);
-
-  const depts = Array.from(new Set(students.map(s => s.departmentName).filter(Boolean)));
+  }, [selectedSemId, classId]);
 
   const filtered = students.filter(s => {
     const term = search.toLowerCase();
     const matchSearch = s.name.toLowerCase().includes(term) || s.studentCode.toLowerCase().includes(term) || s.className.toLowerCase().includes(term);
-    const matchDept = deptFilter ? s.departmentName === deptFilter : true;
-    return matchSearch && matchDept;
+    return matchSearch;
   });
 
   const columns = [
     { header: 'MSSV', width: 100, render: (s: any) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{s.studentCode}</span> },
     { header: 'Họ tên', render: (s: any) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</span> },
-    { header: 'Lớp', width: 120, render: (s: any) => s.className },
-    { header: 'Khoa', width: 180, render: (s: any) => s.departmentName },
-    { header: 'Trạng thái', width: 120, render: (s: any) => {
+    { header: 'Trạng thái', width: 140, render: (s: any) => {
         const st = s.status;
         let bg = '#f3f4f6', color = '#6b7280', label = st;
         if (st === 'UPCOMING') { bg = '#eff6ff'; color = '#3b82f6'; label = 'Chưa nộp'; }
@@ -62,10 +66,13 @@ export function AdminStudentsTab() {
         if (st === 'ADVISOR_REVIEWING') { bg = '#fce7f3'; color = '#db2777'; label = 'CVHT duyệt'; }
         if (st === 'SCHOOL_REVIEWING') { bg = '#e0e7ff'; color = '#4f46e5'; label = 'Trường xét'; }
         if (st === 'FINALIZED') { bg = '#ecfdf5'; color = '#10b981'; label = 'Đã chốt'; }
-        return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: bg, color }}>{label}</span>;
+        return <span style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 999, background: bg, color }}>{label}</span>;
       }
     },
-    { header: 'Điểm CVHT', width: 100, align: 'center' as const, render: (s: any) => s.advisorTotal || '-' },
+    { header: 'SV tự chấm', width: 100, align: 'center' as const, render: (s: any) => s.studentTotal || '-' },
+    { header: 'BCS chấm', width: 100, align: 'center' as const, render: (s: any) => s.classTotal || '-' },
+    { header: 'CVHT chấm', width: 100, align: 'center' as const, render: (s: any) => s.advisorTotal || '-' },
+    { header: 'Điểm chốt', width: 100, align: 'center' as const, render: (s: any) => <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{s.finalTotal ?? s.score ?? '-'}</span> },
     { header: 'Xếp loại', width: 120, align: 'center' as const, render: (s: any) => {
         const c = s.classification;
         if (!c) return '-';
@@ -74,9 +81,9 @@ export function AdminStudentsTab() {
         return <span style={{ color: col[c] || '#000', fontWeight: 600 }}>{m[c] || c}</span>;
       }
     },
-    { header: 'Thao tác', width: 100, align: 'center' as const, render: (s: any) => (
+    { header: 'Thao tác', width: 120, align: 'center' as const, render: (s: any) => (
         <button className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setSelectedStudentForEdit(s)}>
-          Sửa phiếu
+          Chi tiết phiếu
         </button>
       )
     }
@@ -84,21 +91,26 @@ export function AdminStudentsTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {onBack && (
+        <div style={{ marginBottom: '-10px' }}>
+          <button onClick={onBack} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            Quay lại danh sách lớp
+          </button>
+        </div>
+      )}
       <div className="dashboard-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--text-primary)', flex: 1 }}>Danh sách sinh viên (Toàn trường)</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--text-primary)', flex: 1 }}>
+          {classNameStr ? `Danh sách sinh viên - Lớp ${classNameStr}` : 'Danh sách sinh viên (Toàn trường)'}
+        </h2>
         
         <select value={selectedSemId} onChange={e => setSelectedSemId(e.target.value)} className="form-select" style={{ width: 200 }}>
           {semesters.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         
-        <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)} className="form-select" style={{ width: 250 }}>
-          <option value="">-- Tất cả khoa --</option>
-          {depts.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-        
         <input 
           type="text" 
-          placeholder="Tìm tên, MSSV, lớp..." 
+          placeholder="Tìm tên, MSSV..." 
           className="form-input" 
           style={{ width: 200 }}
           value={search}
