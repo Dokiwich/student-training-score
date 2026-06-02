@@ -304,7 +304,7 @@ export function DepartmentDashboard() {
 
   // Import Excel state (Khoa)
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importData, setImportData] = useState<{ rowIndex: number; student_id?: string; full_name: string; email: string; password: string; class_code?: string }[]>([]);
+  const [importData, setImportData] = useState<{ rowIndex: number; student_id?: string; full_name: string; email: string; password: string; class_code?: string; role?: string }[]>([]);
   const [importResults, setImportResults] = useState<{ rowIndex: number; success: boolean; message: string; full_name?: string }[] | null>(null);
   const [importStats, setImportStats] = useState<{ successCount: number; errorCount: number; total: number } | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -484,16 +484,16 @@ export function DepartmentDashboard() {
         // Row 8: empty
         [],
         // Row 9: Table header
-        ['MSSV', 'Họ và tên', 'Email Trường', 'Mật Khẩu', 'Lớp'],
+        ['MSSV', 'Họ và tên', 'Email Trường', 'Mật Khẩu', 'Lớp', 'Vai trò'],
         // Row 10+: Sample data
-        [`${sampleCode}001`, 'Nguyễn Văn A', `${sampleCode.toLowerCase()}001@student.edu.vn`, `Sv@${sampleCode}001`, sampleCode],
-        [`${sampleCode}002`, 'Trần Thị B', `${sampleCode.toLowerCase()}002@student.edu.vn`, `Sv@${sampleCode}002`, sampleCode],
+        [`${sampleCode}001`, 'Nguyễn Văn A', `${sampleCode.toLowerCase()}001@student.edu.vn`, `Sv@${sampleCode}001`, sampleCode, 'STUDENT'],
+        [`${sampleCode}002`, 'Trần Thị B', `${sampleCode.toLowerCase()}002@student.edu.vn`, `Sv@${sampleCode}002`, sampleCode, 'CLASS_COMMITTEE'],
       ];
 
       const ws = XLSX.utils.aoa_to_sheet(sheetData);
 
       // Column widths
-      ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 32 }, { wch: 18 }, { wch: 10 }];
+      ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 32 }, { wch: 18 }, { wch: 10 }, { wch: 16 }];
 
       // Merge cells for header area
       ws['!merges'] = [
@@ -537,6 +537,7 @@ export function DepartmentDashboard() {
       'Email': 'email', 'email': 'email', 'Email Trường': 'email', 'Email trường': 'email',
       'Mật khẩu': 'password', 'Mat khau': 'password', 'Password': 'password', 'Mật Khẩu': 'password',
       'Lớp': 'class_code', 'Mã lớp': 'class_code', 'Class': 'class_code',
+      'Vai trò': 'role', 'Vai tro': 'role', 'Role': 'role',
     };
 
     // Auto-detect header row: scan rows to find the one containing "MSSV"
@@ -553,11 +554,22 @@ export function DepartmentDashboard() {
     // Parse with detected header offset using range option
     const jsonData = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { range: headerRowIndex, defval: '' });
 
+    const roleMap: Record<string, string> = {
+      'sinh viên': 'STUDENT', 'sv': 'STUDENT', 'student': 'STUDENT',
+      'ban cán sự': 'CLASS_COMMITTEE', 'bcs': 'CLASS_COMMITTEE', 'class_committee': 'CLASS_COMMITTEE',
+    };
+
     const parsed = jsonData.map((row, i) => {
       const mapped: any = { rowIndex: headerRowIndex + i + 2 }; // +2: header=1 row, 0-indexed
       for (const [key, value] of Object.entries(row)) {
         const normalKey = columnMap[key.trim()];
         if (normalKey) mapped[normalKey] = String(value).trim();
+      }
+      if (mapped.role) {
+        const roleLower = mapped.role.toLowerCase();
+        mapped.role = roleMap[roleLower] || mapped.role.toUpperCase();
+      } else {
+        mapped.role = 'STUDENT';
       }
       return mapped;
     }).filter((r: any) => r.full_name || r.email);
@@ -1044,6 +1056,7 @@ export function DepartmentDashboard() {
                             <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>MSSV</th>
                             <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>Họ tên</th>
                             <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>Email</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>Vai trò</th>
                             <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>Lớp</th>
                           </tr></thead>
                           <tbody>{importData.map((row, i) => {
@@ -1053,6 +1066,11 @@ export function DepartmentDashboard() {
                               <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', fontFamily: 'monospace' }}>{row.student_id || '-'}</td>
                               <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', fontWeight: 500, color: !row.full_name ? '#dc2626' : '#1f2937' }}>{row.full_name || '⚠ Thiếu'}</td>
                               <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: !row.email ? '#dc2626' : '#6b7280' }}>{row.email || '⚠ Thiếu'}</td>
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6' }}>
+                                <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: '#f3f4f6', color: '#374151' }}>
+                                  {row.role === 'CLASS_COMMITTEE' ? 'Ban cán sự' : (row.role === 'STUDENT' ? 'Sinh viên' : row.role)}
+                                </span>
+                              </td>
                               <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{row.class_code || (manageClassId ? '← Lớp đã chọn' : '⚠ Chưa có')}</td>
                             </tr>);
                           })}</tbody>

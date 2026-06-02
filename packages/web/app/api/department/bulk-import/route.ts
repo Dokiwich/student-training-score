@@ -23,6 +23,7 @@ interface ImportRow {
   email: string;
   password: string;
   class_code?: string;
+  role?: string;
 }
 
 interface ImportResult {
@@ -145,7 +146,7 @@ export async function POST(req: Request) {
             email: row.email.trim(),
             password_hash: passwordHash,
             student_id: studentId,
-            role: 'STUDENT',
+            role: (row.role || 'STUDENT') as any,
             department_id: deptUser.department_id,
             is_active: 1,
           },
