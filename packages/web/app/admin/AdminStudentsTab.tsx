@@ -80,12 +80,6 @@ export function AdminStudentsTab({ classId, classNameStr, onBack }: AdminStudent
         const col: any = { EXCELLENT: '#10b981', VERY_GOOD: '#3b82f6', GOOD: '#f59e0b', AVERAGE: '#6b7280', WEAK: '#ef4444', POOR: '#dc2626' };
         return <span style={{ color: col[c] || '#000', fontWeight: 600 }}>{m[c] || c}</span>;
       }
-    },
-    { header: 'Thao tác', width: 120, align: 'center' as const, render: (s: any) => (
-        <button className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setSelectedStudentForEdit(s)}>
-          Chi tiết phiếu
-        </button>
-      )
     }
   ];
 
@@ -124,6 +118,7 @@ export function AdminStudentsTab({ classId, classNameStr, onBack }: AdminStudent
         columns={columns}
         data={filtered}
         loading={loading}
+        onRowClick={(s) => setSelectedStudentForEdit(s)}
       />
 
       {selectedStudentForEdit && (

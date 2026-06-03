@@ -47,6 +47,7 @@ export function UsersTab() {
   const [editRole, setEditRole] = useState('');
   const [editClassId, setEditClassId] = useState('');
   const [editDeptId, setEditDeptId] = useState('');
+  const [editStudentId, setEditStudentId] = useState('');
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newFullname, setNewFullname] = useState('');
@@ -83,14 +84,14 @@ export function UsersTab() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const startEdit = (u: UserItem) => { setEditing(u); setEditRole(u.role); setEditClassId(u.class_id || ''); setEditDeptId(u.department_id || ''); };
+  const startEdit = (u: UserItem) => { setEditing(u); setEditRole(u.role); setEditClassId(u.class_id || ''); setEditDeptId(u.department_id || ''); setEditStudentId(u.student_id || ''); };
 
   const handleSave = async () => {
     if (!editing) return;
     try {
       const r = await fetch('/api/admin/users', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editing.id, role: editRole, class_id: editClassId, department_id: editDeptId }),
+        body: JSON.stringify({ id: editing.id, role: editRole, class_id: editClassId, department_id: editDeptId, student_id: editStudentId }),
       });
       const d = await r.json();
       if (r.ok) { setEditing(null); fetchAll(); } else { alert(d.message); }
@@ -349,6 +350,10 @@ export function UsersTab() {
                 <select value={editRole} onChange={e => setEditRole(e.target.value)} className="form-select">
                   {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">MSSV</label>
+                <input type="text" className="form-input" value={editStudentId} onChange={e => setEditStudentId(e.target.value)} placeholder="Nhập mã số sinh viên" />
               </div>
               <div style={{ marginBottom: 16 }}>
                 <label className="form-label">Khoa</label>

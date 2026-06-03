@@ -72,9 +72,8 @@ export function ClassesTab() {
     { header: 'Trạng thái', width: 100, align: 'center' as const, render: (c: ClassItem) => <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: c.is_active ? 'var(--success-bg)' : '#f3f4f6', color: c.is_active ? 'var(--success)' : 'var(--text-muted)' }}>{c.is_active ? 'Hoạt động' : 'Ẩn'}</span> },
     { header: 'Thao tác', width: 200, align: 'center' as const, render: (c: ClassItem) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-          <button onClick={() => setSelectedClassForStudents(c)} className="btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>Xem SV</button>
-          <button onClick={() => startEdit(c)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
-          <button onClick={() => handleDelete(c)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
+          <button onClick={(e) => { e.stopPropagation(); startEdit(c); }} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
+          <button onClick={(e) => { e.stopPropagation(); handleDelete(c); }} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
         </div>
       )
     }
@@ -130,6 +129,7 @@ export function ClassesTab() {
         columns={columns}
         data={classes}
         loading={loading}
+        onRowClick={(c) => setSelectedClassForStudents(c)}
       />
     </div>
   );

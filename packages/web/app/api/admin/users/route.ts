@@ -157,7 +157,7 @@ export async function PUT(req: Request) {
   }
 
   try {
-    const { id, role, class_id, department_id, is_active, full_name, phone } = await req.json();
+    const { id, role, class_id, department_id, is_active, full_name, phone, student_id } = await req.json();
     if (!id) return NextResponse.json({ message: 'ID người dùng là bắt buộc' }, { status: 400 });
 
     const updateData: Record<string, unknown> = {};
@@ -166,6 +166,14 @@ export async function PUT(req: Request) {
     if (is_active !== undefined) updateData.is_active = is_active;
     if (full_name !== undefined) updateData.full_name = full_name;
     if (phone !== undefined) updateData.phone = phone;
+    if (student_id !== undefined) updateData.student_id = student_id || null;
+
+    if (student_id) {
+      const existingStudentId = await prisma.users.findUnique({ where: { student_id } });
+      if (existingStudentId && existingStudentId.id !== id) {
+        return NextResponse.json({ message: 'Mã số sinh viên đã tồn tại' }, { status: 400 });
+      }
+    }
 
     const user = await prisma.users.update({
       where: { id },
