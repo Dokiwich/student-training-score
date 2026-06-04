@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -16,8 +16,8 @@ model appeals {
   status                           appeals_status @default(PENDING)
   resolved_by                      String?        @db.VarChar(36)
   resolution                       String?        @db.Text
-  created_at                       DateTime       @default(now()) @db.DateTime(0)
-  resolved_at                      DateTime?      @db.DateTime(0)
+  created_at                       DateTime       @default(now()) @db.Timestamp(0)
+  resolved_at                      DateTime?      @db.Timestamp(0)
   users_appeals_resolved_byTousers users?         @relation("appeals_resolved_byTousers", fields: [resolved_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_appeal_resolver")
   scoring_sheets                   scoring_sheets @relation(fields: [scoring_sheet_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_appeal_sheet")
 
@@ -35,7 +35,7 @@ model audit_logs {
   new_value   Json?
   ip_address  String?  @db.VarChar(45)
   user_agent  String?  @db.VarChar(500)
-  created_at  DateTime @default(now()) @db.DateTime(0)
+  created_at  DateTime @default(now()) @db.Timestamp(0)
   users       users    @relation(fields: [actor_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_audit_actor")
 
   @@index([actor_id], map: "idx_audit_actor")
@@ -48,9 +48,9 @@ model class_roles {
   user_id    String                @db.VarChar(36)
   class_id   String                @db.VarChar(36)
   role_type  class_roles_role_type
-  is_active  Int                   @default(1) @db.TinyInt
-  start_date DateTime              @db.DateTime(0)
-  end_date   DateTime?             @db.DateTime(0)
+  is_active  Int                   @default(1) @db.SmallInt
+  start_date DateTime              @db.Timestamp(0)
+  end_date   DateTime?             @db.Timestamp(0)
   classes    classes               @relation(fields: [class_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_cr_class")
   users      users                 @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_cr_user")
 
@@ -64,8 +64,8 @@ model classes {
   name                 String                 @db.VarChar(100)
   department_id        String                 @db.VarChar(36)
   academic_year        String                 @db.VarChar(20)
-  is_active            Int                    @default(1) @db.TinyInt
-  created_at           DateTime               @default(now()) @db.DateTime(0)
+  is_active            Int                    @default(1) @db.SmallInt
+  created_at           DateTime               @default(now()) @db.Timestamp(0)
   class_roles          class_roles[]
   departments          departments            @relation(fields: [department_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_class_dept")
   semester_enrollments semester_enrollments[]
@@ -79,7 +79,7 @@ model comments {
   user_id          String         @db.VarChar(36)
   content          String         @db.Text
   parent_id        String?        @db.VarChar(36)
-  created_at       DateTime       @default(now()) @db.DateTime(0)
+  created_at       DateTime       @default(now()) @db.Timestamp(0)
   comments         comments?      @relation("commentsTocomments", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_cmt_parent")
   other_comments   comments[]     @relation("commentsTocomments")
   scoring_sheets   scoring_sheets @relation(fields: [scoring_sheet_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_cmt_sheet")
@@ -94,16 +94,16 @@ model criteria {
   parent_id           Int?
   code                String              @db.VarChar(20)
   content             String              @db.VarChar(500)
-  max_points          Float               @default(0) @db.Float
-  min_score           Float               @default(0) @db.Float
+  max_points          Float               @default(0) @db.Real
+  min_score           Float               @default(0) @db.Real
   score_type          criteria_score_type @default(RANGE)
   score_options       Json?
-  require_evidence    Int                 @default(0) @db.TinyInt
+  require_evidence    Int                 @default(0) @db.SmallInt
   evidence_guide      String?             @db.Text
   sort_order          Int                 @default(0)
-  is_active           Int                 @default(1) @db.TinyInt
-  created_at          DateTime            @default(now()) @db.DateTime(0)
-  updated_at          DateTime            @default(now()) @db.DateTime(0)
+  is_active           Int                 @default(1) @db.SmallInt
+  created_at          DateTime            @default(now()) @db.Timestamp(0)
+  updated_at          DateTime            @default(now()) @db.Timestamp(0)
   criteria_categories criteria_categories @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_criteria_category")
   criteria            criteria?           @relation("criteriaTocriteria", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_criteria_parent")
   other_criteria      criteria[]          @relation("criteriaTocriteria")
@@ -120,9 +120,9 @@ model criteria_categories {
   code                String            @db.VarChar(10)
   name                String            @db.VarChar(200)
   description         String?           @db.Text
-  max_score           Float             @db.Float
+  max_score           Float             @db.Real
   sort_order          Int               @default(0)
-  created_at          DateTime          @default(now()) @db.DateTime(0)
+  created_at          DateTime          @default(now()) @db.Timestamp(0)
   criteria            criteria[]
   criteria_versions   criteria_versions @relation(fields: [criteria_version_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_cc_version")
 
@@ -133,9 +133,9 @@ model criteria_versions {
   id                  String                @id @db.VarChar(36)
   semester_id         String                @db.VarChar(36)
   version             Int                   @default(1)
-  is_active           Int                   @default(1) @db.TinyInt
-  applied_at          DateTime              @db.DateTime(0)
-  created_at          DateTime              @default(now()) @db.DateTime(0)
+  is_active           Int                   @default(1) @db.SmallInt
+  applied_at          DateTime              @db.Timestamp(0)
+  created_at          DateTime              @default(now()) @db.Timestamp(0)
   criteria_categories criteria_categories[]
   semesters           semesters             @relation(fields: [semester_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_cv_semester")
 
@@ -146,8 +146,8 @@ model departments {
   id         String    @id @db.VarChar(36)
   code       String    @unique(map: "uk_dept_code") @db.VarChar(20)
   name       String    @db.VarChar(100)
-  is_active  Int       @default(1) @db.TinyInt
-  created_at DateTime  @default(now()) @db.DateTime(0)
+  is_active  Int       @default(1) @db.SmallInt
+  created_at DateTime  @default(now()) @db.Timestamp(0)
   classes    classes[]
   users      users[]
 }
@@ -161,7 +161,7 @@ model evidences {
   file_type        String         @db.VarChar(50)
   file_size        Int
   description      String?        @db.Text
-  uploaded_at      DateTime       @default(now()) @db.DateTime(0)
+  uploaded_at      DateTime       @default(now()) @db.Timestamp(0)
   criteria         criteria?      @relation(fields: [criteria_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ev_criteria")
   scoring_sheets   scoring_sheets @relation(fields: [scoring_sheet_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ev_sheet")
 
@@ -176,9 +176,9 @@ model notifications {
   title      String             @db.VarChar(200)
   content    String             @db.Text
   data       Json?
-  is_read    Int                @default(0) @db.TinyInt
-  read_at    DateTime?          @db.DateTime(0)
-  created_at DateTime           @default(now()) @db.DateTime(0)
+  is_read    Int                @default(0) @db.SmallInt
+  read_at    DateTime?          @db.Timestamp(0)
+  created_at DateTime           @default(now()) @db.Timestamp(0)
   users      users              @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_notif_user")
 
   @@index([user_id, is_read], map: "idx_notif_user_read")
@@ -186,11 +186,11 @@ model notifications {
 
 model refresh_tokens {
   id         String    @id @db.VarChar(36)
-  token      String    @unique(map: "uk_rt_token", length: 255) @db.VarChar(500)
+  token      String    @unique(map: "uk_rt_token") @db.VarChar(500)
   user_id    String    @db.VarChar(36)
-  expires_at DateTime  @db.DateTime(0)
-  created_at DateTime  @default(now()) @db.DateTime(0)
-  revoked_at DateTime? @db.DateTime(0)
+  expires_at DateTime  @db.Timestamp(0)
+  created_at DateTime  @default(now()) @db.Timestamp(0)
+  revoked_at DateTime? @db.Timestamp(0)
   users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_rt_user")
 
   @@index([user_id], map: "idx_rt_user")
@@ -205,7 +205,7 @@ model review_actions {
   to_status        String                @db.VarChar(30)
   comment          String?               @db.Text
   metadata         Json?
-  created_at       DateTime              @default(now()) @db.DateTime(0)
+  created_at       DateTime              @default(now()) @db.Timestamp(0)
   users            users                 @relation(fields: [reviewer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ra_reviewer")
   scoring_sheets   scoring_sheets        @relation(fields: [scoring_sheet_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ra_sheet")
 
@@ -220,7 +220,7 @@ model score_adjustment_logs {
   old_score       Decimal       @db.Decimal(5, 1)
   new_score       Decimal       @db.Decimal(5, 1)
   reason          String?       @db.Text
-  created_at      DateTime      @default(now()) @db.DateTime(0)
+  created_at      DateTime      @default(now()) @db.Timestamp(0)
   users           users         @relation(fields: [adjusted_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_sal_adjuster")
   score_details   score_details @relation(fields: [score_detail_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_sal_detail")
 
@@ -232,8 +232,8 @@ model score_details {
   id                    String                  @id @db.VarChar(36)
   scoring_sheet_id      String                  @db.VarChar(36)
   criteria_id           Int
-  created_at            DateTime                @default(now()) @db.DateTime(0)
-  updated_at            DateTime                @default(now()) @db.DateTime(0)
+  created_at            DateTime                @default(now()) @db.Timestamp(0)
+  updated_at            DateTime                @default(now()) @db.Timestamp(0)
   note                  String?                 @db.Text
   proof_url             String?                 @db.Text
   score_adjustment_logs score_adjustment_logs[]
@@ -242,7 +242,7 @@ model score_details {
   score_entries         score_entries[]
 
   @@unique([scoring_sheet_id, criteria_id])
-  @@index([criteria_id], map: "score_details_criteria_id_fkey")
+  @@index([criteria_id], map: "idx_sd_criteria")
 }
 
 model score_entries {
@@ -250,7 +250,7 @@ model score_entries {
   score_detail_id String        @db.VarChar(36)
   scorer_role     scorer_role
   score           Decimal       @db.Decimal(5, 2)
-  scored_at       DateTime      @default(now()) @db.DateTime(0)
+  scored_at       DateTime      @default(now()) @db.Timestamp(0)
   score_details   score_details @relation(fields: [score_detail_id], references: [id], onDelete: Cascade, map: "fk_se_detail")
 
   @@unique([score_detail_id, scorer_role], map: "uk_se_detail_role")
@@ -260,20 +260,20 @@ model score_entries {
 model scoring_sheets {
   id                   String                         @id @db.VarChar(36)
   status               scoring_sheets_status          @default(DRAFT)
-  current_step         Int                            @default(1) @db.TinyInt
+  current_step         Int                            @default(1) @db.SmallInt
   student_total        Decimal?                       @db.Decimal(5, 1)
   class_total          Decimal?                       @db.Decimal(5, 1)
   advisor_total        Decimal?                       @db.Decimal(5, 1)
   final_total          Decimal?                       @db.Decimal(5, 1)
   classification       scoring_sheets_classification?
-  student_submitted_at DateTime?                      @db.DateTime(0)
-  class_reviewed_at    DateTime?                      @db.DateTime(0)
-  advisor_approved_at  DateTime?                      @db.DateTime(0)
-  school_finalized_at  DateTime?                      @db.DateTime(0)
+  student_submitted_at DateTime?                      @db.Timestamp(0)
+  class_reviewed_at    DateTime?                      @db.Timestamp(0)
+  advisor_approved_at  DateTime?                      @db.Timestamp(0)
+  school_finalized_at  DateTime?                      @db.Timestamp(0)
   rejection_reason     String?                        @db.Text
-  rejected_by_step     Int?                           @db.TinyInt
-  created_at           DateTime                       @default(now()) @db.DateTime(0)
-  updated_at           DateTime                       @default(now()) @db.DateTime(0)
+  rejected_by_step     Int?                           @db.SmallInt
+  created_at           DateTime                       @default(now()) @db.Timestamp(0)
+  updated_at           DateTime                       @default(now()) @db.Timestamp(0)
   enrollment_id        String                         @unique(map: "uk_sheet_enrollment") @db.VarChar(36)
   appeals              appeals[]
   comments             comments[]
@@ -291,16 +291,16 @@ model semesters {
   code                     String                 @unique(map: "uk_semester_code") @db.VarChar(20)
   name                     String                 @db.VarChar(100)
   academic_year            String                 @db.VarChar(20)
-  semester_number          Int                    @db.TinyInt
-  start_date               DateTime               @db.DateTime(0)
-  end_date                 DateTime               @db.DateTime(0)
-  student_deadline         DateTime               @db.DateTime(0)
-  class_committee_deadline DateTime               @db.DateTime(0)
-  advisor_deadline         DateTime               @db.DateTime(0)
-  school_deadline          DateTime               @db.DateTime(0)
+  semester_number          Int                    @db.SmallInt
+  start_date               DateTime               @db.Timestamp(0)
+  end_date                 DateTime               @db.Timestamp(0)
+  student_deadline         DateTime               @db.Timestamp(0)
+  class_committee_deadline DateTime               @db.Timestamp(0)
+  advisor_deadline         DateTime               @db.Timestamp(0)
+  school_deadline          DateTime               @db.Timestamp(0)
   status                   semesters_status       @default(UPCOMING)
-  is_active                Int                    @default(1) @db.TinyInt
-  created_at               DateTime               @default(now()) @db.DateTime(0)
+  is_active                Int                    @default(1) @db.SmallInt
+  created_at               DateTime               @default(now()) @db.Timestamp(0)
   criteria_versions        criteria_versions[]
   semester_enrollments     semester_enrollments[]
 }
@@ -310,8 +310,8 @@ model semester_enrollments {
   user_id        String          @db.VarChar(36)
   semester_id    String          @db.VarChar(36)
   class_id       String          @db.VarChar(36)
-  enrolled_at    DateTime        @default(now()) @db.DateTime(0)
-  is_active      Int             @default(1) @db.TinyInt
+  enrolled_at    DateTime        @default(now()) @db.Timestamp(0)
+  is_active      Int             @default(1) @db.SmallInt
   scoring_sheets scoring_sheets?
   classes        classes         @relation(fields: [class_id], references: [id], onDelete: NoAction, map: "fk_sen_class")
   semesters      semesters       @relation(fields: [semester_id], references: [id], onDelete: NoAction, map: "fk_sen_semester")
@@ -332,12 +332,12 @@ model users {
   phone                              String?                 @db.VarChar(20)
   role                               users_role              @default(STUDENT)
   department_id                      String?                 @db.VarChar(36)
-  is_active                          Int                     @default(1) @db.TinyInt
-  last_login_at                      DateTime?               @db.DateTime(0)
-  created_at                         DateTime                @default(now()) @db.DateTime(0)
-  updated_at                         DateTime                @default(now()) @db.DateTime(0)
-  failed_login_attempts              Int                     @default(0) @db.TinyInt
-  locked_until                       DateTime?               @db.DateTime(0)
+  is_active                          Int                     @default(1) @db.SmallInt
+  last_login_at                      DateTime?               @db.Timestamp(0)
+  created_at                         DateTime                @default(now()) @db.Timestamp(0)
+  updated_at                         DateTime                @default(now()) @db.Timestamp(0)
+  failed_login_attempts              Int                     @default(0) @db.SmallInt
+  locked_until                       DateTime?               @db.Timestamp(0)
   session_version                    Int                     @default(1)
   appeals_appeals_resolved_byTousers appeals[]               @relation("appeals_resolved_byTousers")
   audit_logs                         audit_logs[]
