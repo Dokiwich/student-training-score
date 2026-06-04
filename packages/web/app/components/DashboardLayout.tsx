@@ -3,7 +3,7 @@
 import { useSession, signOut } from 'next-auth/react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import './dashboard.css';
 
 // ─── Trạng thái học kỳ ───────────────────────────────────────────────────────
@@ -85,6 +85,271 @@ function SemesterBadge({ semester, collapsed }: { semester: SemesterInfo | null;
           {meta.label}
         </span>
       </div>
+    </div>
+  );
+}
+
+// ─── Notifications ─────────────────────────────────────────────────────────────
+interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  content: string;
+  data: any;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+
+const NOTIF_TYPE_META: Record<string, { icon: React.ReactNode; color: string }> = {
+  SCORE_SUBMITTED: {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+      </svg>
+    ),
+    color: '#059669',
+  },
+  SCORE_REVIEWED: {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+      </svg>
+    ),
+    color: '#2563eb',
+  },
+  SCORE_APPROVED: {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    ),
+    color: '#059669',
+  },
+  SCORE_REJECTED: {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+      </svg>
+    ),
+    color: '#dc2626',
+  },
+  SCORE_FINALIZED: {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      </svg>
+    ),
+    color: '#10b981',
+  },
+  APPEAL_SUBMITTED: {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+        <line x1="4" y1="22" x2="4" y2="15" />
+      </svg>
+    ),
+    color: '#d97706',
+  },
+  APPEAL_RESOLVED: {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+        <line x1="4" y1="22" x2="4" y2="15" />
+      </svg>
+    ),
+    color: '#059669',
+  },
+  SCORING_OPENED: {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+        <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+      </svg>
+    ),
+    color: '#5e6ad2',
+  },
+  DEADLINE_REMINDER: {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    ),
+    color: '#d97706',
+  },
+  SYSTEM_ANNOUNCEMENT: {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+      </svg>
+    ),
+    color: '#6b7280',
+  },
+};
+
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return 'Vừa xong';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} phút trước`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} giờ trước`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} ngày trước`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks} tuần trước`;
+  return new Date(dateStr).toLocaleDateString('vi-VN');
+}
+
+function useNotifications(intervalMs = 30000) {
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const res = await fetch('/api/notifications?limit=30', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        setNotifications(json.data || []);
+        setUnreadCount(json.unreadCount || 0);
+      }
+    } catch { /* silent */ }
+    setLoading(false);
+  }, []);
+
+  const markAsRead = useCallback(async (ids?: string[]) => {
+    try {
+      const body = ids ? { ids } : { markAllRead: true };
+      const res = await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setUnreadCount(json.unreadCount || 0);
+        // Update local state
+        if (ids) {
+          setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, isRead: true } : n));
+        } else {
+          setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+        }
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+    timerRef.current = setInterval(fetchNotifications, intervalMs);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [intervalMs, fetchNotifications]);
+
+  return { notifications, unreadCount, loading, markAsRead, refetch: fetchNotifications };
+}
+
+function NotificationBell({ collapsed }: { collapsed: boolean }) {
+  const { notifications, unreadCount, loading, markAsRead } = useNotifications(30000);
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Mark as read when opening
+  const handleItemClick = (item: NotificationItem) => {
+    if (!item.isRead) {
+      markAsRead([item.id]);
+    }
+  };
+
+  const defaultMeta = { icon: <span style={{ fontSize: 14 }}>🔔</span>, color: '#6b7280' };
+
+  return (
+    <div className="sidebar-notif-wrapper" ref={panelRef}>
+      <button
+        className={`sidebar-notif-btn ${collapsed ? 'collapsed' : ''}`}
+        onClick={() => setOpen(!open)}
+        title="Thông báo"
+        id="sidebar-notification-bell"
+      >
+        <span className="sidebar-notif-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          {unreadCount > 0 && (
+            <span className="sidebar-notif-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+          )}
+        </span>
+        {!collapsed && <span className="sidebar-notif-label">Thông báo</span>}
+      </button>
+
+      {open && (
+        <div className="notif-dropdown">
+          <div className="notif-dropdown-header">
+            <span className="notif-dropdown-title">Thông báo</span>
+            {unreadCount > 0 && (
+              <button
+                className="notif-mark-all-btn"
+                onClick={() => markAsRead()}
+              >
+                Đánh dấu tất cả đã đọc
+              </button>
+            )}
+          </div>
+
+          <div className="notif-dropdown-body">
+            {loading ? (
+              <div className="notif-empty">
+                <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#5e6ad2', animation: 'spin 0.7s linear infinite' }} />
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="notif-empty">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                <span>Chưa có thông báo nào</span>
+              </div>
+            ) : (
+              notifications.map((n) => {
+                const meta = NOTIF_TYPE_META[n.type] || defaultMeta;
+                return (
+                  <div
+                    key={n.id}
+                    className={`notif-item ${!n.isRead ? 'unread' : ''}`}
+                    onClick={() => handleItemClick(n)}
+                  >
+                    <div className="notif-item-icon" style={{ color: meta.color, background: `${meta.color}14` }}>
+                      {meta.icon}
+                    </div>
+                    <div className="notif-item-body">
+                      <div className="notif-item-title">{n.title}</div>
+                      <div className="notif-item-content">{n.content}</div>
+                      <div className="notif-item-time">{timeAgo(n.createdAt)}</div>
+                    </div>
+                    {!n.isRead && <div className="notif-item-dot" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -505,6 +770,11 @@ export function DashboardLayout({
             <SidebarNavList navItems={navItems} isDesktopCollapsed={isDesktopCollapsed} />
           </Suspense>
         </nav>
+
+        {/* Notifications */}
+        <div className="sidebar-notif-section">
+          <NotificationBell collapsed={isDesktopCollapsed} />
+        </div>
 
         {/* Footer */}
         <div className="sidebar-footer">
