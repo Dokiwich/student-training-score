@@ -12,10 +12,31 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [semesterInfo, setSemesterInfo] = useState('Hệ thống đang hoạt động');
   const router = useRouter();
 
   useEffect(() => {
     setMounted(true);
+    
+    const now = new Date();
+    const month = now.getMonth(); // 0-11
+    const year = now.getFullYear();
+    
+    let semester = '';
+    let academicYear = '';
+    
+    if (month >= 7 && month <= 11) {
+      semester = 'Học kỳ 1';
+      academicYear = `${year}-${year + 1}`;
+    } else if (month >= 0 && month <= 4) {
+      semester = 'Học kỳ 2';
+      academicYear = `${year - 1}-${year}`;
+    } else {
+      semester = 'Học kỳ Hè';
+      academicYear = `${year - 1}-${year}`;
+    }
+    
+    setSemesterInfo(`Hệ thống đang hoạt động — ${semester}, Năm học ${academicYear}`);
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -33,10 +54,10 @@ export default function LoginPage() {
       if (res?.error) {
         if (res.error === 'ACCOUNT_LOCKED') {
           setError('Tài khoản đã bị khóa do sai mật khẩu quá 5 lần. Vui lòng thử lại sau 30 phút!');
-        } else if (res.error === 'INVALID_CREDENTIALS') {
+        } else if (res.error === 'INVALID_CREDENTIALS' || res.error === 'CredentialsSignin') {
           setError('Tài khoản hoặc mật khẩu không chính xác!');
         } else {
-          setError(res.error || 'Tài khoản hoặc mật khẩu không chính xác!');
+          setError('Đăng nhập thất bại. Vui lòng kiểm tra lại!');
         }
       } else {
         // Middleware will redirect to the correct dashboard based on role
@@ -54,6 +75,17 @@ export default function LoginPage() {
       <div className="login-bg" />
       <div className="login-bg-overlay" />
 
+      {/* Top Navigation */}
+      <div className="login-top-nav">
+        <a href="https://sinhvien.mit.vn" className="login-back-link">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          Quay lại Cổng Sinh Viên
+        </a>
+      </div>
+
       {/* Login card */}
       <div
         className="login-card"
@@ -64,22 +96,10 @@ export default function LoginPage() {
       >
         {/* Logo / Brand area */}
         <div className="login-brand">
-          <div className="login-logo-icon">
-            <svg
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-              <path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5" />
-            </svg>
+          <div className="login-logo-container">
+            <img src="/assets/login/logo.png" alt="Logo Trường" className="login-logo-image" />
           </div>
-          <h1 className="login-title">Hệ thống Đánh giá Rèn luyện</h1>
+          <h1 className="login-title">Cổng Chấm Điểm Rèn Luyện</h1>
           <p className="login-subtitle">
             Đăng nhập để truy cập hệ thống chấm điểm rèn luyện sinh viên
           </p>
@@ -167,6 +187,13 @@ export default function LoginPage() {
             </div>
           )}
 
+          <div className="login-remember-me">
+            <label className="login-checkbox-label">
+              <input type="checkbox" className="login-checkbox" />
+              <span>Duy trì đăng nhập</span>
+            </label>
+          </div>
+
           <button
             type="submit"
             disabled={isLoading}
@@ -176,24 +203,24 @@ export default function LoginPage() {
             {isLoading ? (
               <>
                 <span className="login-spinner" />
-                Đang đăng nhập...
+                ĐANG ĐĂNG NHẬP...
               </>
             ) : (
-              'Đăng nhập'
+              'ĐĂNG NHẬP'
             )}
           </button>
+          
+          <div className="login-forgot-password">
+            <p>Quên Mật Khẩu? &rarr; Liên Hệ Phòng CNTT</p>
+          </div>
         </form>
 
-        {/* Footer */}
-        <div className="login-footer">
-          <p>© 2026 Hệ thống Đánh giá Rèn luyện Sinh viên</p>
-        </div>
       </div>
 
       {/* Decorative bottom bar */}
       <div className="login-bottom-info">
         <span className="login-status-dot" />
-        Hệ thống đang hoạt động — Học kỳ 1, Năm học 2025-2026
+        {semesterInfo}
       </div>
     </div>
   );
