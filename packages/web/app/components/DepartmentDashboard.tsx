@@ -84,7 +84,7 @@ const CLASSIFICATION_LABELS: Record<string, string> = {
 
 const CLS_COLORS: Record<string, { bg: string; color: string; chart: string }> = {
   EXCELLENT: { bg: '#ecfdf5', color: '#059669', chart: '#10b981' },
-  VERY_GOOD: { bg: '#eff6ff', color: '#2563eb', chart: '#3b82f6' },
+  VERY_GOOD: { bg: '#fef2f2', color: '#991b1b', chart: '#b91c1c' },
   GOOD: { bg: '#fffbeb', color: '#d97706', chart: '#f59e0b' },
   AVERAGE: { bg: '#f3f4f6', color: '#6b7280', chart: '#9ca3af' },
   WEAK: { bg: '#fef2f2', color: '#dc2626', chart: '#ef4444' },
@@ -154,7 +154,7 @@ function BarChart({ comparison }: { comparison: ComparisonData[] }) {
   const chartW = categories.length * barGroupWidth + 60;
   const chartH = 240;
   const barW = 28;
-  const semColors = ['#6366f1', '#0ea5e9', '#f59e0b'];
+  const semColors = ['#6366f1', '#991b1b', '#f59e0b'];
 
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -230,8 +230,8 @@ function MonthlyChart({ data }: { data: { month: string; count: number }[] }) {
       <svg width={chartW} height={chartH + 10} viewBox={`0 0 ${chartW} ${chartH + 10}`} style={{ display: 'block' }}>
         <defs>
           <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.02" />
+            <stop offset="0%" stopColor="#991b1b" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#991b1b" stopOpacity="0.02" />
           </linearGradient>
         </defs>
         {/* Grid */}
@@ -240,10 +240,10 @@ function MonthlyChart({ data }: { data: { month: string; count: number }[] }) {
           return <line key={i} x1={pad} y1={y} x2={chartW - pad} y2={y} stroke="#e2e8f0" strokeDasharray="4,4" />;
         })}
         <path d={areaPath} fill="url(#areaGrad)" />
-        <path d={linePath} fill="none" stroke="#0ea5e9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={linePath} fill="none" stroke="#991b1b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         {points.map((p, i) => (
           <g key={i}>
-            <circle cx={p.x} cy={p.y} r="4" fill="#fff" stroke="#0ea5e9" strokeWidth="2" />
+            <circle cx={p.x} cy={p.y} r="4" fill="#fff" stroke="#991b1b" strokeWidth="2" />
             <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fontWeight="600" fill="#0369a1">{p.count}</text>
             <text x={p.x} y={chartH - pad + 16} textAnchor="middle" fontSize="9" fill="#94a3b8">{p.month.substring(5)}/{p.month.substring(2, 4)}</text>
           </g>
@@ -691,7 +691,7 @@ export function DepartmentDashboard() {
     }},
     { header: 'Thao tác', width: 120, align: 'center' as const, render: (s: any) => (
       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button onClick={() => setSelectedStudentForEdit(s)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#dbeafe'; }} onMouseOut={e => { e.currentTarget.style.background = '#eff6ff'; }}>Phiếu</button>
+        <button onClick={() => setSelectedStudentForEdit(s)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #bfdbfe', background: '#fef2f2', color: '#1d4ed8', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#dbeafe'; }} onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}>Phiếu</button>
         <button onClick={() => handleDeleteStudent(s)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#fee2e2'; }} onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}>Xóa</button>
       </div>
     ) },
@@ -747,7 +747,7 @@ export function DepartmentDashboard() {
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Tổng Sinh viên</div>
               <div style={{ fontSize: 36, fontWeight: 800 }}>{stats.total}</div>
             </div>
-            <div style={{ background: 'linear-gradient(135deg, #93c5fd 0%, #3b82f6 100%)', borderRadius: 12, padding: 20, color: '#1e3a8a', boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.2)' }}>
+            <div style={{ background: 'linear-gradient(135deg, #93c5fd 0%, #b91c1c 100%)', borderRadius: 12, padding: 20, color: '#1e3a8a', boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.2)' }}>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Điểm trung bình</div>
               <div style={{ fontSize: 36, fontWeight: 800 }}>{stats.avgScore}</div>
             </div>

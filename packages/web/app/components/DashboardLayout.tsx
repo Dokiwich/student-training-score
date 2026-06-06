@@ -20,7 +20,7 @@ interface SemesterInfo {
 }
 
 const SEM_STATUS_META: Record<string, { label: string; color: string; dot: string }> = {
-  UPCOMING:          { label: 'Sắp diễn ra',   color: '#60a5fa', dot: '#3b82f6' }, // blue-400
+  UPCOMING:          { label: 'Sắp diễn ra',   color: '#f87171', dot: '#b91c1c' }, // red-400
   STUDENT_SCORING:   { label: 'SV đang chấm',   color: '#fbbf24', dot: '#f59e0b' }, // amber-400
   CLASS_REVIEWING:   { label: 'Lớp đang xét',   color: '#fbbf24', dot: '#f59e0b' },
   ADVISOR_REVIEWING: { label: 'CVHT đang xét',  color: '#a78bfa', dot: '#8b5cf6' }, // violet-400
@@ -68,9 +68,12 @@ function SemesterBadge({ semester, collapsed }: { semester: SemesterInfo | null;
 
   return (
     <div style={{ padding: '8px 0 4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {/* Semester name — avoid repeating academic_year if already in the name */}
-      <div style={{ fontSize: 11, fontWeight: 600, color: '#f8fafc', opacity: 0.9, letterSpacing: '0.02em' }}>
-        {semester.name.includes(semester.academic_year) ? semester.name : `${semester.name} — ${semester.academic_year}`}
+      {/* Semester name */}
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#facc15', letterSpacing: '0.02em', textTransform: 'uppercase', lineHeight: 1.2 }}>
+        {semester.name.replace(semester.academic_year, '').replace(/năm học/i, '').replace('-', '').trim()}
+      </div>
+      <div style={{ fontSize: 9, fontWeight: 500, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.02em' }}>
+        Năm học {semester.academic_year}
       </div>
       {/* Live status badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -117,7 +120,7 @@ const NOTIF_TYPE_META: Record<string, { icon: React.ReactNode; color: string }> 
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
       </svg>
     ),
-    color: '#2563eb',
+    color: '#991b1b',
   },
   SCORE_APPROVED: {
     icon: (
@@ -169,7 +172,7 @@ const NOTIF_TYPE_META: Record<string, { icon: React.ReactNode; color: string }> 
         <line x1="3" y1="10" x2="21" y2="10" />
       </svg>
     ),
-    color: '#5e6ad2',
+    color: '#991b1b',
   },
   DEADLINE_REMINDER: {
     icon: (
@@ -315,7 +318,7 @@ function NotificationBell({ collapsed }: { collapsed: boolean }) {
           <div className="notif-dropdown-body">
             {loading ? (
               <div className="notif-empty">
-                <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#5e6ad2', animation: 'spin 0.7s linear infinite' }} />
+                <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#991b1b', animation: 'spin 0.7s linear infinite' }} />
               </div>
             ) : notifications.length === 0 ? (
               <div className="notif-empty">
@@ -701,7 +704,7 @@ export function DashboardLayout({
           <div style={{ textAlign: 'center' }}>
             <div style={{
               width: 32, height: 32, borderRadius: '50%',
-              border: '3px solid #e5e7eb', borderTopColor: '#5e6ad2',
+              border: '3px solid #e5e7eb', borderTopColor: '#991b1b',
               animation: 'spin 0.7s linear infinite', margin: '0 auto 12px'
             }} />
             <p style={{ color: '#9ca3af', fontSize: 13, fontWeight: 500 }}>Đang tải...</p>
@@ -729,39 +732,31 @@ export function DashboardLayout({
       {/* Sidebar */}
       <aside className={`dashboard-sidebar ${sidebarOpen ? 'open' : ''} ${isDesktopCollapsed ? 'collapsed' : ''}`}>
         {/* Brand */}
-        <div className="sidebar-brand">
-          <div style={{ display: 'flex', alignItems: isDesktopCollapsed ? 'center' : 'flex-start', justifyContent: isDesktopCollapsed ? 'center' : 'space-between', width: '100%', flexDirection: isDesktopCollapsed ? 'column' : 'row', gap: isDesktopCollapsed ? 8 : 0 }}>
-            <div className="sidebar-brand-icon">
-              <svg
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                <path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5" />
-              </svg>
-            </div>
-            <button 
-              className="sidebar-collapse-btn" 
-              onClick={() => setIsDesktopCollapsed(!isDesktopCollapsed)}
-              title={isDesktopCollapsed ? "Mở rộng" : "Thu gọn"}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {isDesktopCollapsed ? (
-                  <polyline points="9 18 15 12 9 6" />
-                ) : (
-                  <polyline points="15 18 9 12 15 6" />
-                )}
-              </svg>
-            </button>
+        <div className="sidebar-brand" style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: isDesktopCollapsed ? '20px 16px' : '20px' }}>
+          <div className="sidebar-brand-icon" style={{ marginBottom: 0 }}>
+            <img src="/assets/dash/logom.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
-          {/* Live semester status — real-time polling */}
-          <SemesterBadge semester={activeSemester} collapsed={isDesktopCollapsed} />
+          
+          {!isDesktopCollapsed && (
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+              <SemesterBadge semester={activeSemester} collapsed={isDesktopCollapsed} />
+            </div>
+          )}
+
+          <button 
+            className="sidebar-collapse-btn" 
+            onClick={() => setIsDesktopCollapsed(!isDesktopCollapsed)}
+            title={isDesktopCollapsed ? "Mở rộng" : "Thu gọn"}
+            style={{ marginTop: 0 }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {isDesktopCollapsed ? (
+                <polyline points="9 18 15 12 9 6" />
+              ) : (
+                <polyline points="15 18 9 12 15 6" />
+              )}
+            </svg>
+          </button>
         </div>
 
         {/* Nav */}

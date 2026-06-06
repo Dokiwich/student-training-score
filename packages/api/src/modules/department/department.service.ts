@@ -126,51 +126,130 @@ export class DepartmentService {
     return { message: 'Lấy danh sách sinh viên toàn khoa thành công', data, department, semester };
   }
 
-  /** Thống kê tổng hợp cấp khoa */
+  /** Thống kê tổng hợp cấp khoa — ✅ FIX: Dùng DB Aggregation thay vì tải toàn bộ SV vào RAM */
   async getDepartmentStats(userId: string, semesterId?: string) {
-    const result = await this.getStudentsByDepartment(userId, semesterId);
-    const students = result.data;
+    const departmentId = await this.getDepartmentId(userId);
+    const semester = await this.getSemester(semesterId);
+    if (!semester) return { message: 'Không tìm thấy học kỳ', department: null, semester: null, stats: { total: 0, submitted: 0, finalized: 0, avgScore: 0, byClassification: {}, byClass: [], byMonth: [] } };
 
-    const total = students.length;
-    const submitted = students.filter(s => s.status !== 'NO_SHEET' && s.status !== 'DRAFT').length;
-    const finalized = students.filter(s => ['ADVISOR_APPROVED', 'FINALIZED', 'SCHOOL_APPROVED'].includes(s.status)).length;
+    const department = await prisma.departments.findUnique({ where: { id: departmentId }, select: { id: true, code: true, name: true } });
 
+    // Điều kiện lọc chung cho tất cả query
+    const enrollmentWhere = {
+      semester_id: semester.id,
+      is_active: 1,
+      classes: { department_id: departmentId, is_active: 1 },
+      users: { role: { in: ['STUDENT', 'CLASS_COMMITTEE'] as any }, is_active: 1 },
+    };
+
+    // 1. Tổng số sinh viên
+    const total = await prisma.semester_enrollments.count({ where: enrollmentWhere });
+
+    // 2. Lấy scoring_sheets cho các enrollment thuộc khoa (chỉ lấy trường cần thiết)
+    const sheets = await prisma.scoring_sheets.findMany({
+      where: {
+        semester_enrollments: enrollmentWhere,
+      },
+      select: {
+        status: true,
+        final_total: true,
+        advisor_total: true,
+        classification: true,
+        student_submitted_at: true,
+        semester_enrollments: {
+          select: {
+            classes: { select: { code: true, name: true } },
+          },
+        },
+      },
+    });
+
+    // 3. Tính toán thống kê từ sheets (nhẹ hơn nhiều so với tải toàn bộ student data)
+    let submitted = 0;
+    let finalized = 0;
     const byClassification: Record<string, number> = {};
-    students.forEach(s => { const cls = s.classification || 'NONE'; byClassification[cls] = (byClassification[cls] || 0) + 1; });
-
-    const scoredStudents = students.filter(s => s.finalTotal != null || s.advisorTotal != null);
-    const avgScore = scoredStudents.length > 0 ? scoredStudents.reduce((sum, s) => sum + (s.finalTotal || s.advisorTotal || 0), 0) / scoredStudents.length : 0;
-
-    const byClass: Record<string, { className: string; classCode: string; total: number; submitted: number; finalized: number; avgScore: number; byClassification: Record<string, number> }> = {};
-    students.forEach(s => {
-      if (!byClass[s.classCode]) byClass[s.classCode] = { className: s.className, classCode: s.classCode, total: 0, submitted: 0, finalized: 0, avgScore: 0, byClassification: {} };
-      const c = byClass[s.classCode];
-      c.total++;
-      if (s.status !== 'NO_SHEET' && s.status !== 'DRAFT') c.submitted++;
-      if (['ADVISOR_APPROVED', 'FINALIZED', 'SCHOOL_APPROVED'].includes(s.status)) c.finalized++;
-      const cls = s.classification || 'NONE'; c.byClassification[cls] = (c.byClassification[cls] || 0) + 1;
-    });
-
-    Object.values(byClass).forEach(c => {
-      const cs = students.filter(s => s.classCode === c.classCode && (s.finalTotal != null || s.advisorTotal != null));
-      c.avgScore = cs.length > 0 ? Number((cs.reduce((sum, s) => sum + (s.finalTotal || s.advisorTotal || 0), 0) / cs.length).toFixed(1)) : 0;
-    });
-
-    // Thống kê theo tháng
     const byMonth: Record<string, number> = {};
-    students.forEach(s => {
-      if (s.studentSubmittedAt) {
-        const d = new Date(s.studentSubmittedAt);
+    const byClass: Record<string, { className: string; classCode: string; total: number; submitted: number; finalized: number; scores: number[]; byClassification: Record<string, number> }> = {};
+
+    // Đếm các enrollment KHÔNG có sheet (NO_SHEET) theo lớp
+    const enrollmentsWithSheet = await prisma.semester_enrollments.findMany({
+      where: enrollmentWhere,
+      select: {
+        classes: { select: { code: true, name: true } },
+        scoring_sheets: { select: { id: true } },
+      },
+    });
+
+    // Init byClass từ toàn bộ enrollment
+    for (const e of enrollmentsWithSheet) {
+      const cc = e.classes.code;
+      if (!byClass[cc]) {
+        byClass[cc] = { className: e.classes.name, classCode: cc, total: 0, submitted: 0, finalized: 0, scores: [], byClassification: {} };
+      }
+      byClass[cc].total++;
+      if (!e.scoring_sheets) {
+        const cls = 'NONE';
+        byClass[cc].byClassification[cls] = (byClass[cc].byClassification[cls] || 0) + 1;
+        byClassification[cls] = (byClassification[cls] || 0) + 1;
+      }
+    }
+
+    // Xử lý sheets
+    const FINALIZED_STATUSES = ['ADVISOR_APPROVED', 'FINALIZED', 'SCHOOL_APPROVED'];
+    let scoreSum = 0;
+    let scoreCount = 0;
+
+    for (const s of sheets) {
+      const isSubmitted = s.status !== 'DRAFT';
+      const isFinalized = FINALIZED_STATUSES.includes(s.status);
+      const cls = s.classification || 'NONE';
+      const classCode = s.semester_enrollments?.classes?.code || 'UNKNOWN';
+
+      if (isSubmitted) submitted++;
+      if (isFinalized) finalized++;
+
+      byClassification[cls] = (byClassification[cls] || 0) + 1;
+
+      const effectiveScore = s.final_total != null ? Number(s.final_total) : (s.advisor_total != null ? Number(s.advisor_total) : null);
+      if (effectiveScore != null) {
+        scoreSum += effectiveScore;
+        scoreCount++;
+      }
+
+      if (byClass[classCode]) {
+        if (isSubmitted) byClass[classCode].submitted++;
+        if (isFinalized) byClass[classCode].finalized++;
+        byClass[classCode].byClassification[cls] = (byClass[classCode].byClassification[cls] || 0) + 1;
+        if (effectiveScore != null) byClass[classCode].scores.push(effectiveScore);
+      }
+
+      if (s.student_submitted_at) {
+        const d = new Date(s.student_submitted_at);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         byMonth[key] = (byMonth[key] || 0) + 1;
       }
-    });
+    }
+
+    const avgScore = scoreCount > 0 ? Number((scoreSum / scoreCount).toFixed(1)) : 0;
+
+    // Format byClass output (loại bỏ mảng scores tạm)
+    const byClassOutput = Object.values(byClass)
+      .map(c => ({
+        className: c.className,
+        classCode: c.classCode,
+        total: c.total,
+        submitted: c.submitted,
+        finalized: c.finalized,
+        avgScore: c.scores.length > 0 ? Number((c.scores.reduce((a, b) => a + b, 0) / c.scores.length).toFixed(1)) : 0,
+        byClassification: c.byClassification,
+      }))
+      .sort((a, b) => a.classCode.localeCompare(b.classCode));
 
     return {
-      message: 'Thống kê khoa thành công', department: result.department, semester: result.semester,
+      message: 'Thống kê khoa thành công', department, semester,
       stats: {
-        total, submitted, finalized, avgScore: Number(avgScore.toFixed(1)), byClassification,
-        byClass: Object.values(byClass).sort((a, b) => a.classCode.localeCompare(b.classCode)),
+        total, submitted, finalized, avgScore, byClassification,
+        byClass: byClassOutput,
         byMonth: Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b)).map(([month, count]) => ({ month, count })),
       },
     };

@@ -160,8 +160,8 @@ function AdminPageInner() {
             {loading ? (
               <div className="flex items-center justify-center h-64">
                 <div className="flex flex-col items-center gap-3">
-                  <div className="w-10 h-10 rounded-full border-4 border-sky-100 border-t-sky-500 animate-spin"></div>
-                  <span className="text-sky-600 text-sm">Đang tải dữ liệu...</span>
+                  <div className="w-10 h-10 rounded-full border-4 border-red-100 border-t-red-500 animate-spin"></div>
+                  <span className="text-red-600 text-sm">Đang tải dữ liệu...</span>
                 </div>
               </div>
             ) : (
@@ -239,7 +239,7 @@ function AdminPageInner() {
                     <div key={cat.id} className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
                       <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '16px 20px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', gap: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 700, color: 'var(--primary)', backgroundColor: '#eff6ff', padding: '4px 8px', borderRadius: 6, fontSize: 13 }}>Mục {cat.code.replace(/CAT/i, '')}</span>
+                          <span style={{ fontWeight: 700, color: 'var(--primary)', backgroundColor: '#fef2f2', padding: '4px 8px', borderRadius: 6, fontSize: 13 }}>Mục {cat.code.replace(/CAT/i, '')}</span>
                           <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>{cat.name}</span>
                           <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '2px 8px', borderRadius: 4, background: '#fff' }}>(Tối đa: {cat.max_score} đ)</span>
                         </div>
@@ -290,10 +290,10 @@ function AdminPageInner() {
 
       {/* Edit Modal */}
       {editingCriterion && (
-        <div className="fixed inset-0 bg-sky-900/30 backdrop-blur-sm z-100 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-sky-100 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-5 border-b border-sky-50 bg-sky-50/30 flex justify-between items-center">
-              <h3 className="font-bold text-sky-800 text-lg">Sửa tiêu chí <span className="bg-sky-100 px-2 py-0.5 rounded text-sky-600">{editingCriterion.code}</span></h3>
+        <div className="fixed inset-0 bg-red-900/30 backdrop-blur-sm z-100 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-red-100 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-5 border-b border-red-50 bg-red-50/30 flex justify-between items-center">
+              <h3 className="font-bold text-red-800 text-lg">Sửa tiêu chí <span className="bg-red-100 px-2 py-0.5 rounded text-red-600">{editingCriterion.code}</span></h3>
               <button onClick={() => setEditingCriterion(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
@@ -303,23 +303,23 @@ function AdminPageInner() {
                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Mã tiêu chí</label>
                 <input type="text" value={editingCriterion.code}
                   onChange={(e) => setEditingCriterion({ ...editingCriterion, code: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-all" />
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Nội dung</label>
                 <textarea value={editingCriterion.content}
                   onChange={(e) => setEditingCriterion({ ...editingCriterion, content: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all min-h-[120px]" />
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-all min-h-[120px]" />
               </div>
               <div className="mb-8">
                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Điểm tối đa</label>
                 <input type="number" step="0.1" min="0" value={editingCriterion.max_points}
                   onChange={(e) => setEditingCriterion({ ...editingCriterion, max_points: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all font-bold text-sky-700 bg-sky-50" />
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-all font-bold text-red-700 bg-red-50" />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setEditingCriterion(null)} className="px-5 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">Hủy bỏ</button>
-                <button type="submit" className="px-6 py-2.5 text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700 shadow-sm rounded-xl transition-colors">Lưu thay đổi</button>
+                <button type="submit" className="px-6 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm rounded-xl transition-colors">Lưu thay đổi</button>
               </div>
             </form>
           </div>
@@ -328,10 +328,10 @@ function AdminPageInner() {
 
       {/* Edit Category Modal */}
       {editingCategory && (
-        <div className="fixed inset-0 bg-sky-900/30 backdrop-blur-sm z-100 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-sky-100 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-5 border-b border-sky-50 bg-sky-50/30 flex justify-between items-center">
-              <h3 className="font-bold text-sky-800 text-lg">Sửa mục <span className="bg-sky-100 px-2 py-0.5 rounded text-sky-600">{editingCategory.code}</span></h3>
+        <div className="fixed inset-0 bg-red-900/30 backdrop-blur-sm z-100 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-red-100 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-5 border-b border-red-50 bg-red-50/30 flex justify-between items-center">
+              <h3 className="font-bold text-red-800 text-lg">Sửa mục <span className="bg-red-100 px-2 py-0.5 rounded text-red-600">{editingCategory.code}</span></h3>
               <button onClick={() => setEditingCategory(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
@@ -341,23 +341,23 @@ function AdminPageInner() {
                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Mã mục</label>
                 <input type="text" value={editingCategory.code}
                   onChange={(e) => setEditingCategory({ ...editingCategory, code: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-all" />
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Tên mục</label>
                 <input type="text" value={editingCategory.name}
                   onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all" />
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-all" />
               </div>
               <div className="mb-8">
                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Điểm tối đa</label>
                 <input type="number" step="0.1" min="0" value={editingCategory.max_score}
                   onChange={(e) => setEditingCategory({ ...editingCategory, max_score: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 transition-all font-bold text-sky-700 bg-sky-50" />
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-all font-bold text-red-700 bg-red-50" />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setEditingCategory(null)} className="px-5 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">Hủy bỏ</button>
-                <button type="submit" className="px-6 py-2.5 text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700 shadow-sm rounded-xl transition-colors">Lưu thay đổi</button>
+                <button type="submit" className="px-6 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm rounded-xl transition-colors">Lưu thay đổi</button>
               </div>
             </form>
           </div>

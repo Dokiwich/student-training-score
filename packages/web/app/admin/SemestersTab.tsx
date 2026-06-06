@@ -6,7 +6,7 @@ interface Semester { id: string; code: string; name: string; academic_year: stri
 
 const STATUS_LABELS: Record<string, string> = { UPCOMING: 'Sắp tới', STUDENT_SCORING: 'SV chấm', CLASS_REVIEWING: 'Lớp xét', ADVISOR_REVIEWING: 'CVHT xét', SCHOOL_REVIEWING: 'Trường xét', FINALIZED: 'Đã chốt', LOCKED: 'Khóa' };
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  UPCOMING:          { bg: '#eff6ff', color: '#3b82f6' }, // blue-50, blue-500
+  UPCOMING:          { bg: '#fef2f2', color: '#ef4444' }, // red-50, red-500
   STUDENT_SCORING:   { bg: '#fffbeb', color: '#f59e0b' }, // amber-50, amber-500
   CLASS_REVIEWING:   { bg: '#fffbeb', color: '#f59e0b' },
   ADVISOR_REVIEWING: { bg: '#f5f3ff', color: '#8b5cf6' }, // violet-50, violet-500

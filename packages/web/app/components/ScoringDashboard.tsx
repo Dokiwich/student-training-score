@@ -24,7 +24,7 @@ interface StudentRow {
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   NO_SHEET: { label: 'Chưa tạo', color: '#9ca3af', bg: '#f3f4f6' },
   DRAFT: { label: 'Nháp', color: '#6b7280', bg: '#f3f4f6' },
-  STUDENT_SUBMITTED: { label: 'SV đã nộp', color: '#2563eb', bg: '#eff6ff' },
+  STUDENT_SUBMITTED: { label: 'SV đã nộp', color: '#991b1b', bg: '#fef2f2' },
   CLASS_REVIEWING: { label: 'Đang xét', color: '#d97706', bg: '#fffbeb' },
   CLASS_REVIEWED: { label: 'Đã duyệt', color: '#059669', bg: '#ecfdf5' },
   ADVISOR_REVIEWING: { label: 'CVHT xét', color: '#d97706', bg: '#fffbeb' },

@@ -61,7 +61,7 @@ function Toast({
   }, [message.id, onDismiss]);
 
   return (
-    <div className={`px-4 py-3 text-xs font-medium border rounded-xl shadow-lg ${message.type === 'success' ? 'bg-sky-50 border-sky-200 text-sky-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+    <div className={`px-4 py-3 text-xs font-medium border rounded-xl shadow-lg ${message.type === 'success' ? 'bg-stone-50 border-stone-300 text-red-900' : 'bg-stone-50 border-stone-300 text-red-900'}`}>
       <span className="font-semibold">{message.type === 'success' ? 'Thành công:' : 'Lỗi:'}</span>{' '}
       {message.text}
     </div>
@@ -640,8 +640,8 @@ export function ScoringForm({
     return (
       <div className="flex items-center justify-center h-full">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-full border-4 border-sky-100 border-t-sky-500 animate-spin"></div>
-          <span className="text-sky-600 text-sm">Đang tải dữ liệu...</span>
+          <div className="w-10 h-10 rounded-full border-4 border-stone-200 border-t-red-900 animate-spin"></div>
+          <span className="text-red-900 text-sm">Đang tải dữ liệu...</span>
         </div>
       </div>
     );
@@ -673,11 +673,11 @@ export function ScoringForm({
         </div>
       )}
 
-      <div className="bg-sky-50/40 flex-1 flex flex-col h-full overflow-y-auto p-4 md:p-6">
+      <div className="bg-stone-50/40 flex-1 flex flex-col h-full overflow-y-auto p-4 md:p-6">
         <div className="w-full mx-auto space-y-4">
 
           {/* Header: Stepper + Actions — fixed layout, no scroll */}
-          <div className="bg-white rounded-2xl px-6 py-4 flex flex-col md:flex-row md:items-center justify-between border border-sky-100 shadow-sm gap-3">
+          <div className="bg-white rounded-2xl px-6 py-4 flex flex-col md:flex-row md:items-center justify-between border border-stone-200 shadow-sm gap-3">
             {/* Stepper — evenly spaced */}
             <div className="flex items-center flex-1 min-w-0">
               {steps.map((step, idx) => {
@@ -686,13 +686,13 @@ export function ScoringForm({
                 return (
                   <div key={step.id} className="flex items-center flex-1 last:flex-none">
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all ${isActive ? 'bg-sky-500 text-white' : isCompleted ? 'bg-sky-100 text-sky-600' : 'bg-gray-100 text-gray-400'}`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all ${isActive ? 'bg-stone-500 text-white' : isCompleted ? 'bg-red-100 text-red-900' : 'bg-gray-100 text-gray-400'}`}>
                         {isCompleted ? <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg> : step.num}
                       </div>
-                      <span className={`text-xs ${isActive ? 'text-sky-700 font-semibold' : isCompleted ? 'text-sky-500' : 'text-gray-400'}`}>{step.label}</span>
+                      <span className={`text-xs ${isActive ? 'text-red-900 font-semibold' : isCompleted ? 'text-red-900' : 'text-gray-400'}`}>{step.label}</span>
                     </div>
                     {idx < steps.length - 1 && (
-                      <div className={`flex-1 h-[1.5px] mx-2 rounded-full ${isCompleted ? 'bg-sky-200' : 'bg-gray-100'}`} />
+                      <div className={`flex-1 h-[1.5px] mx-2 rounded-full ${isCompleted ? 'bg-red-200' : 'bg-gray-100'}`} />
                     )}
                   </div>
                 );
@@ -703,16 +703,16 @@ export function ScoringForm({
             <div className="flex items-center gap-2 shrink-0">
               {effectiveCanEdit && (
                 <>
-                  <button onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting || isDeleting} className="px-4 py-2 rounded-xl text-xs font-semibold text-sky-700 bg-white border border-sky-200 hover:bg-sky-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
-                    {isSavingDraft ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-sky-200 border-t-sky-600 animate-spin"></span> Đang lưu...</> : 'Lưu Nháp'}
+                  <button onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting || isDeleting} className="px-4 py-2 rounded-xl text-xs font-semibold text-red-900 bg-white border border-stone-300 hover:bg-stone-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                    {isSavingDraft ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-stone-300 border-t-red-900 animate-spin"></span> Đang lưu...</> : 'Lưu Nháp'}
                   </button>
-                  <button onClick={handleSubmitForm} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
-                    {isSubmitting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-sky-300 border-t-white animate-spin"></span> {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Đang xác nhận...' : 'Đang nộp...'}</> : <>{(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Xác nhận' : 'Nộp Phiếu'} <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></>}
+                  <button onClick={handleSubmitForm} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-800 hover:bg-red-900 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                    {isSubmitting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Đang xác nhận...' : 'Đang nộp...'}</> : <>{(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Xác nhận' : 'Nộp Phiếu'} <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></>}
                   </button>
                 </>
               )}
               {canDeleteForm && (
-                <button onClick={() => setShowDeleteConfirm(true)} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-500 hover:bg-red-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ml-2">
+                <button onClick={() => setShowDeleteConfirm(true)} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ml-2">
                   {isDeleting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> Đang xóa...</> : <>Xóa Phiếu <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></>}
                 </button>
               )}
@@ -720,18 +720,18 @@ export function ScoringForm({
           </div>
 
           {/* Horizontal Score Card */}
-          <div className="bg-white rounded-2xl px-6 py-5 shadow-sm border border-sky-100 flex flex-col md:flex-row items-center gap-6">
+          <div className="bg-white rounded-2xl px-6 py-5 shadow-sm border border-stone-200 flex flex-col md:flex-row items-center gap-6">
             {/* Circle */}
             <div className="flex flex-col items-center shrink-0">
-              <span className="text-[10px] font-semibold text-sky-400 uppercase tracking-widest mb-2">Tổng điểm</span>
+              <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-widest mb-2">Tổng điểm</span>
               <div className="relative w-24 h-24 flex items-center justify-center">
                 <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#e0f2fe" strokeWidth="7" />
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#0ea5e9" strokeWidth="7" strokeLinecap="round" strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * totalScore) / 100} className="transition-all duration-1000 ease-out" />
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="#fef2f2" strokeWidth="7" />
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="#991b1b" strokeWidth="7" strokeLinecap="round" strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * totalScore) / 100} className="transition-all duration-1000 ease-out" />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-bold text-sky-700 leading-none">{totalScore}</span>
-                  <span className="text-[10px] text-sky-400 font-medium">/ 100</span>
+                  <span className="text-2xl font-bold text-red-900 leading-none">{totalScore}</span>
+                  <span className="text-[10px] text-stone-500 font-medium">/ 100</span>
                 </div>
               </div>
             </div>
@@ -744,9 +744,9 @@ export function ScoringForm({
                 const isFull = tabScore === tab.max;
                 const isEmpty = tabScore === 0;
                 return (
-                  <div key={tab.id} className={`flex flex-col items-center px-3 py-3 rounded-xl border transition-colors ${isFull ? 'bg-sky-50 border-sky-200' : isEmpty ? 'bg-gray-50 border-gray-100' : 'bg-white border-sky-100'}`}>
-                    <span className="text-[10px] font-semibold text-sky-400 uppercase tracking-wide text-center leading-tight mb-1.5 line-clamp-1" title={tab.short}>Mục {idx + 1}</span>
-                    <span className={`text-lg font-bold leading-none ${isFull ? 'text-sky-600' : isEmpty ? 'text-gray-300' : 'text-sky-700'}`}>{tabScore}<span className="text-xs text-sky-300 font-medium">/{tab.max}</span></span>
+                  <div key={tab.id} className={`flex flex-col items-center px-3 py-3 rounded-xl border transition-colors ${isFull ? 'bg-stone-50 border-stone-300' : isEmpty ? 'bg-gray-50 border-gray-100' : 'bg-white border-stone-200'}`}>
+                    <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wide text-center leading-tight mb-1.5 line-clamp-1" title={tab.short}>Mục {idx + 1}</span>
+                    <span className={`text-lg font-bold leading-none ${isFull ? 'text-red-900' : isEmpty ? 'text-gray-300' : 'text-red-900'}`}>{tabScore}<span className="text-xs text-stone-400 font-medium">/{tab.max}</span></span>
                   </div>
                 );
               })}
@@ -768,34 +768,34 @@ export function ScoringForm({
               });
 
               return (
-                <div key={tab.id} className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-all duration-200 ${isTabExpanded ? 'border-sky-200' : 'border-sky-100 hover:border-sky-200'}`}>
+                <div key={tab.id} className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-all duration-200 ${isTabExpanded ? 'border-stone-300' : 'border-stone-200 hover:border-stone-300'}`}>
                   {/* Accordion Header */}
                   <button onClick={() => toggleTab(tab.id)} className="w-full px-5 py-4 flex items-center justify-between gap-3 outline-none group">
                     <div className="flex items-center gap-3 text-left min-w-0">
-                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-semibold text-sm shrink-0 transition-colors ${isTabExpanded ? 'bg-sky-500 text-white' : 'bg-sky-50 text-sky-600 group-hover:bg-sky-100'}`}>
+                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-semibold text-sm shrink-0 transition-colors ${isTabExpanded ? 'bg-red-800 text-white' : 'bg-stone-50 text-red-900 group-hover:bg-red-100'}`}>
                         {idx + 1}
                       </span>
                       <div className="min-w-0">
-                        <h4 className="text-sm font-semibold text-sky-800 truncate">Mục {idx + 1}: {tab.short}</h4>
-                        {isTabExpanded && <p className="text-[11px] text-sky-400 mt-0.5 leading-snug line-clamp-2">{tab.title}</p>}
+                        <h4 className="text-sm font-semibold text-red-900 truncate">Mục {idx + 1}: {tab.short}</h4>
+                        {isTabExpanded && <p className="text-[11px] text-stone-500 mt-0.5 leading-snug line-clamp-2">{tab.title}</p>}
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg ${isFull ? 'bg-sky-100 text-sky-700' : 'bg-gray-50 text-sky-600'}`}>
-                        {tabScore}<span className="text-xs text-sky-300 font-medium">/{tab.max}</span>
+                      <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg ${isFull ? 'bg-red-100 text-red-900' : 'bg-gray-50 text-red-900'}`}>
+                        {tabScore}<span className="text-xs text-stone-400 font-medium">/{tab.max}</span>
                       </span>
-                      <div className={`w-6 h-6 rounded-md bg-sky-50 flex items-center justify-center transition-transform duration-200 ${isTabExpanded ? 'rotate-180' : ''}`}>
-                        <svg className="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                      <div className={`w-6 h-6 rounded-md bg-stone-50 flex items-center justify-center transition-transform duration-200 ${isTabExpanded ? 'rotate-180' : ''}`}>
+                        <svg className="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                       </div>
                     </div>
                   </button>
 
                   {/* Accordion Body */}
                   {isTabExpanded && (
-                    <div className="border-t border-sky-100 overflow-x-auto">
+                    <div className="border-t border-stone-200 overflow-x-auto">
                       <table className="w-full text-left border-collapse min-w-[700px]">
-                        <thead className="bg-sky-50/60">
-                          <tr className="text-sky-500 text-[11px] font-semibold uppercase tracking-wider border-b border-sky-100">
+                        <thead className="bg-stone-50/60">
+                          <tr className="text-red-900 text-[11px] font-semibold uppercase tracking-wider border-b border-stone-200">
                             <th className="px-4 py-2.5 w-16">Mã</th>
                             <th className="px-4 py-2.5">Nội dung</th>
                             <th className="px-4 py-2.5 w-16 text-center">Điểm</th>
@@ -810,9 +810,9 @@ export function ScoringForm({
                             <th className="px-4 py-2.5 w-12 text-center"></th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-sky-50">
+                        <tbody className="divide-y divide-red-50">
                           {filtered.length === 0 ? (
-                            <tr><td colSpan={currentRole === 'STUDENT' ? 6 : currentRole === 'CLASS_COMMITTEE' ? 7 : 8} className="p-8 text-center text-sky-300 text-sm">Không có tiêu chí nào.</td></tr>
+                            <tr><td colSpan={currentRole === 'STUDENT' ? 6 : currentRole === 'CLASS_COMMITTEE' ? 7 : 8} className="p-8 text-center text-stone-400 text-sm">Không có tiêu chí nào.</td></tr>
                           ) : (
                             filtered.map((item) => {
                               const isParent = parentIds.has(item.id);
@@ -829,56 +829,56 @@ export function ScoringForm({
 
                               if (isParent) {
                                 return (
-                                  <tr key={item.id} className="bg-sky-50/30 hover:bg-sky-50/60 cursor-pointer transition-colors" onClick={() => toggleExpand(item.id)}>
-                                    <td className="px-4 py-2.5 text-[11px] font-medium text-sky-400">{item.code}</td>
+                                  <tr key={item.id} className="bg-stone-50/30 hover:bg-stone-50/60 cursor-pointer transition-colors" onClick={() => toggleExpand(item.id)}>
+                                    <td className="px-4 py-2.5 text-[11px] font-medium text-stone-500">{item.code}</td>
                                     <td className="px-4 py-2.5">
                                       <div className="flex items-center" style={{ paddingLeft: `${depth * 1.2}rem` }}>
-                                        <span className={`w-4 h-4 rounded flex items-center justify-center mr-2 text-[10px] font-semibold ${isExpanded ? 'bg-sky-100 text-sky-500' : 'bg-sky-500 text-white'}`}>{isExpanded ? '−' : '+'}</span>
-                                        <span className="text-xs font-semibold text-sky-800">{item.content}</span>
+                                        <span className={`w-4 h-4 rounded flex items-center justify-center mr-2 text-[10px] font-semibold ${isExpanded ? 'bg-red-100 text-red-900' : 'bg-red-800 text-white'}`}>{isExpanded ? '−' : '+'}</span>
+                                        <span className="text-xs font-semibold text-red-900">{item.content}</span>
                                       </div>
                                     </td>
-                                    <td className="px-4 py-2.5 text-center text-xs text-sky-400">{item.max_points}</td>
-                                    <td className="px-4 py-2.5 text-center text-xs font-semibold text-sky-600">
+                                    <td className="px-4 py-2.5 text-center text-xs text-stone-500">{item.max_points}</td>
+                                    <td className="px-4 py-2.5 text-center text-xs font-semibold text-red-900">
                                       {currentRole === 'STUDENT' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedStudentScores)}
                                     </td>
                                     {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
-                                      <td className="px-4 py-2.5 text-center text-xs font-semibold text-sky-600">
+                                      <td className="px-4 py-2.5 text-center text-xs font-semibold text-red-900">
                                         {currentRole === 'CLASS_COMMITTEE' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedClassScores)}
                                       </td>
                                     )}
                                     {currentRole === 'ADVISOR' && (
-                                      <td className="px-4 py-2.5 text-center text-xs font-semibold text-sky-600">
+                                      <td className="px-4 py-2.5 text-center text-xs font-semibold text-red-900">
                                         {calculateAutoScore(item.id)}
                                       </td>
                                     )}
                                     <td className="px-4 py-2.5"></td>
-                                    <td className="px-4 py-2.5 text-center"><span className="text-[9px] uppercase font-semibold text-sky-300 bg-sky-50 px-1.5 py-0.5 rounded">Auto</span></td>
+                                    <td className="px-4 py-2.5 text-center"><span className="text-[9px] uppercase font-semibold text-stone-400 bg-stone-50 px-1.5 py-0.5 rounded">Auto</span></td>
                                   </tr>
                                 );
                               }
 
                               return (
-                                <tr key={item.id} className={`hover:bg-sky-50/30 transition-colors group ${isRowSaving ? 'opacity-50' : ''}`}>
-                                  <td className="px-4 py-2.5 text-[11px] text-sky-400">{item.code}</td>
+                                <tr key={item.id} className={`hover:bg-stone-50/30 transition-colors group ${isRowSaving ? 'opacity-50' : ''}`}>
+                                  <td className="px-4 py-2.5 text-[11px] text-stone-500">{item.code}</td>
                                   <td className="px-4 py-2.5">
                                     <div style={{ paddingLeft: `${depth * 1.2}rem` }}>
-                                      <span className="text-xs text-sky-700 leading-snug">{item.content}</span>
-                                      {item.description && <span className="text-[10px] text-sky-300 mt-0.5 block leading-relaxed">{item.description}</span>}
+                                      <span className="text-xs text-red-900 leading-snug">{item.content}</span>
+                                      {item.description && <span className="text-[10px] text-stone-400 mt-0.5 block leading-relaxed">{item.description}</span>}
                                     </div>
                                   </td>
-                                  <td className="px-4 py-2.5 text-center text-xs text-sky-400">{item.max_points}</td>
+                                  <td className="px-4 py-2.5 text-center text-xs text-stone-500">{item.max_points}</td>
                                   
                                   {/* Student Score Column */}
                                   <td className="px-4 py-2.5 text-center">
                                     {isFixed ? (
-                                      <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                      <span className="text-xs font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                     ) : currentRole === 'STUDENT' ? (
                                       <div className="relative inline-block">
-                                        <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
-                                        {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                        <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                        {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
                                       </div>
                                     ) : (
-                                      <span className="text-xs font-medium text-sky-700">{savedStudentScores[item.id] ?? '-'}</span>
+                                      <span className="text-xs font-medium text-red-900">{savedStudentScores[item.id] ?? '-'}</span>
                                     )}
                                   </td>
 
@@ -886,14 +886,14 @@ export function ScoringForm({
                                   {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
                                     <td className="px-4 py-2.5 text-center">
                                       {isFixed ? (
-                                        <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                        <span className="text-xs font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                       ) : currentRole === 'CLASS_COMMITTEE' ? (
                                         <div className="relative inline-block">
-                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
-                                          {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                          {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
                                         </div>
                                       ) : (
-                                        <span className="text-xs font-medium text-sky-700">{savedClassScores[item.id] ?? '-'}</span>
+                                        <span className="text-xs font-medium text-red-900">{savedClassScores[item.id] ?? '-'}</span>
                                       )}
                                     </td>
                                   )}
@@ -902,11 +902,11 @@ export function ScoringForm({
                                   {currentRole === 'ADVISOR' && (
                                     <td className="px-4 py-2.5 text-center">
                                       {isFixed ? (
-                                        <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                        <span className="text-xs font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                       ) : (
                                         <div className="relative inline-block">
-                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-sky-800 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300" />
-                                          {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                          {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
                                         </div>
                                       )}
                                     </td>
@@ -914,10 +914,10 @@ export function ScoringForm({
                                   <td className="px-4 py-2.5">
                                     {!isFixed && (
                                       <div className="relative flex items-center">
-                                        <input type="text" placeholder="Link minh chứng..." value={evidence} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => setEvidenceValues(prev => ({ ...prev, [item.id]: e.target.value }))} className="w-full h-8 px-3 text-[11px] text-sky-600 border border-sky-200 rounded-lg focus:border-sky-500 focus:ring-0 outline-none transition-all pr-8 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-sky-300 placeholder-sky-200" />
+                                        <input type="text" placeholder="Link minh chứng..." value={evidence} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => setEvidenceValues(prev => ({ ...prev, [item.id]: e.target.value }))} className="w-full h-8 px-3 text-[11px] text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all pr-8 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300 placeholder-red-200" />
                                         {evidence && (
-                                          <a href={evidence.startsWith('http') ? evidence : `https://${evidence}`} target="_blank" rel="noopener noreferrer" className="absolute right-2 w-5 h-5 bg-sky-100 hover:bg-sky-200 rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer z-10" title="Mở liên kết minh chứng">
-                                            <svg className="w-3 h-3 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                          <a href={evidence.startsWith('http') ? evidence : `https://${evidence}`} target="_blank" rel="noopener noreferrer" className="absolute right-2 w-5 h-5 bg-red-100 hover:bg-red-200 rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer z-10" title="Mở liên kết minh chứng">
+                                            <svg className="w-3 h-3 text-red-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
                                           </a>
                                         )}
                                       </div>
@@ -925,7 +925,7 @@ export function ScoringForm({
                                   </td>
                                   <td className="px-4 py-2.5 text-center">
                                     {!isFixed && effectiveCanEdit && (
-                                      <button onClick={() => { handleInputChange(item.id, ''); setEvidenceValues(prev => ({ ...prev, [item.id]: '' })); }} disabled={isRowSaving || isSavingDraft || isSubmitting} className="w-6 h-6 rounded-md flex items-center justify-center text-sky-300 hover:text-red-400 hover:bg-red-50 transition-colors mx-auto opacity-0 group-hover:opacity-100 disabled:opacity-0" title="Xóa">
+                                      <button onClick={() => { handleInputChange(item.id, ''); setEvidenceValues(prev => ({ ...prev, [item.id]: '' })); }} disabled={isRowSaving || isSavingDraft || isSubmitting} className="w-6 h-6 rounded-md flex items-center justify-center text-stone-400 hover:text-stone-500 hover:bg-stone-50 transition-colors mx-auto opacity-0 group-hover:opacity-100 disabled:opacity-0" title="Xóa">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                       </button>
                                     )}
@@ -948,20 +948,20 @@ export function ScoringForm({
 
       {/* Submit Confirmation Modal */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-sky-900/30 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-900/30 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl p-7 max-w-sm w-full shadow-2xl">
-            <div className="w-14 h-14 bg-sky-100 text-sky-600 rounded-xl flex items-center justify-center mb-5 mx-auto">
+            <div className="w-14 h-14 bg-red-100 text-red-900 rounded-xl flex items-center justify-center mb-5 mx-auto">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
             </div>
-            <h3 className="text-lg font-semibold text-center text-sky-800 mb-1.5">
+            <h3 className="text-lg font-semibold text-center text-red-900 mb-1.5">
               {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Bạn có chắc chắn xác nhận?' : 'Xác nhận nộp phiếu?'}
             </h3>
-            <p className="text-center text-sky-400 text-xs mb-6 leading-relaxed">
+            <p className="text-center text-stone-500 text-xs mb-6 leading-relaxed">
               {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Phiếu điểm sẽ được xác nhận và chuyển sang trạng thái tiếp theo.' : 'Sau khi nộp, bạn sẽ không thể chỉnh sửa điểm. Bạn chắc chắn chứ?'}
             </p>
             <div className="flex gap-2.5">
-              <button onClick={() => setShowConfirm(false)} className="flex-1 py-2.5 px-4 bg-sky-50 hover:bg-sky-100 text-sky-700 font-semibold text-sm rounded-xl transition-colors">Hủy bỏ</button>
-              <button onClick={doSubmitForm} className="flex-1 py-2.5 px-4 bg-sky-500 hover:bg-sky-600 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors">
+              <button onClick={() => setShowConfirm(false)} className="flex-1 py-2.5 px-4 bg-stone-50 hover:bg-red-100 text-red-900 font-semibold text-sm rounded-xl transition-colors">Hủy bỏ</button>
+              <button onClick={doSubmitForm} className="flex-1 py-2.5 px-4 bg-red-800 hover:bg-red-900 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors">
                 {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Đồng ý Xác nhận' : 'Đồng ý Nộp'}
               </button>
             </div>
@@ -973,7 +973,7 @@ export function ScoringForm({
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl p-7 max-w-sm w-full shadow-2xl">
-            <div className="w-14 h-14 bg-red-100 text-red-600 rounded-xl flex items-center justify-center mb-5 mx-auto">
+            <div className="w-14 h-14 bg-red-100 text-red-900 rounded-xl flex items-center justify-center mb-5 mx-auto">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
             </div>
             <h3 className="text-lg font-semibold text-center text-slate-800 mb-2">Xóa Phiếu Rèn Luyện?</h3>
@@ -982,7 +982,7 @@ export function ScoringForm({
             </p>
             <div className="flex gap-3">
               <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 px-4 bg-slate-50 hover:bg-slate-100 text-slate-600 font-semibold text-sm rounded-xl transition-colors">Hủy bỏ</button>
-              <button onClick={doDeleteForm} className="flex-1 py-2.5 px-4 bg-red-500 hover:bg-red-600 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm shadow-red-200">Xóa Phiếu</button>
+              <button onClick={doDeleteForm} className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm shadow-red-200">Xóa Phiếu</button>
             </div>
           </div>
         </div>

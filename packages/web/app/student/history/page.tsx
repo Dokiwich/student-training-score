@@ -41,7 +41,7 @@ interface HistoryRecord {
 
 const ROLE_COLORS: Record<string, string> = {
   STUDENT: 'bg-gray-100 text-gray-700',
-  CLASS_COMMITTEE: 'bg-blue-100 text-blue-700',
+  CLASS_COMMITTEE: 'bg-red-100 text-red-700',
   ADVISOR: 'bg-green-100 text-green-700',
   DEPARTMENT: 'bg-purple-100 text-purple-700',
   SCHOOL_ADMIN: 'bg-red-100 text-red-700',
@@ -100,7 +100,7 @@ export default function StudentHistoryPage() {
           
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
-              <div className="w-10 h-10 rounded-full border-4 border-sky-100 border-t-sky-500 animate-spin"></div>
+              <div className="w-10 h-10 rounded-full border-4 border-red-100 border-t-red-500 animate-spin"></div>
             </div>
           ) : error ? (
             <div className="bg-white p-8 rounded-2xl text-center border shadow-sm">
@@ -120,7 +120,7 @@ export default function StudentHistoryPage() {
                   
                   {/* Ô 1: Thông tin điểm số */}
                   <div 
-                    className="flex-1 p-6 border-b md:border-b-0 md:border-r border-gray-100 hover:bg-sky-50 transition-colors cursor-pointer group"
+                    className="flex-1 p-6 border-b md:border-b-0 md:border-r border-gray-100 hover:bg-red-50 transition-colors cursor-pointer group"
                     onClick={() => {
                       if (record.hasSheet) {
                         setSelectedSemester({ id: record.semesterId, name: record.semesterName });
@@ -129,7 +129,7 @@ export default function StudentHistoryPage() {
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h3 className="text-xl font-bold text-gray-900 group-hover:text-sky-700 transition-colors">
+                        <h3 className="text-xl font-bold text-gray-900 group-hover:text-red-700 transition-colors">
                           {record.semesterName}
                         </h3>
                         <p className="text-sm text-gray-500 mt-1">Lớp: {record.className}</p>
@@ -137,7 +137,7 @@ export default function StudentHistoryPage() {
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                         record.status === 'NO_SHEET' ? 'bg-gray-100 text-gray-600' :
                         record.status === 'FINALIZED' ? 'bg-green-100 text-green-700' :
-                        'bg-blue-100 text-blue-700'
+                        'bg-red-100 text-red-700'
                       }`}>
                         {record.status === 'NO_SHEET' ? 'Chưa tạo' : record.status === 'FINALIZED' ? 'Đã chốt' : 'Đang xử lý'}
                       </span>
@@ -162,9 +162,9 @@ export default function StudentHistoryPage() {
                             <div className="text-xs text-gray-500 mb-1">CVHT chấm</div>
                             <div className="text-lg font-bold text-gray-800">{record.advisorTotal ?? '-'}</div>
                           </div>
-                          <div className="bg-sky-50 p-3 rounded-xl border border-sky-100 text-center">
-                            <div className="text-xs text-sky-600 mb-1">Điểm chốt</div>
-                            <div className="text-lg font-bold text-sky-700">{record.finalTotal ?? record.advisorTotal ?? '-'}</div>
+                          <div className="bg-red-50 p-3 rounded-xl border border-red-100 text-center">
+                            <div className="text-xs text-red-600 mb-1">Điểm chốt</div>
+                            <div className="text-lg font-bold text-red-700">{record.finalTotal ?? record.advisorTotal ?? '-'}</div>
                           </div>
                         </div>
 
@@ -173,7 +173,7 @@ export default function StudentHistoryPage() {
                             <span className="text-sm text-gray-500">Xếp loại:</span>
                             <span className={`font-semibold ${
                               record.classification === 'EXCELLENT' ? 'text-purple-600' :
-                              record.classification === 'VERY_GOOD' ? 'text-blue-600' :
+                              record.classification === 'VERY_GOOD' ? 'text-red-600' :
                               record.classification === 'GOOD' ? 'text-green-600' :
                               record.classification === 'AVERAGE' ? 'text-orange-600' :
                               'text-red-600'
@@ -182,7 +182,7 @@ export default function StudentHistoryPage() {
                             </span>
                           </div>
                           
-                          <div className="text-sm text-sky-600 font-medium flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                          <div className="text-sm text-red-600 font-medium flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                             Xem chi tiết phiếu
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                           </div>
@@ -221,7 +221,7 @@ export default function StudentHistoryPage() {
                             </div>
                             
                             {note.action && (
-                              <div className="text-[11px] font-medium text-sky-600 mb-1">
+                              <div className="text-[11px] font-medium text-red-600 mb-1">
                                 {ACTION_LABELS[note.action] || note.action}
                               </div>
                             )}
@@ -254,7 +254,7 @@ export default function StudentHistoryPage() {
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h3 className="text-lg font-bold text-gray-900">
-                Chi tiết phiếu điểm - <span className="text-sky-600">{selectedSemester.name}</span>
+                Chi tiết phiếu điểm - <span className="text-red-600">{selectedSemester.name}</span>
               </h3>
               <button 
                 onClick={() => setSelectedSemester(null)}

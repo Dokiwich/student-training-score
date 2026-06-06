@@ -87,6 +87,7 @@ export const authOptions: AuthOptions = {
           select: { session_version: true }
         });
         if (!dbUser || dbUser.session_version !== token.session_version) {
+          console.log("Session Invalidated!", { dbUser, token_session_version: token.session_version, token_id: token.id });
           return {}; // Invalidate token
         }
       }

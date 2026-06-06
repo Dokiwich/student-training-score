@@ -29,7 +29,7 @@ const CLASSIFICATION_LABELS: Record<string, string> = {
 
 const CLS_COLORS: Record<string, { bg: string; color: string }> = {
   EXCELLENT: { bg: '#ecfdf5', color: '#059669' },
-  VERY_GOOD: { bg: '#eff6ff', color: '#2563eb' },
+  VERY_GOOD: { bg: '#fef2f2', color: '#991b1b' },
   GOOD: { bg: '#fffbeb', color: '#d97706' },
   AVERAGE: { bg: '#f3f4f6', color: '#6b7280' },
   WEAK: { bg: '#fef2f2', color: '#dc2626' },
@@ -94,7 +94,7 @@ export function AdvisorSummary() {
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Sĩ số</div>
           <div style={{ fontSize: 36, fontWeight: 800 }}>{stats.total}</div>
         </div>
-        <div style={{ background: 'linear-gradient(135deg, #93c5fd 0%, #3b82f6 100%)', borderRadius: 12, padding: 20, color: '#1e3a8a', boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.2)' }}>
+        <div style={{ background: 'linear-gradient(135deg, #93c5fd 0%, #b91c1c 100%)', borderRadius: 12, padding: 20, color: '#1e3a8a', boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.2)' }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Điểm trung bình lớp</div>
           <div style={{ fontSize: 36, fontWeight: 800 }}>{stats.avgScore}</div>
         </div>
