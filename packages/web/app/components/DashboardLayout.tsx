@@ -20,7 +20,7 @@ interface SemesterInfo {
 }
 
 const SEM_STATUS_META: Record<string, { label: string; color: string; dot: string }> = {
-  UPCOMING:          { label: 'Sắp diễn ra',   color: '#60a5fa', dot: '#b91c1c' }, // blue-400
+  UPCOMING:          { label: 'Sắp diễn ra',   color: '#f87171', dot: '#b91c1c' }, // red-400
   STUDENT_SCORING:   { label: 'SV đang chấm',   color: '#fbbf24', dot: '#f59e0b' }, // amber-400
   CLASS_REVIEWING:   { label: 'Lớp đang xét',   color: '#fbbf24', dot: '#f59e0b' },
   ADVISOR_REVIEWING: { label: 'CVHT đang xét',  color: '#a78bfa', dot: '#8b5cf6' }, // violet-400
