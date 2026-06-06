@@ -43,9 +43,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Dữ liệu rỗng' }, { status: 400 });
     }
 
-    if (rows.length > 500) {
-      return NextResponse.json({ message: 'Tối đa 500 dòng mỗi lần import' }, { status: 400 });
-    }
+    // Đã bỏ giới hạn 500 dòng để import toàn bộ file
 
     // Fetch all departments and classes for lookup
     const [allDepts, allClasses, activeSemester] = await Promise.all([
