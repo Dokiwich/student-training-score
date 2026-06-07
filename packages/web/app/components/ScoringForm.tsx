@@ -5,7 +5,7 @@ import { useSession, signOut } from 'next-auth/react';
 
 const API_BASE = '/proxy-api';
 
-const FIXED_CODES = ['1.1.1', '2.1', '4.1', '3.1.1'];
+const FIXED_CODES = ['1.1.1', '2.1', '4.1', '3.1.1', '2.2'];
 
 const TAB_GROUPS = [
   { id: '1', short: 'Ý thức học tập', title: 'Đánh giá về ý thức tham gia học tập', max: 20 },
@@ -415,7 +415,22 @@ export function ScoringForm({
   }, [criteria, calculateAutoScore]);
 
   const handleInputChange = (criteriaId: number, value: string) => {
-    setInputValues((prev) => ({ ...prev, [criteriaId]: value }));
+    let finalValue = value;
+    const item = criteria.find(c => c.id === criteriaId);
+    if (item && value !== '' && value !== '-') {
+      const num = parseFloat(value);
+      if (!isNaN(num)) {
+        const isDeduction = item.score_type === 'DEDUCTION' || item.max_points < 0;
+        if (isDeduction) {
+          if (num > 0) finalValue = '0';
+          else if (num < item.max_points) finalValue = item.max_points.toString();
+        } else {
+          if (num < 0) finalValue = '0';
+          else if (item.max_points > 0 && num > item.max_points) finalValue = item.max_points.toString();
+        }
+      }
+    }
+    setInputValues((prev) => ({ ...prev, [criteriaId]: finalValue }));
     setIsDirty(true);
   };
 
