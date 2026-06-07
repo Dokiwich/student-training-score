@@ -983,6 +983,12 @@ export class ScoringService {
       })
     ]);
 
+    // ✅ Ghi audit log cho việc xóa/reset phiếu
+    await this.logAudit(actorId, 'REJECT_FORM', 'scoring_sheets', form.id,
+      { status: form.status, score_details_count: form.score_details?.length ?? 0 },
+      { action: 'DELETED_AND_RESET', role },
+    );
+
     // Thông báo cho sinh viên: phiếu bị trả lại
     try {
       const rejecterLabel = role === 'CLASS_COMMITTEE' ? 'Ban cán sự lớp' : 'Cố vấn học tập';

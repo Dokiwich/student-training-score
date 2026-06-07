@@ -116,7 +116,6 @@ export class AppealService {
 
       // Get current scores cho tiêu chí đang khiếu nại
       let currentScores: Record<string, number> | null = null;
-      let proofUrl: string | null = null;
       if (criteriaId) {
         const scoreDetail = await prisma.score_details.findUnique({
           where: {
@@ -128,7 +127,6 @@ export class AppealService {
           include: { score_entries: true },
         });
         if (scoreDetail) {
-          proofUrl = scoreDetail.proof_url;
           currentScores = {};
           for (const entry of scoreDetail.score_entries) {
             currentScores[entry.scorer_role] = Number(entry.score);
@@ -144,7 +142,6 @@ export class AppealService {
         criteriaCode,
         criteriaContent,
         currentScores,
-        proofUrl,
         status: a.status,
         resolution: a.resolution,
         resolvedBy: a.users_appeals_resolved_byTousers?.full_name || null,
@@ -241,14 +238,14 @@ export class AppealService {
       data: { status: 'APPEALING', updated_at: new Date() },
     });
 
-    // Gửi notification cho DEPARTMENT
+    // Gửi notification cho ADVISOR
     try {
       const sheetInfo = await prisma.scoring_sheets.findUnique({
         where: { id: sheetId },
         select: {
           semester_enrollments: {
             select: {
-              classes: { select: { department_id: true } },
+              class_id: true,
               users: { select: { full_name: true } },
             },
           },
@@ -256,19 +253,19 @@ export class AppealService {
       });
 
       if (sheetInfo?.semester_enrollments) {
-        const departmentId = sheetInfo.semester_enrollments.classes.department_id;
+        const classId = sheetInfo.semester_enrollments.class_id;
         const studentName = sheetInfo.semester_enrollments.users.full_name;
 
-        const deptUsers = await prisma.users.findMany({
-          where: { role: 'DEPARTMENT', department_id: departmentId },
-          select: { id: true },
+        const advisorRoles = await prisma.class_roles.findMany({
+          where: { class_id: classId, role_type: 'ADVISOR', is_active: 1 },
+          select: { user_id: true },
         });
 
-        for (const deptUser of deptUsers) {
+        for (const ar of advisorRoles) {
           await prisma.notifications.create({
             data: {
               id: randomUUID(),
-              user_id: deptUser.id,
+              user_id: ar.user_id,
               type: 'APPEAL_SUBMITTED',
               title: 'Có khiếu nại mới cần xử lý',
               content: `Sinh viên ${studentName} đã gửi khiếu nại ${criteriaIds.length} tiêu chí. Vui lòng xem xét và phê duyệt.`,
@@ -304,10 +301,10 @@ export class AppealService {
   }
 
   // =============================================
-  // 3. RESOLVE MỘT KHIẾU NẠI (DEPARTMENT / SCHOOL_ADMIN)
+  // 3. RESOLVE MỘT KHIẾU NẠI (ADVISOR / SCHOOL_ADMIN)
   //    ACCEPTED → cập nhật điểm nếu có newScore
   //    REJECTED → giữ nguyên điểm
-  //    Khi hết PENDING → chuyển phiếu về SCHOOL_REVIEWING
+  //    Khi hết PENDING → chuyển phiếu về ADVISOR_APPROVED
   // =============================================
   async resolveAppeal(
     appealId: string,
@@ -325,7 +322,7 @@ export class AppealService {
             id: true,
             status: true,
             semester_enrollments: {
-              select: { user_id: true, class_id: true, classes: { select: { department_id: true } } },
+              select: { user_id: true, class_id: true },
             },
           },
         },
@@ -343,18 +340,21 @@ export class AppealService {
     // 3b. Kiểm tra quyền resolver
     const resolver = await prisma.users.findUnique({
       where: { id: resolverId },
-      select: { role: true, department_id: true },
+      select: { role: true },
     });
 
-    if (!resolver || !['DEPARTMENT', 'SCHOOL_ADMIN'].includes(resolver.role)) {
-      throw new ForbiddenException('Bạn không có quyền xử lý khiếu nại (Chỉ Khoa hoặc Admin trường)');
+    if (!resolver || !['ADVISOR', 'SCHOOL_ADMIN'].includes(resolver.role)) {
+      throw new ForbiddenException('Bạn không có quyền xử lý khiếu nại');
     }
 
-    // Nếu là DEPARTMENT, kiểm tra đúng khoa của lớp
-    if (resolver.role === 'DEPARTMENT') {
-      const deptId = appeal.scoring_sheets.semester_enrollments.classes.department_id;
-      if (resolver.department_id !== deptId) {
-        throw new ForbiddenException('Sinh viên này không thuộc khoa của bạn');
+    // Nếu là ADVISOR, kiểm tra đúng cố vấn của lớp
+    if (resolver.role === 'ADVISOR') {
+      const classId = appeal.scoring_sheets.semester_enrollments.class_id;
+      const isAdvisor = await prisma.class_roles.findFirst({
+        where: { user_id: resolverId, class_id: classId, role_type: 'ADVISOR', is_active: 1 },
+      });
+      if (!isAdvisor) {
+        throw new ForbiddenException('Bạn không phải cố vấn của lớp này');
       }
     }
 
@@ -448,7 +448,7 @@ export class AppealService {
       await prisma.scoring_sheets.update({
         where: { id: appeal.scoring_sheet_id },
         data: {
-          status: 'SCHOOL_REVIEWING',
+          status: 'ADVISOR_APPROVED',
           advisor_total: totals.advisorTotal,
           final_total: totals.advisorTotal,
           classification: this.getClassification(Number(totals.advisorTotal)) as any,
@@ -506,17 +506,17 @@ export class AppealService {
 
   // =============================================
   // 4. RESOLVE TẤT CẢ PENDING APPEALS TRÊN 1 PHIẾU
-  //    Dùng khi Khoa muốn kết thúc nhanh
+  //    Dùng khi ADVISOR muốn kết thúc nhanh
   //    Các appeal chưa xử lý sẽ bị REJECTED với lý do mặc định
   // =============================================
   async resolveAllAppeals(sheetId: string, resolverId: string, defaultResolution?: string) {
     // 4a. Kiểm tra quyền
     const resolver = await prisma.users.findUnique({
       where: { id: resolverId },
-      select: { role: true, department_id: true },
+      select: { role: true },
     });
 
-    if (!resolver || !['DEPARTMENT', 'SCHOOL_ADMIN'].includes(resolver.role)) {
+    if (!resolver || !['ADVISOR', 'SCHOOL_ADMIN'].includes(resolver.role)) {
       throw new ForbiddenException('Bạn không có quyền xử lý khiếu nại');
     }
 
@@ -526,16 +526,12 @@ export class AppealService {
       select: {
         id: true,
         status: true,
-        semester_enrollments: { select: { user_id: true, classes: { select: { department_id: true } } } },
+        semester_enrollments: { select: { user_id: true } },
       },
     });
 
     if (!sheet) {
       throw new BadRequestException('Không tìm thấy phiếu điểm');
-    }
-
-    if (resolver.role === 'DEPARTMENT' && resolver.department_id !== sheet.semester_enrollments.classes.department_id) {
-       throw new ForbiddenException('Sinh viên này không thuộc khoa của bạn');
     }
 
     if (sheet.status !== 'APPEALING') {
@@ -565,11 +561,11 @@ export class AppealService {
     // 4d. Tính lại tổng điểm
     const totals = await this.recalculateTotals(sheetId);
 
-    // 4e. Chuyển trạng thái phiếu → SCHOOL_REVIEWING
+    // 4e. Chuyển trạng thái phiếu → ADVISOR_APPROVED
     await prisma.scoring_sheets.update({
       where: { id: sheetId },
       data: {
-        status: 'SCHOOL_REVIEWING',
+        status: 'ADVISOR_APPROVED',
         advisor_total: totals.advisorTotal,
         final_total: totals.advisorTotal,
         classification: this.getClassification(Number(totals.advisorTotal)) as any,
@@ -587,7 +583,7 @@ export class AppealService {
           entity_type: 'scoring_sheets',
           entity_id: sheetId,
           old_value: { status: 'APPEALING', pending_count: pendingAppeals.length },
-          new_value: { status: 'SCHOOL_REVIEWING', resolution: resolveMessage },
+          new_value: { status: 'ADVISOR_APPROVED', resolution: resolveMessage },
         },
       });
     } catch (err) {
@@ -615,7 +611,7 @@ export class AppealService {
       message: 'Đã xử lý tất cả khiếu nại',
       data: {
         rejectedCount: pendingAppeals.length,
-        newStatus: 'SCHOOL_REVIEWING',
+        newStatus: 'ADVISOR_APPROVED',
         totals,
       },
     };
