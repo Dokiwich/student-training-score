@@ -18,6 +18,11 @@ model appeals {
   resolution                       String?        @db.Text
   created_at                       DateTime       @default(now()) @db.Timestamp(0)
   resolved_at                      DateTime?      @db.Timestamp(0)
+  dept_decision                    String?        @db.VarChar(20)
+  dept_resolution                  String?        @db.Text
+  dept_resolved_by                 String?        @db.VarChar(36)
+  dept_resolved_at                 DateTime?      @db.Timestamp(0)
+  dept_new_score                   Decimal?       @db.Decimal(5, 1)
   users_appeals_resolved_byTousers users?         @relation("appeals_resolved_byTousers", fields: [resolved_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_appeal_resolver")
   scoring_sheets                   scoring_sheets @relation(fields: [scoring_sheet_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_appeal_sheet")
 
@@ -404,6 +409,7 @@ enum scoring_sheets_status {
 
 enum appeals_status {
   PENDING
+  DEPT_REVIEWED
   ACCEPTED
   REJECTED
 }

@@ -34,9 +34,10 @@ interface AppealItem {
 }
 
 const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> = {
-  PENDING: { label: 'Đang chờ xử lý', bg: '#fef3c7', color: '#d97706' },
-  ACCEPTED: { label: 'Đã chấp nhận', bg: '#ecfdf5', color: '#059669' },
-  REJECTED: { label: 'Đã từ chối', bg: '#fef2f2', color: '#dc2626' },
+  PENDING: { label: 'Chờ Khoa xem xét', bg: '#fef3c7', color: '#d97706' },
+  DEPT_REVIEWED: { label: 'Đã xem xét — Chờ Admin', bg: '#e0e7ff', color: '#4338ca' },
+  ACCEPTED: { label: 'Đã chấp nhận (Admin)', bg: '#ecfdf5', color: '#059669' },
+  REJECTED: { label: 'Đã từ chối (Admin)', bg: '#fef2f2', color: '#dc2626' },
 };
 
 export default function DepartmentAppealsPage() {
@@ -121,6 +122,7 @@ export default function DepartmentAppealsPage() {
   };
 
   const pendingCount = appeals.filter(a => a.status === 'PENDING').length;
+  const deptReviewedCount = appeals.filter(a => a.status === 'DEPT_REVIEWED').length;
 
   return (
     <DashboardLayout
@@ -262,7 +264,7 @@ export default function DepartmentAppealsPage() {
             <div className="modal-content" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
                <div className="modal-header">
                   <h3 className="modal-header-title">
-                     {selectedAppeal.status === 'PENDING' ? 'Xử lý khiếu nại' : 'Chi tiết khiếu nại'}
+                     {selectedAppeal.status === 'PENDING' ? 'Xem xét & Đề xuất cho Admin' : 'Chi tiết khiếu nại'}
                   </h3>
                   <button onClick={() => setSelectedAppeal(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -334,11 +336,11 @@ export default function DepartmentAppealsPage() {
                            <div style={{ display: 'flex', gap: 16 }}>
                               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                                  <input type="radio" name="decision" checked={decision === 'ACCEPTED'} onChange={() => setDecision('ACCEPTED')} style={{ accentColor: '#059669', width: 16, height: 16 }} />
-                                 <span style={{ fontSize: 14, fontWeight: 600, color: '#059669' }}>Chấp nhận & Đổi điểm</span>
+                              <span style={{ fontSize: 14, fontWeight: 600, color: '#059669' }}>Đề xuất chấp nhận & Đổi điểm</span>
                               </label>
                               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                                  <input type="radio" name="decision" checked={decision === 'REJECTED'} onChange={() => setDecision('REJECTED')} style={{ accentColor: '#dc2626', width: 16, height: 16 }} />
-                                 <span style={{ fontSize: 14, fontWeight: 600, color: '#dc2626' }}>Từ chối (Giữ nguyên)</span>
+                                 <span style={{ fontSize: 14, fontWeight: 600, color: '#dc2626' }}>Đề xuất từ chối (Giữ nguyên)</span>
                               </label>
                            </div>
                         </div>
@@ -375,8 +377,12 @@ export default function DepartmentAppealsPage() {
                               disabled={submitting}
                               style={{ background: decision === 'ACCEPTED' ? '#059669' : '#dc2626', borderColor: decision === 'ACCEPTED' ? '#059669' : '#dc2626' }}
                            >
-                              {submitting ? 'Đang xử lý...' : 'Xác nhận xử lý'}
+                              {submitting ? 'Đang gửi...' : 'Đề xuất & Trình lên Admin'}
                            </button>
+                        </div>
+
+                        <div style={{ marginTop: 12, padding: '10px 12px', background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a' }}>
+                           <span style={{ fontSize: 12, color: '#92400e' }}>⚠️ Lưu ý: Đề xuất của Khoa sẽ được gửi lên Admin trường để phê duyệt cuối cùng. Khoa không trực tiếp thay đổi điểm.</span>
                         </div>
                      </>
                   ) : (

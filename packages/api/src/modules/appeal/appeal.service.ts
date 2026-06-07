@@ -136,6 +136,16 @@ export class AppealService {
         }
       }
 
+      // Lấy tên người duyệt Khoa
+      let deptResolverName: string | null = null;
+      if (a.dept_resolved_by) {
+        const deptResolver = await prisma.users.findUnique({
+          where: { id: a.dept_resolved_by },
+          select: { full_name: true },
+        });
+        deptResolverName = deptResolver?.full_name || null;
+      }
+
       return {
         id: a.id,
         reason: a.reason,
@@ -150,6 +160,12 @@ export class AppealService {
         resolvedBy: a.users_appeals_resolved_byTousers?.full_name || null,
         resolvedAt: a.resolved_at?.toISOString() || null,
         createdAt: a.created_at.toISOString(),
+        // Thông tin duyệt cấp Khoa
+        deptDecision: a.dept_decision || null,
+        deptResolution: a.dept_resolution || null,
+        deptResolvedBy: deptResolverName,
+        deptResolvedAt: a.dept_resolved_at?.toISOString() || null,
+        deptNewScore: a.dept_new_score != null ? Number(a.dept_new_score) : null,
         sheetId: sheet.id,
         sheetStatus: sheet.status,
         studentName: enrollment.users.full_name,
@@ -211,11 +227,11 @@ export class AppealService {
       );
     }
 
-    // Kiểm tra trùng: không tạo appeal mới nếu tiêu chí đã có PENDING
+    // Kiểm tra trùng: không tạo appeal mới nếu tiêu chí đã có PENDING hoặc DEPT_REVIEWED
     for (const criteriaId of criteriaIds) {
       const evidenceNote = `${appealType}:${criteriaId}`;
       const existing = await prisma.appeals.findFirst({
-        where: { scoring_sheet_id: sheetId, status: 'PENDING', evidence_note: evidenceNote },
+        where: { scoring_sheet_id: sheetId, status: { in: ['PENDING', 'DEPT_REVIEWED'] }, evidence_note: evidenceNote },
       });
       if (existing) {
         throw new BadRequestException(
@@ -304,10 +320,10 @@ export class AppealService {
   }
 
   // =============================================
-  // 3. RESOLVE MỘT KHIẾU NẠI (DEPARTMENT / SCHOOL_ADMIN)
-  //    ACCEPTED → cập nhật điểm nếu có newScore
-  //    REJECTED → giữ nguyên điểm
-  //    Khi hết PENDING → chuyển phiếu về SCHOOL_REVIEWING
+  // 3. RESOLVE MỘT KHIẾU NẠI — QUY TRÌNH 2 CẤP
+  //    Bước 1: DEPARTMENT xem xét → DEPT_REVIEWED (lưu đề xuất)
+  //    Bước 2: SCHOOL_ADMIN phê duyệt cuối → ACCEPTED/REJECTED
+  //    Chỉ Admin mới được cập nhật điểm chính thức
   // =============================================
   async resolveAppeal(
     appealId: string,
@@ -336,10 +352,6 @@ export class AppealService {
       throw new BadRequestException('Không tìm thấy khiếu nại');
     }
 
-    if (appeal.status !== 'PENDING') {
-      throw new BadRequestException('Khiếu nại này đã được xử lý rồi');
-    }
-
     // 3b. Kiểm tra quyền resolver
     const resolver = await prisma.users.findUnique({
       where: { id: resolverId },
@@ -350,14 +362,6 @@ export class AppealService {
       throw new ForbiddenException('Bạn không có quyền xử lý khiếu nại (Chỉ Khoa hoặc Admin trường)');
     }
 
-    // Nếu là DEPARTMENT, kiểm tra đúng khoa của lớp
-    if (resolver.role === 'DEPARTMENT') {
-      const deptId = appeal.scoring_sheets.semester_enrollments.classes.department_id;
-      if (resolver.department_id !== deptId) {
-        throw new ForbiddenException('Sinh viên này không thuộc khoa của bạn');
-      }
-    }
-
     if (!resolution?.trim()) {
       throw new BadRequestException('Vui lòng nhập nội dung phản hồi');
     }
@@ -366,148 +370,253 @@ export class AppealService {
       throw new BadRequestException('Quyết định không hợp lệ (ACCEPTED hoặc REJECTED)');
     }
 
-    // 3c. Cập nhật appeal
-    await prisma.appeals.update({
-      where: { id: appealId },
-      data: {
-        status: decision,
-        resolved_by: resolverId,
-        resolution: resolution.trim(),
-        resolved_at: new Date(),
-      },
-    });
+    // ========== NHÁNH 1: KHOA (DEPARTMENT) XEM XÉT ==========
+    if (resolver.role === 'DEPARTMENT') {
+      if (appeal.status !== 'PENDING') {
+        throw new BadRequestException('Khiếu nại này đã được xem xét rồi');
+      }
 
-    // 3d. Nếu ACCEPTED + có newScore → cập nhật điểm
-    if (decision === 'ACCEPTED' && newScore != null && appeal.evidence_note) {
-      const [type, criteriaIdStr] = appeal.evidence_note.split(':');
-      const criteriaId = parseInt(criteriaIdStr);
-      const scorerRole = type === 'class' ? 'CLASS_COMMITTEE' : 'ADVISOR';
+      // Kiểm tra đúng khoa
+      const deptId = appeal.scoring_sheets.semester_enrollments.classes.department_id;
+      if (resolver.department_id !== deptId) {
+        throw new ForbiddenException('Sinh viên này không thuộc khoa của bạn');
+      }
 
-      if (!isNaN(criteriaId)) {
-        const scoreDetail = await prisma.score_details.findUnique({
-          where: {
-            scoring_sheet_id_criteria_id: {
-              scoring_sheet_id: appeal.scoring_sheet_id,
-              criteria_id: criteriaId,
-            },
+      // Cập nhật appeal → DEPT_REVIEWED (chưa chốt, chỉ ghi đề xuất)
+      await prisma.appeals.update({
+        where: { id: appealId },
+        data: {
+          status: 'DEPT_REVIEWED',
+          dept_decision: decision,
+          dept_resolution: resolution.trim(),
+          dept_resolved_by: resolverId,
+          dept_resolved_at: new Date(),
+          dept_new_score: newScore != null ? newScore : null,
+        },
+      });
+
+      // Audit log
+      try {
+        await prisma.audit_logs.create({
+          data: {
+            id: randomUUID(),
+            actor_id: resolverId,
+            action: 'DEPT_REVIEW_APPEAL',
+            entity_type: 'appeals',
+            entity_id: appealId,
+            old_value: { status: 'PENDING' },
+            new_value: { status: 'DEPT_REVIEWED', dept_decision: decision, dept_new_score: newScore ?? null },
           },
-          include: { score_entries: { where: { scorer_role: scorerRole as any } } },
         });
+      } catch (err) {
+        console.warn('Lỗi khi ghi audit log:', err);
+      }
 
-        if (scoreDetail) {
-          const oldScore = scoreDetail.score_entries[0]?.score != null
-            ? Number(scoreDetail.score_entries[0].score)
-            : null;
+      // Notification cho Admin trường
+      try {
+        const admins = await prisma.users.findMany({
+          where: { role: 'SCHOOL_ADMIN' },
+          select: { id: true },
+        });
+        const studentId = appeal.scoring_sheets.semester_enrollments.user_id;
+        const student = await prisma.users.findUnique({ where: { id: studentId }, select: { full_name: true } });
+        const decisionText = decision === 'ACCEPTED' ? 'đề xuất chấp nhận' : 'đề xuất từ chối';
 
-          // Upsert score entry
-          await prisma.score_entries.upsert({
-            where: {
-              score_detail_id_scorer_role: {
-                score_detail_id: scoreDetail.id,
-                scorer_role: scorerRole as any,
-              },
-            },
-            update: { score: newScore, scored_at: new Date() },
-            create: {
+        for (const admin of admins) {
+          await prisma.notifications.create({
+            data: {
               id: randomUUID(),
-              score_detail_id: scoreDetail.id,
-              scorer_role: scorerRole as any,
-              score: newScore,
+              user_id: admin.id,
+              type: 'APPEAL_SUBMITTED',
+              title: 'Khoa đã xem xét khiếu nại — Cần Admin phê duyệt',
+              content: `Khoa đã ${decisionText} khiếu nại của SV ${student?.full_name || ''}. Vui lòng phê duyệt cuối cùng.`,
+              is_read: 0,
             },
           });
+        }
+      } catch (err) {
+        console.warn('Lỗi khi gửi thông báo cho Admin:', err);
+      }
 
-          // Ghi score_adjustment_logs
-          if (oldScore != null && oldScore !== newScore) {
-            try {
-              await prisma.score_adjustment_logs.create({
-                data: {
-                  id: randomUUID(),
+      // Notification cho sinh viên
+      try {
+        const studentId = appeal.scoring_sheets.semester_enrollments.user_id;
+        const decisionText = decision === 'ACCEPTED' ? 'đề xuất chấp nhận' : 'đề xuất từ chối';
+        await prisma.notifications.create({
+          data: {
+            id: randomUUID(),
+            user_id: studentId,
+            type: 'APPEAL_RESOLVED',
+            title: `Khoa đã xem xét khiếu nại (${decisionText})`,
+            content: `Khoa đã ${decisionText} khiếu nại của bạn. Đang chờ Admin trường phê duyệt cuối cùng. Phản hồi Khoa: ${resolution.trim()}`,
+            is_read: 0,
+          },
+        });
+      } catch (err) {
+        console.warn('Lỗi khi gửi thông báo:', err);
+      }
+
+      return {
+        message: `Đã ${decision === 'ACCEPTED' ? 'đề xuất chấp nhận' : 'đề xuất từ chối'} khiếu nại. Đang chờ Admin trường phê duyệt.`,
+        data: { appealId, decision: 'DEPT_REVIEWED', deptDecision: decision },
+      };
+    }
+
+    // ========== NHÁNH 2: ADMIN TRƯỜNG PHÊ DUYỆT CUỐI ==========
+    if (resolver.role === 'SCHOOL_ADMIN') {
+      // Admin có thể duyệt cả PENDING (bỏ qua Khoa) lẫn DEPT_REVIEWED
+      if (appeal.status !== 'PENDING' && appeal.status !== 'DEPT_REVIEWED') {
+        throw new BadRequestException('Khiếu nại này đã được xử lý rồi');
+      }
+
+      // Cập nhật appeal → ACCEPTED / REJECTED (chốt sổ)
+      await prisma.appeals.update({
+        where: { id: appealId },
+        data: {
+          status: decision,
+          resolved_by: resolverId,
+          resolution: resolution.trim(),
+          resolved_at: new Date(),
+        },
+      });
+
+      // Nếu ACCEPTED + có newScore → cập nhật điểm chính thức
+      if (decision === 'ACCEPTED' && newScore != null && appeal.evidence_note) {
+        const [type, criteriaIdStr] = appeal.evidence_note.split(':');
+        const criteriaId = parseInt(criteriaIdStr);
+        const scorerRole = type === 'class' ? 'CLASS_COMMITTEE' : 'ADVISOR';
+
+        if (!isNaN(criteriaId)) {
+          const scoreDetail = await prisma.score_details.findUnique({
+            where: {
+              scoring_sheet_id_criteria_id: {
+                scoring_sheet_id: appeal.scoring_sheet_id,
+                criteria_id: criteriaId,
+              },
+            },
+            include: { score_entries: { where: { scorer_role: scorerRole as any } } },
+          });
+
+          if (scoreDetail) {
+            const oldScore = scoreDetail.score_entries[0]?.score != null
+              ? Number(scoreDetail.score_entries[0].score)
+              : null;
+
+            // Upsert score entry
+            await prisma.score_entries.upsert({
+              where: {
+                score_detail_id_scorer_role: {
                   score_detail_id: scoreDetail.id,
-                  adjusted_by_id: resolverId,
-                  old_score: oldScore,
-                  new_score: newScore,
-                  reason: `Phúc khảo: ${resolution.trim()}`,
+                  scorer_role: scorerRole as any,
                 },
-              });
-            } catch (err) {
-              console.warn('Lỗi khi ghi score adjustment log:', err);
+              },
+              update: { score: newScore, scored_at: new Date() },
+              create: {
+                id: randomUUID(),
+                score_detail_id: scoreDetail.id,
+                scorer_role: scorerRole as any,
+                score: newScore,
+              },
+            });
+
+            // Ghi score_adjustment_logs
+            if (oldScore != null && oldScore !== newScore) {
+              try {
+                await prisma.score_adjustment_logs.create({
+                  data: {
+                    id: randomUUID(),
+                    score_detail_id: scoreDetail.id,
+                    adjusted_by_id: resolverId,
+                    old_score: oldScore,
+                    new_score: newScore,
+                    reason: `Phúc khảo (Admin): ${resolution.trim()}`,
+                  },
+                });
+              } catch (err) {
+                console.warn('Lỗi khi ghi score adjustment log:', err);
+              }
             }
           }
         }
       }
-    }
 
-    // 3e. Kiểm tra PENDING còn lại → nếu hết thì chuyển trạng thái
-    const pendingCount = await prisma.appeals.count({
-      where: { scoring_sheet_id: appeal.scoring_sheet_id, status: 'PENDING' },
-    });
-
-    let sheetTransitioned = false;
-    if (pendingCount === 0) {
-      const totals = await this.recalculateTotals(appeal.scoring_sheet_id);
-      await prisma.scoring_sheets.update({
-        where: { id: appeal.scoring_sheet_id },
-        data: {
-          status: 'SCHOOL_REVIEWING',
-          advisor_total: totals.advisorTotal,
-          final_total: totals.advisorTotal,
-          classification: this.getClassification(Number(totals.advisorTotal)) as any,
-          updated_at: new Date(),
+      // Kiểm tra còn PENDING/DEPT_REVIEWED không → nếu hết thì chuyển trạng thái phiếu
+      const remainingCount = await prisma.appeals.count({
+        where: {
+          scoring_sheet_id: appeal.scoring_sheet_id,
+          status: { in: ['PENDING', 'DEPT_REVIEWED'] },
         },
       });
-      sheetTransitioned = true;
-    }
 
-    // 3f. Audit log
-    try {
-      await prisma.audit_logs.create({
+      let sheetTransitioned = false;
+      if (remainingCount === 0) {
+        const totals = await this.recalculateTotals(appeal.scoring_sheet_id);
+        await prisma.scoring_sheets.update({
+          where: { id: appeal.scoring_sheet_id },
+          data: {
+            status: 'SCHOOL_REVIEWING',
+            advisor_total: totals.advisorTotal,
+            final_total: totals.advisorTotal,
+            classification: this.getClassification(Number(totals.advisorTotal)) as any,
+            updated_at: new Date(),
+          },
+        });
+        sheetTransitioned = true;
+      }
+
+      // Audit log
+      try {
+        await prisma.audit_logs.create({
+          data: {
+            id: randomUUID(),
+            actor_id: resolverId,
+            action: 'ADMIN_RESOLVE_APPEAL',
+            entity_type: 'appeals',
+            entity_id: appealId,
+            old_value: { status: appeal.status },
+            new_value: { status: decision, resolution: resolution.trim(), new_score: newScore ?? null },
+          },
+        });
+      } catch (err) {
+        console.warn('Lỗi khi ghi audit log:', err);
+      }
+
+      // Notification cho sinh viên
+      try {
+        const studentId = appeal.scoring_sheets.semester_enrollments.user_id;
+        const decisionText = decision === 'ACCEPTED' ? 'chấp nhận' : 'từ chối';
+        await prisma.notifications.create({
+          data: {
+            id: randomUUID(),
+            user_id: studentId,
+            type: 'APPEAL_RESOLVED',
+            title: `Khiếu nại đã được Admin trường ${decisionText}`,
+            content: `Khiếu nại của bạn đã được Admin trường ${decisionText} (quyết định cuối cùng). Phản hồi: ${resolution.trim()}`,
+            is_read: 0,
+          },
+        });
+      } catch (err) {
+        console.warn('Lỗi khi gửi thông báo:', err);
+      }
+
+      return {
+        message: `Đã ${decision === 'ACCEPTED' ? 'chấp nhận' : 'từ chối'} khiếu nại (Quyết định cuối cùng)`,
         data: {
-          id: randomUUID(),
-          actor_id: resolverId,
-          action: 'RESOLVE_APPEAL',
-          entity_type: 'appeals',
-          entity_id: appealId,
-          old_value: { status: 'PENDING' },
-          new_value: { status: decision, resolution: resolution.trim(), new_score: newScore ?? null },
+          appealId,
+          decision,
+          pendingRemaining: remainingCount,
+          sheetTransitioned,
         },
-      });
-    } catch (err) {
-      console.warn('Lỗi khi ghi audit log:', err);
+      };
     }
 
-    // 3g. Notification cho sinh viên
-    try {
-      const studentId = appeal.scoring_sheets.semester_enrollments.user_id;
-      const decisionText = decision === 'ACCEPTED' ? 'chấp nhận' : 'từ chối';
-      await prisma.notifications.create({
-        data: {
-          id: randomUUID(),
-          user_id: studentId,
-          type: 'APPEAL_RESOLVED',
-          title: `Khiếu nại đã được ${decisionText}`,
-          content: `Khiếu nại của bạn đã được ${decisionText}. Phản hồi: ${resolution.trim()}`,
-          is_read: 0,
-        },
-      });
-    } catch (err) {
-      console.warn('Lỗi khi gửi thông báo:', err);
-    }
-
-    return {
-      message: `Đã ${decision === 'ACCEPTED' ? 'chấp nhận' : 'từ chối'} khiếu nại`,
-      data: {
-        appealId,
-        decision,
-        pendingRemaining: pendingCount,
-        sheetTransitioned,
-      },
-    };
+    throw new ForbiddenException('Không xác định được quyền xử lý');
   }
 
   // =============================================
-  // 4. RESOLVE TẤT CẢ PENDING APPEALS TRÊN 1 PHIẾU
-  //    Dùng khi Khoa muốn kết thúc nhanh
-  //    Các appeal chưa xử lý sẽ bị REJECTED với lý do mặc định
+  // 4. RESOLVE TẤT CẢ APPEALS TRÊN 1 PHIẾU — QUY TRÌNH 2 CẤP
+  //    DEPARTMENT → chuyển tất cả PENDING → DEPT_REVIEWED (đề xuất từ chối)
+  //    SCHOOL_ADMIN → chốt tất cả PENDING/DEPT_REVIEWED → REJECTED
   // =============================================
   async resolveAllAppeals(sheetId: string, resolverId: string, defaultResolution?: string) {
     // 4a. Kiểm tra quyền
@@ -534,25 +643,71 @@ export class AppealService {
       throw new BadRequestException('Không tìm thấy phiếu điểm');
     }
 
-    if (resolver.role === 'DEPARTMENT' && resolver.department_id !== sheet.semester_enrollments.classes.department_id) {
-       throw new ForbiddenException('Sinh viên này không thuộc khoa của bạn');
-    }
-
     if (sheet.status !== 'APPEALING') {
       throw new BadRequestException('Phiếu không ở trạng thái khiếu nại (APPEALING)');
     }
 
-    // 4c. Tìm và reject tất cả PENDING appeals
-    const pendingAppeals = await prisma.appeals.findMany({
-      where: { scoring_sheet_id: sheetId, status: 'PENDING' },
+    const resolveMessage = defaultResolution?.trim() || 'Đã xem xét, không điều chỉnh điểm';
+
+    // ========== NHÁNH DEPARTMENT ==========
+    if (resolver.role === 'DEPARTMENT') {
+      if (resolver.department_id !== sheet.semester_enrollments.classes.department_id) {
+        throw new ForbiddenException('Sinh viên này không thuộc khoa của bạn');
+      }
+
+      const pendingAppeals = await prisma.appeals.findMany({
+        where: { scoring_sheet_id: sheetId, status: 'PENDING' },
+        select: { id: true },
+      });
+
+      if (pendingAppeals.length > 0) {
+        await prisma.appeals.updateMany({
+          where: { scoring_sheet_id: sheetId, status: 'PENDING' },
+          data: {
+            status: 'DEPT_REVIEWED',
+            dept_decision: 'REJECTED',
+            dept_resolution: resolveMessage,
+            dept_resolved_by: resolverId,
+            dept_resolved_at: new Date(),
+          },
+        });
+      }
+
+      // Thông báo cho Admin
+      try {
+        const admins = await prisma.users.findMany({ where: { role: 'SCHOOL_ADMIN' }, select: { id: true } });
+        for (const admin of admins) {
+          await prisma.notifications.create({
+            data: {
+              id: randomUUID(),
+              user_id: admin.id,
+              type: 'APPEAL_SUBMITTED',
+              title: 'Khoa đã xem xét tất cả khiếu nại — Cần Admin phê duyệt',
+              content: `Khoa đã đề xuất từ chối ${pendingAppeals.length} khiếu nại trên phiếu. Vui lòng phê duyệt cuối cùng.`,
+              is_read: 0,
+            },
+          });
+        }
+      } catch (err) {
+        console.warn('Lỗi khi gửi thông báo cho Admin:', err);
+      }
+
+      return {
+        message: `Đã đề xuất từ chối ${pendingAppeals.length} khiếu nại. Đang chờ Admin trường phê duyệt.`,
+        data: { reviewedCount: pendingAppeals.length, newStatus: 'DEPT_REVIEWED' },
+      };
+    }
+
+    // ========== NHÁNH SCHOOL_ADMIN ==========
+    // Admin chốt tất cả PENDING + DEPT_REVIEWED còn lại
+    const unresolved = await prisma.appeals.findMany({
+      where: { scoring_sheet_id: sheetId, status: { in: ['PENDING', 'DEPT_REVIEWED'] } },
       select: { id: true },
     });
 
-    const resolveMessage = defaultResolution?.trim() || 'Đã xem xét, không điều chỉnh điểm';
-
-    if (pendingAppeals.length > 0) {
+    if (unresolved.length > 0) {
       await prisma.appeals.updateMany({
-        where: { scoring_sheet_id: sheetId, status: 'PENDING' },
+        where: { scoring_sheet_id: sheetId, status: { in: ['PENDING', 'DEPT_REVIEWED'] } },
         data: {
           status: 'REJECTED',
           resolved_by: resolverId,
@@ -562,10 +717,10 @@ export class AppealService {
       });
     }
 
-    // 4d. Tính lại tổng điểm
+    // Tính lại tổng điểm
     const totals = await this.recalculateTotals(sheetId);
 
-    // 4e. Chuyển trạng thái phiếu → SCHOOL_REVIEWING
+    // Chuyển trạng thái phiếu → SCHOOL_REVIEWING
     await prisma.scoring_sheets.update({
       where: { id: sheetId },
       data: {
@@ -577,16 +732,16 @@ export class AppealService {
       },
     });
 
-    // 4f. Audit log
+    // Audit log
     try {
       await prisma.audit_logs.create({
         data: {
           id: randomUUID(),
           actor_id: resolverId,
-          action: 'RESOLVE_ALL_APPEALS',
+          action: 'ADMIN_RESOLVE_ALL_APPEALS',
           entity_type: 'scoring_sheets',
           entity_id: sheetId,
-          old_value: { status: 'APPEALING', pending_count: pendingAppeals.length },
+          old_value: { status: 'APPEALING', unresolved_count: unresolved.length },
           new_value: { status: 'SCHOOL_REVIEWING', resolution: resolveMessage },
         },
       });
@@ -594,7 +749,7 @@ export class AppealService {
       console.warn('Lỗi khi ghi audit log:', err);
     }
 
-    // 4g. Notification cho sinh viên
+    // Notification cho sinh viên
     try {
       const studentId = sheet.semester_enrollments.user_id;
       await prisma.notifications.create({
@@ -602,8 +757,8 @@ export class AppealService {
           id: randomUUID(),
           user_id: studentId,
           type: 'APPEAL_RESOLVED',
-          title: 'Tất cả khiếu nại đã được xử lý',
-          content: `Tất cả khiếu nại trên phiếu đã được xem xét và xử lý hoàn tất. Phiếu đã chuyển về trạng thái chờ duyệt.`,
+          title: 'Tất cả khiếu nại đã được xử lý (Admin)',
+          content: `Admin trường đã xử lý tất cả khiếu nại trên phiếu (quyết định cuối cùng). Phiếu đã chuyển về trạng thái chờ duyệt.`,
           is_read: 0,
         },
       });
@@ -612,9 +767,9 @@ export class AppealService {
     }
 
     return {
-      message: 'Đã xử lý tất cả khiếu nại',
+      message: 'Đã xử lý tất cả khiếu nại (quyết định cuối cùng)',
       data: {
-        rejectedCount: pendingAppeals.length,
+        rejectedCount: unresolved.length,
         newStatus: 'SCHOOL_REVIEWING',
         totals,
       },

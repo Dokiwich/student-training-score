@@ -34,9 +34,10 @@ interface AppealItem {
 }
 
 const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> = {
-  PENDING: { label: 'Đang chờ xử lý', bg: '#fef3c7', color: '#d97706' },
-  ACCEPTED: { label: 'Đã chấp nhận', bg: '#ecfdf5', color: '#059669' },
-  REJECTED: { label: 'Đã từ chối', bg: '#fef2f2', color: '#dc2626' },
+  PENDING: { label: 'Chờ Khoa xem xét', bg: '#fef3c7', color: '#d97706' },
+  DEPT_REVIEWED: { label: 'Khoa đã xem xét — Chờ Admin', bg: '#e0e7ff', color: '#4338ca' },
+  ACCEPTED: { label: 'Đã chấp nhận (Admin)', bg: '#ecfdf5', color: '#059669' },
+  REJECTED: { label: 'Đã từ chối (Admin)', bg: '#fef2f2', color: '#dc2626' },
 };
 
 export default function AdvisorAppealsPage() {

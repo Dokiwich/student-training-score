@@ -34,7 +34,8 @@ interface AppealItem {
 }
 
 const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> = {
-  PENDING: { label: 'Đang chờ xử lý', bg: '#fef3c7', color: '#d97706' },
+  PENDING: { label: 'Chờ Khoa xem xét', bg: '#fef3c7', color: '#d97706' },
+  DEPT_REVIEWED: { label: 'Khoa đã xem xét — Chờ Admin', bg: '#e0e7ff', color: '#4338ca' },
   ACCEPTED: { label: 'Đã chấp nhận', bg: '#ecfdf5', color: '#059669' },
   REJECTED: { label: 'Đã từ chối', bg: '#fef2f2', color: '#dc2626' },
 };
@@ -75,9 +76,16 @@ export default function AdminAppealsPage() {
 
   const handleOpenResolve = (appeal: AppealItem) => {
     setSelectedAppeal(appeal);
-    setDecision('ACCEPTED');
+    // Nếu Khoa đã xem xét, pre-fill theo đề xuất của Khoa
+    const a = appeal as any;
+    if (a.deptDecision) {
+      setDecision(a.deptDecision === 'ACCEPTED' ? 'ACCEPTED' : 'REJECTED');
+      setNewScore(a.deptNewScore ?? appeal.currentScores?.[appeal.appealType === 'class' ? 'CLASS_COMMITTEE' : 'ADVISOR'] ?? '');
+    } else {
+      setDecision('ACCEPTED');
+      setNewScore(appeal.currentScores?.[appeal.appealType === 'class' ? 'CLASS_COMMITTEE' : 'ADVISOR'] ?? '');
+    }
     setResolution('');
-    setNewScore(appeal.currentScores?.[appeal.appealType === 'class' ? 'CLASS_COMMITTEE' : 'ADVISOR'] ?? '');
   };
 
   const handleResolve = async () => {
@@ -121,6 +129,8 @@ export default function AdminAppealsPage() {
   };
 
   const pendingCount = appeals.filter(a => a.status === 'PENDING').length;
+  const deptReviewedCount = appeals.filter(a => a.status === 'DEPT_REVIEWED').length;
+  const needsActionCount = pendingCount + deptReviewedCount;
 
   return (
     <DashboardLayout
@@ -135,8 +145,8 @@ export default function AdminAppealsPage() {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>CẦN XỬ LÝ</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{pendingCount}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>CẦN PHÊ DUYỆT</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{needsActionCount}</div>
             </div>
           </div>
           <div className="dashboard-card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -145,7 +155,7 @@ export default function AdminAppealsPage() {
             </div>
             <div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>ĐÃ XỬ LÝ</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{appeals.length - pendingCount}</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{appeals.length - needsActionCount}</div>
             </div>
           </div>
           <div className="dashboard-card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -243,7 +253,7 @@ export default function AdminAppealsPage() {
                             style={{ padding: '4px 12px', fontSize: 12 }}
                             onClick={() => handleOpenResolve(a)}
                           >
-                            {a.status === 'PENDING' ? 'Xử lý' : 'Chi tiết'}
+                            {(a.status === 'PENDING' || a.status === 'DEPT_REVIEWED') ? 'Phê duyệt' : 'Xem chi tiết'}
                           </button>
                         </td>
                       </tr>
@@ -262,7 +272,7 @@ export default function AdminAppealsPage() {
           <div className="modal-content" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-header-title">
-                {selectedAppeal.status === 'PENDING' ? 'Xử lý khiếu nại' : 'Chi tiết khiếu nại'}
+                {(selectedAppeal.status === 'PENDING' || selectedAppeal.status === 'DEPT_REVIEWED') ? 'Phê duyệt khiếu nại (Quyết định cuối cùng)' : 'Chi tiết khiếu nại'}
               </h3>
               <button onClick={() => setSelectedAppeal(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -327,10 +337,41 @@ export default function AdminAppealsPage() {
                 </div>
               </div>
 
-              {selectedAppeal.status === 'PENDING' ? (
+              {/* Hiển thị đề xuất của Khoa nếu đã xem xét */}
+              {(selectedAppeal as any).deptDecision && (
+                <div style={{ marginBottom: 20, padding: 16, background: '#eef2ff', borderRadius: 10, border: '1px solid #c7d2fe' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#4338ca', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    Đề xuất của Khoa
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
+                      background: (selectedAppeal as any).deptDecision === 'ACCEPTED' ? '#ecfdf5' : '#fef2f2',
+                      color: (selectedAppeal as any).deptDecision === 'ACCEPTED' ? '#059669' : '#dc2626',
+                    }}>
+                      {(selectedAppeal as any).deptDecision === 'ACCEPTED' ? 'Đề xuất chấp nhận' : 'Đề xuất từ chối'}
+                    </span>
+                    {(selectedAppeal as any).deptNewScore != null && (
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#4338ca' }}>
+                        Điểm đề xuất: <strong>{(selectedAppeal as any).deptNewScore}</strong>
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 13, color: '#312e81' }}>
+                    <strong>Phản hồi Khoa:</strong> {(selectedAppeal as any).deptResolution}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#6366f1', marginTop: 6 }}>
+                    Người xem xét: <strong>{(selectedAppeal as any).deptResolvedBy}</strong>
+                    {(selectedAppeal as any).deptResolvedAt && ` — ${new Date((selectedAppeal as any).deptResolvedAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+                  </div>
+                </div>
+              )}
+
+              {(selectedAppeal.status === 'PENDING' || selectedAppeal.status === 'DEPT_REVIEWED') ? (
                 <>
                   <div style={{ marginBottom: 20 }}>
-                    <label className="form-label">Quyết định *</label>
+                    <label className="form-label">Quyết định cuối cùng *</label>
                     <div style={{ display: 'flex', gap: 16 }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                         <input type="radio" name="decision" checked={decision === 'ACCEPTED'} onChange={() => setDecision('ACCEPTED')} style={{ accentColor: '#059669', width: 16, height: 16 }} />
@@ -357,12 +398,12 @@ export default function AdminAppealsPage() {
                   )}
 
                   <div style={{ marginBottom: 20 }}>
-                    <label className="form-label">Phản hồi cho sinh viên *</label>
+                    <label className="form-label">Phản hồi cho sinh viên (Admin) *</label>
                     <textarea
                       className="form-input"
                       value={resolution}
                       onChange={e => setResolution(e.target.value)}
-                      placeholder="Nhập nội dung phản hồi..."
+                      placeholder="Nhập nội dung phản hồi cuối cùng..."
                       rows={3}
                     />
                   </div>
@@ -375,7 +416,7 @@ export default function AdminAppealsPage() {
                       disabled={submitting}
                       style={{ background: decision === 'ACCEPTED' ? '#059669' : '#dc2626', borderColor: decision === 'ACCEPTED' ? '#059669' : '#dc2626' }}
                     >
-                      {submitting ? 'Đang xử lý...' : 'Xác nhận xử lý'}
+                      {submitting ? 'Đang xử lý...' : 'Phê duyệt cuối cùng'}
                     </button>
                   </div>
                 </>
@@ -390,7 +431,7 @@ export default function AdminAppealsPage() {
                       {STATUS_MAP[selectedAppeal.status]?.label}
                     </span>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      bởi <strong>{selectedAppeal.resolvedBy}</strong> vào ngày {new Date(selectedAppeal.resolvedAt!).toLocaleDateString('vi-VN')}
+                      bởi <strong>{selectedAppeal.resolvedBy}</strong> vào ngày {selectedAppeal.resolvedAt ? new Date(selectedAppeal.resolvedAt).toLocaleDateString('vi-VN') : '—'}
                     </span>
                   </div>
                   <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>

@@ -449,6 +449,36 @@ export class ScoringService {
 
     const formStatus = workflowStepMap[form.status] || 'DRAFT';
 
+    const enrollment = await prisma.semester_enrollments.findUnique({
+      where: { id: sheet.enrollment_id }
+    });
+    const actualSemesterId = enrollment?.semester_id || semesterId;
+
+    const studentUser = await prisma.users.findUnique({
+      where: { id: studentId },
+      include: {
+        semester_enrollments: {
+          where: { semester_id: actualSemesterId },
+          include: {
+            classes: {
+              include: { departments: true }
+            }
+          }
+        }
+      }
+    });
+
+    const semesterData = actualSemesterId ? await prisma.semesters.findUnique({
+      where: { id: actualSemesterId }
+    }) : null;
+
+    const studentInfo = {
+      name: studentUser?.full_name || '',
+      studentId: studentUser?.student_id || '',
+      className: studentUser?.semester_enrollments?.[0]?.classes?.name || '',
+      departmentName: studentUser?.semester_enrollments?.[0]?.classes?.departments?.name || '',
+    };
+
     return {
       message: 'Lấy danh sách điểm thành công',
       data: scores,
@@ -457,6 +487,8 @@ export class ScoringService {
       formStatusDetail: form.status,
       currentStep: form.current_step,
       rejectionReason: form.rejection_reason || null,
+      studentInfo,
+      semesterName: semesterData ? `Học kỳ ${semesterData.name} - Năm học ${semesterData.academic_year}` : '',
       totals: {
         student: form.student_total,
         class: form.class_total,
