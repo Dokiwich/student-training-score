@@ -312,8 +312,46 @@ export default function StudentAppealsPage() {
                     {rootCriteria.map(parent => {
                       const isExpanded = expandedParents.has(parent.id);
                       const children = getChildren(parent.id);
-                      if (children.length === 0) return null; // Only show parents that have children
+                      
+                      if (children.length === 0) {
+                        // Root criteria without children -> Render as selectable item
+                        const isSelected = selectedCriteriaIds.has(parent.id);
+                        return (
+                          <div key={parent.id} style={{ borderBottom: '1px solid var(--border)', padding: '8px 16px', background: '#fff' }}>
+                            <div 
+                              onClick={() => toggleSelectedCriteria(parent.id)}
+                              style={{
+                                padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
+                                border: isSelected ? '2px solid var(--accent)' : '1px solid var(--border)',
+                                background: isSelected ? 'var(--accent-light)' : '#f8fafc',
+                                display: 'flex', alignItems: 'center', gap: 12
+                              }}
+                            >
+                              <input 
+                                type="checkbox" 
+                                checked={isSelected} 
+                                onChange={() => {}}
+                                style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
+                              />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  [{parent.code}] {parent.content}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'class' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>BCS chấm</div>
+                                <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'class' ? '#dc2626' : 'var(--text-primary)' }}>{parent.classScore ?? '—'}</div>
+                              </div>
+                              <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>CVHT chấm</div>
+                                <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)' }}>{parent.advisorScore ?? '—'}</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
 
+                      // Root criteria with children -> Render as accordion
                       return (
                         <div key={parent.id} style={{ borderBottom: '1px solid var(--border)' }}>
                           <div 
@@ -348,16 +386,21 @@ export default function StudentAppealsPage() {
                                     <input 
                                       type="checkbox" 
                                       checked={isSelected} 
-                                      readOnly
-                                      style={{ margin: 0, cursor: 'pointer', width: 16, height: 16, accentColor: 'var(--accent)' }}
+                                      onChange={() => {}}
+                                      style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
                                     />
                                     <div style={{ flex: 1 }}>
                                       <div style={{ fontSize: 13, fontWeight: isSelected ? 600 : 500, color: 'var(--text-primary)' }}>
                                         [{child.code}] {child.content}
                                       </div>
-                                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                        Tối đa: {child.max_points} điểm
-                                      </div>
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'class' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>BCS chấm</div>
+                                      <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'class' ? '#dc2626' : 'var(--text-primary)' }}>{child.classScore ?? '—'}</div>
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>CVHT chấm</div>
+                                      <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)' }}>{child.advisorScore ?? '—'}</div>
                                     </div>
                                   </div>
                                 );

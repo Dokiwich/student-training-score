@@ -39,7 +39,7 @@ const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> =
   REJECTED: { label: 'Đã từ chối', bg: '#fef2f2', color: '#dc2626' },
 };
 
-export default function AdminAppealsPage() {
+export default function DepartmentAppealsPage() {
   const { data: session } = useSession();
   const [appeals, setAppeals] = useState<AppealItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,8 +124,8 @@ export default function AdminAppealsPage() {
 
   return (
     <DashboardLayout
-      pageTitle="Quản lý khiếu nại (Admin)"
-      pageSubtitle="Giám sát và xét duyệt các khiếu nại về điểm rèn luyện của sinh viên toàn trường"
+      pageTitle="Quản lý khiếu nại (Khoa)"
+      pageSubtitle="Giám sát và xét duyệt các khiếu nại về điểm rèn luyện của sinh viên thuộc Khoa"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {/* Dashboard stats / Header */}

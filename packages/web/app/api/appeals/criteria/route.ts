@@ -39,21 +39,26 @@ export async function GET(req: Request) {
       return NextResponse.json({ message: 'Không tìm thấy phiếu' }, { status: 404 });
     }
 
-    // Lấy tất cả score_details kèm criteria và score_entries cho phiếu này
-    // Đây là cách đơn giản nhất — chỉ lấy criteria mà phiếu đã có score_detail
+    // Lấy tất cả criteria đang active để sinh viên có thể khiếu nại mọi mục, kể cả mục chưa có điểm (bị thiếu)
+    const FIXED_CODES = ['1.1.1', '2.1', '4.1', '3.1.1', '2.2'];
+    const allCriteria = await prisma.criteria.findMany({
+      where: { 
+        is_active: 1,
+        code: { notIn: FIXED_CODES }
+      },
+      select: {
+        id: true,
+        code: true,
+        content: true,
+        max_points: true,
+        parent_id: true,
+      },
+    });
+
     const scoreDetails = await prisma.score_details.findMany({
       where: { scoring_sheet_id: sheetId },
       select: {
         criteria_id: true,
-        criteria: {
-          select: {
-            id: true,
-            code: true,
-            content: true,
-            max_points: true,
-            parent_id: true,
-          },
-        },
         score_entries: {
           select: { scorer_role: true, score: true },
         },
@@ -62,72 +67,27 @@ export async function GET(req: Request) {
 
     console.log('[appeals/criteria] scoreDetails count:', scoreDetails.length);
 
-    // Cũng lấy thêm các criteria cha (parent) để hiển thị cây
-    const allCriteriaIds = new Set<number>();
-    const parentIds = new Set<number>();
-    
+    const scoreMap = new Map();
     for (const sd of scoreDetails) {
-      allCriteriaIds.add(sd.criteria.id);
-      if (sd.criteria.parent_id != null) {
-        parentIds.add(sd.criteria.parent_id);
-      }
+      scoreMap.set(sd.criteria_id, sd.score_entries || []);
     }
 
-    // Lấy thêm thông tin các parent criteria
-    const missingParentIds = [...parentIds].filter(pid => !allCriteriaIds.has(pid));
-    let parentCriteria: any[] = [];
-    if (missingParentIds.length > 0) {
-      parentCriteria = await prisma.criteria.findMany({
-        where: { id: { in: missingParentIds } },
-        select: { id: true, code: true, content: true, max_points: true, parent_id: true },
-      });
-      // Check if these parents also have parents
-      const grandparentIds = parentCriteria
-        .filter((p: any) => p.parent_id != null && !allCriteriaIds.has(p.parent_id) && !missingParentIds.includes(p.parent_id))
-        .map((p: any) => p.parent_id);
-      if (grandparentIds.length > 0) {
-        const gpCriteria = await prisma.criteria.findMany({
-          where: { id: { in: grandparentIds } },
-          select: { id: true, code: true, content: true, max_points: true, parent_id: true },
-        });
-        parentCriteria = [...parentCriteria, ...gpCriteria];
-      }
-    }
-
-    // Build combined list
-    const data: any[] = [];
-
-    // Add parent criteria (no scores)
-    for (const pc of parentCriteria) {
-      data.push({
-        id: pc.id,
-        code: pc.code,
-        content: pc.content,
-        max_points: pc.max_points,
-        parent_id: pc.parent_id,
-        studentScore: null,
-        classScore: null,
-        advisorScore: null,
-      });
-    }
-
-    // Add score_details criteria with scores
-    for (const sd of scoreDetails) {
-      const entries = sd.score_entries || [];
-      const student = entries.find(e => e.scorer_role === 'STUDENT');
-      const classC = entries.find(e => e.scorer_role === 'CLASS_COMMITTEE');
-      const advisor = entries.find(e => e.scorer_role === 'ADVISOR');
-      data.push({
-        id: sd.criteria.id,
-        code: sd.criteria.code,
-        content: sd.criteria.content,
-        max_points: sd.criteria.max_points,
-        parent_id: sd.criteria.parent_id,
+    const data = allCriteria.map(c => {
+      const entries = scoreMap.get(c.id) || [];
+      const student = entries.find((e: any) => e.scorer_role === 'STUDENT');
+      const classC = entries.find((e: any) => e.scorer_role === 'CLASS_COMMITTEE');
+      const advisor = entries.find((e: any) => e.scorer_role === 'ADVISOR');
+      return {
+        id: c.id,
+        code: c.code,
+        content: c.content,
+        max_points: c.max_points,
+        parent_id: c.parent_id,
         studentScore: student ? Number(student.score) : null,
         classScore: classC ? Number(classC.score) : null,
         advisorScore: advisor ? Number(advisor.score) : null,
-      });
-    }
+      };
+    });
 
     console.log('[appeals/criteria] total criteria returned:', data.length);
     return NextResponse.json({ data });
