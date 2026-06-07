@@ -688,6 +688,65 @@ export class ScoringService {
             });
           }
         }
+      } else if (role === 'CLASS_COMMITTEE') {
+        // Lấy thông tin sinh viên + class_id qua enrollment
+        const sheetWithEnrollment = await prisma.scoring_sheets.findUnique({
+          where: { id: form.id },
+          select: {
+            semester_enrollments: {
+              select: {
+                class_id: true,
+                user_id: true,
+                users: { select: { full_name: true } },
+              },
+            },
+          },
+        });
+        const enrollInfo = sheetWithEnrollment?.semester_enrollments;
+        if (enrollInfo) {
+          // 1. Thông báo cho sinh viên: BCS đã duyệt
+          await prisma.notifications.create({
+            data: {
+              id: randomUUID(),
+              user_id: enrollInfo.user_id,
+              type: 'SCORE_REVIEWED',
+              title: 'Phiếu rèn luyện đã được Ban cán sự duyệt',
+              content: 'Phiếu tự đánh giá của bạn đã được Ban cán sự lớp duyệt và chuyển cho Cố vấn học tập.',
+              is_read: 0,
+            },
+          });
+
+          // 2. Thông báo cho Cố vấn học tập
+          const advisorRoles = await prisma.class_roles.findMany({
+            where: { class_id: enrollInfo.class_id, is_active: 1, role_type: 'ADVISOR' },
+            select: { user_id: true },
+          });
+          const advisorIds = advisorRoles.map(cr => cr.user_id);
+          if (advisorIds.length > 0) {
+            await prisma.notifications.createMany({
+              data: advisorIds.map(uid => ({
+                id: randomUUID(),
+                user_id: uid,
+                type: 'SCORE_REVIEWED' as const,
+                title: 'Có phiếu rèn luyện chờ phê duyệt',
+                content: `Phiếu của sinh viên ${enrollInfo.users.full_name} đã được BCS duyệt. Vui lòng phê duyệt.`,
+                is_read: 0,
+              })),
+            });
+          }
+        }
+      } else if (role === 'ADVISOR') {
+        // Thông báo cho sinh viên: CVHT đã phê duyệt
+        await prisma.notifications.create({
+          data: {
+            id: randomUUID(),
+            user_id: studentId,
+            type: 'SCORE_APPROVED',
+            title: 'Phiếu rèn luyện đã được phê duyệt',
+            content: 'Phiếu tự đánh giá của bạn đã được Cố vấn học tập phê duyệt và chốt sổ.',
+            is_read: 0,
+          },
+        });
       }
     } catch (err) {
       console.warn('Lỗi khi gửi thông báo nội bộ:', err);
@@ -738,6 +797,23 @@ export class ScoringService {
         where: { id: form.id }
       })
     ]);
+
+    // Thông báo cho sinh viên: phiếu bị trả lại
+    try {
+      const rejecterLabel = role === 'CLASS_COMMITTEE' ? 'Ban cán sự lớp' : 'Cố vấn học tập';
+      await prisma.notifications.create({
+        data: {
+          id: randomUUID(),
+          user_id: studentId,
+          type: 'SCORE_REJECTED',
+          title: 'Phiếu rèn luyện đã bị trả lại',
+          content: `Phiếu tự đánh giá của bạn đã bị ${rejecterLabel} trả lại. Vui lòng chấm lại từ đầu.`,
+          is_read: 0,
+        },
+      });
+    } catch (notifErr) {
+      console.warn('Lỗi khi gửi thông báo trả lại:', notifErr);
+    }
 
     return {
       message: 'Đã xóa phiếu điểm thành công! Sinh viên có thể bắt đầu lại từ đầu.',
