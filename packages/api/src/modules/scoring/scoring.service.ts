@@ -534,12 +534,24 @@ export class ScoringService {
       throw new BadRequestException('Tiêu chí này đã bị vô hiệu hóa!');
     }
 
+    const QUANTITY_MULTIPLIERS: Record<string, number> = {
+      '1.2.1': 1, '3.2.1': 1,
+      '1.2.2': 1, '3.2.2': 1, '4.2.1': 1,
+      '1.2.3': 2, '3.2.3': 2, '4.2.2': 2, '5.3.1': 2,
+      '1.2.4': 3, '3.2.4': 3, '5.2.2': 3,
+      '1.2.5': 4,
+      '5.3.4': 5,
+      '1.1.3': -2, '1.2.7': -2, '2.3': -2, '3.1.2': -2, '3.3': -2, '4.3': -2
+    };
+
+    const isQuantityBased = criteria.code in QUANTITY_MULTIPLIERS;
+
     // 3d. Validate điểm: không được thấp hơn min / vượt quá max
     // max_points KHÔNG giới hạn ở leaf — chỉ giới hạn bởi trần điểm mục cha (frontend tính)
     if (criteria.score_type === 'DEDUCTION' || criteria.max_points < 0) {
       // Đối với tiêu chí điểm trừ (deduction), max_points là số âm (ví dụ: -2), min_score là 0
       // Điểm hợp lệ phải nằm trong khoảng [max_points, min_score] (ví dụ: [-2, 0])
-      if (score < criteria.max_points) {
+      if (!isQuantityBased && score < criteria.max_points) {
         throw new BadRequestException(
           `Điểm không được thấp hơn ${criteria.max_points} (tiêu chí "${criteria.code}")`,
         );
@@ -558,7 +570,7 @@ export class ScoringService {
       }
       // ✅ FIX: Kiểm tra score không được vượt quá max_points
       // Trước đây bỏ check ở đây dẫn đến lỗi Decimal(5,2) overflow → 500 khi nhập số quá lớn
-      if (criteria.max_points > 0 && score > criteria.max_points) {
+      if (!isQuantityBased && criteria.max_points > 0 && score > criteria.max_points) {
         throw new BadRequestException(
           `Điểm không được vượt quá ${criteria.max_points} (tiêu chí "${criteria.code}")`,
         );

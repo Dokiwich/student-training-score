@@ -7,6 +7,16 @@ const API_BASE = '/proxy-api';
 
 const FIXED_CODES = ['1.1.1', '2.1', '4.1', '3.1.1', '2.2'];
 
+const QUANTITY_MULTIPLIERS: Record<string, number> = {
+  '1.2.1': 1, '3.2.1': 1,
+  '1.2.2': 1, '3.2.2': 1, '4.2.1': 1,
+  '1.2.3': 2, '3.2.3': 2, '4.2.2': 2, '5.3.1': 2,
+  '1.2.4': 3, '3.2.4': 3, '5.2.2': 3,
+  '1.2.5': 4,
+  '5.3.4': 5,
+  '1.1.3': -2, '1.2.7': -2, '2.3': -2, '3.1.2': -2, '3.3': -2, '4.3': -2
+};
+
 const TAB_GROUPS = [
   { id: '1', short: 'Ý thức học tập', title: 'Đánh giá về ý thức tham gia học tập', max: 20 },
   { id: '2', short: 'Nội quy, Quy chế', title: 'Đánh giá về ý thức chấp hành Nội quy, Quy chế, Quy định trong Nhà trường', max: 20 },
@@ -842,6 +852,22 @@ export function ScoringForm({
                               const minVal = isDeduction ? item.max_points : 0;
                               const maxVal = isDeduction ? 0 : (item.max_points > 0 ? item.max_points : 100);
 
+                              const multiplier = QUANTITY_MULTIPLIERS[item.code];
+                              const isQuantityBased = !!multiplier;
+                              const displayVal = isQuantityBased && val ? String(Number(val) / multiplier) : val;
+                              const displayMinVal = isQuantityBased ? 0 : minVal;
+                              const displayMaxVal = isQuantityBased ? (multiplier < 0 ? minVal / multiplier : maxVal / multiplier) : maxVal;
+                              const onChangeFn = isQuantityBased 
+                                ? (e: React.ChangeEvent<HTMLInputElement>) => {
+                                    if (e.target.value === '') {
+                                      handleInputChange(item.id, '');
+                                    } else {
+                                      const num = Number(e.target.value);
+                                      handleInputChange(item.id, String(num * multiplier));
+                                    }
+                                  }
+                                : (e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(item.id, e.target.value);
+
                               if (isParent) {
                                 return (
                                   <tr key={item.id} className="bg-stone-50/30 hover:bg-stone-50/60 cursor-pointer transition-colors" onClick={() => toggleExpand(item.id)}>
@@ -879,6 +905,7 @@ export function ScoringForm({
                                     <div style={{ paddingLeft: `${depth * 1.2}rem` }}>
                                       <span className="text-xs text-red-900 leading-snug">{item.content}</span>
                                       {item.description && <span className="text-[10px] text-stone-400 mt-0.5 block leading-relaxed">{item.description}</span>}
+                                      {isQuantityBased && <span className="text-[10px] text-blue-600 font-semibold mt-0.5 block">Nhập số lượng (Hệ số: {multiplier > 0 ? `+${multiplier}` : multiplier}đ/lần)</span>}
                                     </div>
                                   </td>
                                   <td className="px-4 py-2.5 text-center text-xs text-stone-500">{item.max_points}</td>
@@ -888,9 +915,12 @@ export function ScoringForm({
                                     {isFixed ? (
                                       <span className="text-xs font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                     ) : currentRole === 'STUDENT' ? (
-                                      <div className="relative inline-block">
-                                        <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
-                                        {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                      <div className="flex flex-col items-center gap-1">
+                                        <div className="relative inline-block">
+                                          <input type="number" min={displayMinVal} max={displayMaxVal} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                          {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                        </div>
+                                        {isQuantityBased && val && <span className="text-[10px] font-semibold text-red-700">= {val} đ</span>}
                                       </div>
                                     ) : (
                                       <span className="text-xs font-medium text-red-900">{savedStudentScores[item.id] ?? '-'}</span>
@@ -903,9 +933,12 @@ export function ScoringForm({
                                       {isFixed ? (
                                         <span className="text-xs font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                       ) : currentRole === 'CLASS_COMMITTEE' ? (
-                                        <div className="relative inline-block">
-                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
-                                          {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                        <div className="flex flex-col items-center gap-1">
+                                          <div className="relative inline-block">
+                                            <input type="number" min={displayMinVal} max={displayMaxVal} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                            {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                          </div>
+                                          {isQuantityBased && val && <span className="text-[10px] font-semibold text-red-700">= {val} đ</span>}
                                         </div>
                                       ) : (
                                         <span className="text-xs font-medium text-red-900">{savedClassScores[item.id] ?? '-'}</span>
@@ -919,9 +952,12 @@ export function ScoringForm({
                                       {isFixed ? (
                                         <span className="text-xs font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                       ) : (
-                                        <div className="relative inline-block">
-                                          <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
-                                          {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                        <div className="flex flex-col items-center gap-1">
+                                          <div className="relative inline-block">
+                                            <input type="number" min={displayMinVal} max={displayMaxVal} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                            {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                          </div>
+                                          {isQuantityBased && val && <span className="text-[10px] font-semibold text-red-700">= {val} đ</span>}
                                         </div>
                                       )}
                                     </td>
