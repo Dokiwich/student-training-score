@@ -230,7 +230,147 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 - Dashboard/issue previews dominate feature sections
 - Subtle shadow beneath screenshots: `rgba(0,0,0,0.4) 0px 2px 4px`
 
-## 5. Layout Principles
+## 5. Icon System
+
+### Philosophy
+
+Icon là một trong những dấu hiệu rõ ràng nhất phân biệt UI được thiết kế cẩn thận với UI trông "generic AI-generated". Linear sử dụng icon như một phần của ngôn ngữ hình ảnh nhất quán — không phải decoration, mà là thông tin. Mọi icon đều phải cảm giác như được vẽ bởi cùng một bàn tay, theo cùng một bộ quy tắc.
+
+**Nguyên tắc cốt lõi:**
+- **Monochrome tuyệt đối** — Icon không bao giờ có màu riêng. Màu của icon được kế thừa hoàn toàn từ context thông qua `currentColor`, không hardcode bất kỳ giá trị màu nào.
+- **Stroke, không phải Fill** — Icon sử dụng đường viền (stroke-based), không phải vùng tô đặc (filled). Filled icon trông "nặng" và thường gợi lên cảm giác clipart hoặc emoji — đối lập với tinh thần kỹ thuật của Linear.
+- **Geometry đơn giản** — Không có gradient, không có drop shadow, không có hiệu ứng 3D. Icon là ngôn ngữ ký hiệu thuần túy, không phải minh họa.
+- **Không dùng icon pack màu mè** — Tuyệt đối không dùng các icon set như Flaticon, Freepik, hoặc bất kỳ icon nào có màu sắc cố định (xanh/đỏ/vàng hardcoded). Những icon này phá vỡ tính nhất quán của hệ màu achromatic ngay lập tức.
+
+### Recommended Libraries
+
+| Library | Style | Notes |
+|---------|-------|-------|
+| **Lucide** | Stroke, 24px grid, 2px stroke | Recommended — consistent geometry, dễ customize stroke width |
+| **Phosphor Icons** | Stroke + Fill variants, 256px grid | Linh hoạt hơn — chỉ dùng `regular` (stroke) hoặc `light` variant |
+| **Heroicons** | Stroke (outline) + Fill, 24px grid | Của Tailwind team — dùng `outline` variant |
+| **Radix Icons** | Stroke, 15px grid, 1.5px stroke | Phù hợp nhất cho UI micro-elements, thích hợp với Radix primitives |
+| **Tabler Icons** | Stroke, 24px grid, 2px stroke | Bộ lớn nhất, rất nhất quán |
+
+> **Tránh dùng:** Font Awesome (quá "rounded, generic"), Material Icons filled variant, Bootstrap Icons filled, bất kỳ icon pack nào xuất phát từ flat design 2013–2017 era.
+
+### Size Scale
+
+Icon tuân theo cùng hệ spacing 8px của layout nhưng với granularity cao hơn ở kích thước nhỏ:
+
+| Token | Size | Stroke Width | Use Case |
+|-------|------|-------------|----------|
+| `icon-xs` | 12px | 1.5px | Inline với caption text (13px), status dots bên cạnh label |
+| `icon-sm` | 14px | 1.5px | Inline với body text (14–15px), compact list items |
+| `icon-md` | 16px | 1.5px–2px | Default — navigation, buttons, input prefix/suffix |
+| `icon-base` | 18px | 2px | Feature list items, sidebar navigation entries |
+| `icon-lg` | 20px | 2px | Card headers, section sub-labels |
+| `icon-xl` | 24px | 2px | Standalone feature icons, empty states |
+| `icon-2xl` | 32px | 1.5px (optical) | Hero feature illustrations, large empty states |
+| `icon-3xl` | 48px | 1.5px (optical) | Decorative — rất hiếm dùng, chỉ trong marketing sections |
+
+> **Lưu ý stroke tại kích thước lớn:** Từ 32px trở lên, stroke 2px trông quá nặng — giảm xuống 1.5px để duy trì tỉ lệ thị giác phù hợp.
+
+### Color Roles
+
+Icon không có màu riêng — màu được xác định hoàn toàn bởi context. Mapping với text color system:
+
+| Icon Role | Color | Hex | Use Case |
+|-----------|-------|-----|----------|
+| **Primary** | Primary White | `#f7f8f8` | Icon trong button primary, icon đang active/selected |
+| **Default** | Silver Gray | `#d0d6e0` | Icon trong navigation links, default list items |
+| **Subtle** | Tertiary Gray | `#8a8f98` | Icon placeholder trong input, icon decorative trong card |
+| **Muted** | Quaternary Gray | `#62666d` | Icon trong disabled state, icon trong metadata/timestamps |
+| **Accent** | Accent Violet | `#7170ff` | Icon trong active state, icon bên cạnh accent label |
+| **Brand** | Brand Indigo | `#5e6ad2` | Icon trong primary CTA button |
+| **Success** | Emerald | `#10b981` | Checkmark, completion indicator |
+| **Danger** | — | Không có trong system | Linear không dùng màu đỏ trong UI chrome |
+
+```css
+/* Cách implement đúng — luôn dùng currentColor */
+.icon {
+  color: #8a8f98; /* set tại container */
+  stroke: currentColor; /* icon SVG tự kế thừa */
+}
+
+/* Khi hover, chỉ cần đổi color của container */
+.nav-item:hover .icon {
+  color: #f7f8f8;
+}
+```
+
+### Stroke & Style Rules
+
+**Stroke Width**
+- Tất cả icon sử dụng `stroke-width` nhất quán trong cùng một context — không mix 1.5px và 2px trong một component.
+- `stroke-linecap: round` và `stroke-linejoin: round` cho cảm giác mềm, chính xác — tránh `square` hoặc `miter` trông cứng và thô.
+- Không dùng `fill` — luôn set `fill: none` trừ khi icon có yếu tố solid nhỏ có chủ đích (ví dụ: dot trong notification badge).
+
+**Optical Sizing**
+- Icon ở 16px trở xuống nên dùng stroke 1.5px để không bị "quá nặng" ở kích thước nhỏ.
+- Icon trong button cần visual weight ngang với label text bên cạnh — nếu label là weight 510, icon cũng nên đủ nặng (2px stroke ở 16px).
+
+**Grid Alignment**
+- Luôn render icon trên grid số nguyên — tránh icon size 15px, 17px, 19px vì gây blurry trên non-retina display.
+- Dùng `width` và `height` cố định, không dùng `font-size` để scale icon SVG.
+
+### Icon + Text Pairing
+
+Khoảng cách giữa icon và text label tuân theo tỉ lệ chặt chẽ:
+
+| Text Size | Icon Size | Gap | Notes |
+|-----------|-----------|-----|-------|
+| 10–11px (Tiny/Micro) | 12px | 4px | Label rất nhỏ, icon giữ kích thước tối thiểu |
+| 12–13px (Label/Caption) | 14px | 4px | Navigation phụ, metadata rows |
+| 14–15px (Small) | 16px | 6px | Compact list items, pills |
+| 16px (Body) | 16–18px | 8px | Default button, navigation primary |
+| 18px (Body Large) | 20px | 8px | Feature list items |
+| 20px+ (Heading) | 24px | 10px | Card headers, section labels |
+
+```html
+<!-- Cấu trúc chuẩn — icon và text align baseline -->
+<span style="display: flex; align-items: center; gap: 6px; color: #d0d6e0;">
+  <svg width="16" height="16" stroke="currentColor" fill="none"
+       stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- icon path -->
+  </svg>
+  <span style="font-size: 15px; font-weight: 510;">Label text</span>
+</span>
+```
+
+### State Behavior
+
+| State | Icon Treatment |
+|-------|----------------|
+| **Default** | `#8a8f98` hoặc `#d0d6e0` tùy context |
+| **Hover** | Transition lên một bậc sáng hơn — `#8a8f98` → `#d0d6e0` → `#f7f8f8` |
+| **Active / Selected** | `#f7f8f8` hoặc `#7170ff` (accent) tùy loại element |
+| **Disabled** | `#62666d`, opacity 0.4–0.5, không thay đổi khi hover |
+| **Loading** | Thay thế icon bằng spinner cùng kích thước, cùng màu — không resize |
+
+Transition cho icon state change: `color 150ms ease`, `opacity 150ms ease` — đồng nhất với transition của text.
+
+### Icon-Only Elements
+
+Khi icon không có label đi kèm (icon button, toolbar icon):
+- Luôn có `aria-label` hoặc `title` cho accessibility.
+- Background container nên đủ để tạo tap target tối thiểu 32×32px dù icon chỉ 16px.
+- Tooltip xuất hiện sau 400ms hover delay với text mô tả hành động.
+- Icon-only button dùng `border-radius: 50%` hoặc `6px` tùy context, background `rgba(255,255,255,0.03)`.
+
+### What NOT to Do
+
+- **Không dùng emoji làm icon** — Emoji có màu sắc cố định, scale không nhất quán, phá vỡ toàn bộ hệ màu achromatic.
+- **Không dùng icon PNG/JPG** — Chỉ SVG. PNG icon không scale sắc nét và không thể đổi màu bằng CSS.
+- **Không mix style** — Không dùng filled icon của thư viện này cạnh outlined icon của thư viện khác trong cùng một view.
+- **Không hardcode màu trong SVG** — `fill="#ff0000"` hoặc `stroke="#3b82f6"` trong file SVG là sai hoàn toàn. Luôn dùng `currentColor`.
+- **Không dùng icon để trang trí thuần túy** — Mỗi icon phải có semantic meaning. Icon không có ý nghĩa thì không cần thiết.
+- **Không scale icon bằng transform** — Dùng `width`/`height` attribute, không dùng `transform: scale()` vì gây blur và misalignment.
+- **Không dùng icon pack "3D" hay "gradient"** — Các set như Flaticon 3D, Microsoft Fluent Emoji, hay bất kỳ icon nào có gradient đều không phù hợp với hệ thống này.
+
+---
+
+## 6. Layout Principles
 
 ### Spacing System
 - Base unit: 8px
@@ -260,7 +400,7 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 - Full Pill (9999px): Chips, filter pills, status tags
 - Circle (50%): Icon buttons, avatars, status dots
 
-## 6. Depth & Elevation
+## 7. Depth & Elevation
 
 | Level | Treatment | Use |
 |-------|-----------|-----|
@@ -275,7 +415,7 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 
 **Shadow Philosophy**: On dark surfaces, traditional shadows (dark on dark) are nearly invisible. Linear solves this by using semi-transparent white borders as the primary depth indicator. Elevation isn't communicated through shadow darkness but through background luminance steps — each level slightly increases the white opacity of the surface background (`0.02` → `0.04` → `0.05`), creating a subtle stacking effect. The inset shadow technique (`rgba(0,0,0,0.2) 0px 0px 12px 0px inset`) creates a unique "sunken" effect for recessed panels, adding dimensional depth that traditional dark themes lack.
 
-## 7. Do's and Don'ts
+## 8. Do's and Don'ts
 
 ### Do
 - Use Inter Variable with `"cv01", "ss03"` on ALL text — these features are fundamental to Linear's typeface identity
@@ -287,6 +427,8 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 - Reserve brand indigo (`#5e6ad2` / `#7170ff`) for primary CTAs and interactive accents only
 - Use `#f7f8f8` for primary text — not pure `#ffffff`, which would be too harsh
 - Apply the luminance stacking model: deeper = darker bg, elevated = slightly lighter bg
+- Use stroke-based, monochrome SVG icons only — always via `currentColor`
+- Pick one icon library and use it exclusively throughout the entire project
 
 ### Don't
 - Don't use pure white (`#ffffff`) as primary text — `#f7f8f8` prevents eye strain
@@ -298,8 +440,11 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 - Don't use weight 700 (bold) — Linear's maximum weight is 590, with 510 as the workhorse
 - Don't introduce warm colors into the UI chrome — the palette is cool gray with blue-violet accent only
 - Don't use drop shadows for elevation on dark surfaces — use background luminance stepping instead
+- Don't use colored icons, emoji as icons, PNG icons, or filled icon variants
+- Don't hardcode color values inside SVG files — always use `currentColor` for stroke and fill
+- Don't mix icon styles from different libraries in the same view
 
-## 8. Responsive Behavior
+## 9. Responsive Behavior
 
 ### Breakpoints
 | Name | Width | Key Changes |
@@ -333,7 +478,7 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 - Product screenshots use responsive sizing with consistent radius
 - Dark background ensures screenshots blend naturally at any viewport
 
-## 9. Agent Prompt Guide
+## 10. Agent Prompt Guide
 
 ### Quick Color Reference
 - Primary CTA: Brand Indigo (`#5e6ad2`)
@@ -349,13 +494,23 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 - Border (default): `rgba(255,255,255,0.08)`
 - Border (subtle): `rgba(255,255,255,0.05)`
 - Focus ring: Multi-layer shadow stack
+- Icon color (default): `#8a8f98` via `currentColor`
+- Icon color (active): `#f7f8f8` via `currentColor`
+
+### Quick Icon Reference
+- Library: Lucide hoặc Radix Icons (stroke only)
+- Stroke width: 1.5px (≤16px icon), 2px (18–24px icon)
+- Color: luôn `currentColor` — không hardcode
+- Format: SVG inline, không dùng PNG/JPG
+- Style: outline/stroke variant — không dùng filled variant
 
 ### Example Component Prompts
 - "Create a hero section on `#08090a` background. Headline at 48px Inter Variable weight 510, line-height 1.00, letter-spacing -1.056px, color `#f7f8f8`, font-feature-settings `'cv01', 'ss03'`. Subtitle at 18px weight 400, line-height 1.60, color `#8a8f98`. Brand CTA button (`#5e6ad2`, 6px radius, 8px 16px padding) and ghost button (`rgba(255,255,255,0.02)` bg, `1px solid rgba(255,255,255,0.08)` border, 6px radius)."
 - "Design a card on dark background: `rgba(255,255,255,0.02)` background, `1px solid rgba(255,255,255,0.08)` border, 8px radius. Title at 20px Inter Variable weight 590, letter-spacing -0.24px, color `#f7f8f8`. Body at 15px weight 400, color `#8a8f98`, letter-spacing -0.165px."
 - "Build a pill badge: transparent background, `#d0d6e0` text, 9999px radius, 0px 10px padding, `1px solid #23252a` border, 12px Inter Variable weight 510."
-- "Create navigation: dark sticky header on `#0f1011`. Inter Variable 13px weight 510 for links, `#d0d6e0` text. Brand indigo CTA `#5e6ad2` right-aligned with 6px radius. Bottom border: `1px solid rgba(255,255,255,0.05)`."
-- "Design a command palette: `#191a1b` background, `1px solid rgba(255,255,255,0.08)` border, 12px radius, multi-layer shadow stack. Input at 16px Inter Variable weight 400, `#f7f8f8` text. Results list with 13px weight 510 labels in `#d0d6e0` and 12px metadata in `#62666d`."
+- "Create navigation: dark sticky header on `#0f1011`. Inter Variable 13px weight 510 for links, `#d0d6e0` text. Brand indigo CTA `#5e6ad2` right-aligned with 6px radius. Bottom border: `1px solid rgba(255,255,255,0.05)`. Icons from Lucide at 16px, stroke 1.5px, color `#8a8f98` default → `#f7f8f8` on hover, via currentColor."
+- "Design a command palette: `#191a1b` background, `1px solid rgba(255,255,255,0.08)` border, 12px radius, multi-layer shadow stack. Input at 16px Inter Variable weight 400, `#f7f8f8` text. Results list with 13px weight 510 labels in `#d0d6e0` and 12px metadata in `#62666d`. Each result item has a 14px Lucide icon (stroke 1.5px, currentColor `#8a8f98`) left-aligned with 6px gap to label."
+- "Create a feature list item: Lucide icon 20px stroke 2px color `#8a8f98`, gap 10px, title 16px Inter Variable weight 510 color `#f7f8f8`, description 14px weight 400 color `#8a8f98`."
 
 ### Iteration Guide
 1. Always set font-feature-settings `"cv01", "ss03"` on all Inter text — this is non-negotiable for Linear's look
@@ -365,3 +520,4 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 5. Brand indigo (`#5e6ad2` / `#7170ff`) is the only chromatic color — everything else is grayscale
 6. Borders are always semi-transparent white, never solid dark colors on dark backgrounds
 7. Berkeley Mono for any code or technical content, Inter Variable for everything else
+8. Icons: Lucide or Radix, stroke-based, monochrome via `currentColor` — never colored, never filled, never PNG

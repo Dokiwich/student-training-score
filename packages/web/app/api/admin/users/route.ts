@@ -46,7 +46,6 @@ export async function GET(req: Request) {
         select: { classes: { select: { id: true, name: true, code: true } } }
       }
     },
-    take: 500,
   });
 
   return NextResponse.json({

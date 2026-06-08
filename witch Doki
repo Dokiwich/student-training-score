@@ -1,0 +1,20 @@
+[33m723c2a1[m[33m ([m[1;32mrescue-work[m[33m)[m feat: add administrative semester management tab and API endpoints for CRUD operations and criteria synchronization
+[33me1067b5[m feat: implement admin semester management dashboard and replace design spec with Linear-inspired guidelines
+[33m05a37de[m feat: implement ScoringForm component for student evaluation and score management
+[33m79973f2[m feat: implement scoring service logic with state machine and create frontend dashboard and form components
+[33m3b22de3[m feat(appeals): implement 2-level appeal process (Khoa -> Admin)
+[33m95eb275[m feat: support quantity-based scoring with multipliers
+[33m300788d[m feat: explicitly show missing proof indicator in appeal popups
+[33md08768a[m fix: correct leaf nodes rendering in appeal criteria and restrict appealable sheets
+[33me33dc2c[m feat: transfer appeal resolving to department and add proof url
+[33m361e4a9[m feat: implement appeal features, fix UI scoring issues and notifications
+[33m50dcf35[m feat(api): gửi thông báo khi Ban cán sự hoặc Cố vấn duyệt/trả lại phiếu rèn luyện
+[33m4690447[m feat: transfer appeal resolving to department and add proof url
+[33m44e8ddf[m feat: implement appeal features, fix UI scoring issues and notifications
+[33m3c4248e[m feat(api): gửi thông báo khi Ban cán sự hoặc Cố vấn duyệt/trả lại phiếu rèn luyện
+[33m5ea3dc3[m Update test.md with 24IT test accounts
+[33m369d603[m Go gioi han hien thi va import
+[33m0e40968[m fix(api,web): fix backend bottlenecks and sync UI theme to red
+[33mdd0abbc[m style: update UI to maroon theme across all dashboard components
+[33mdaf0a24[m Merge pull request #4 from Dokiwich/alarie_clone
+[33m4fe2522[m Fix login issue with JWT secret and DB connection

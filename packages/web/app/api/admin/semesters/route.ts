@@ -35,6 +35,16 @@ export async function GET() {
 
   const semesters = await prisma.semesters.findMany({
     orderBy: { start_date: 'desc' },
+    include: {
+      criteria_versions: {
+        where: { is_active: 1 },
+        include: {
+          criteria_categories: {
+            include: { _count: { select: { criteria: true } } },
+          },
+        },
+      },
+    },
   });
 
   // Auto-compute & sync status cho tất cả HK
@@ -50,13 +60,25 @@ export async function GET() {
           ...(shouldDeactivate ? { is_active: 0 } : {})
         },
       });
-      return { 
-        ...s, 
-        status: computed as any,
-        ...(shouldDeactivate ? { is_active: 0 } : {})
-      };
     }
-    return s;
+
+    // Tính tổng criteria cho semester này
+    const activeVersion = s.criteria_versions?.[0];
+    const criteriaCount = activeVersion
+      ? activeVersion.criteria_categories.reduce((a, c) => a + c._count.criteria, 0)
+      : 0;
+    const categoryCount = activeVersion?.criteria_categories.length || 0;
+
+    // Remove nested data, chỉ trả về count
+    const { criteria_versions, ...semesterData } = s;
+    return {
+      ...semesterData,
+      status: (computed !== s.status || shouldDeactivate) ? computed : s.status,
+      ...(shouldDeactivate ? { is_active: 0 } : {}),
+      criteriaCount,
+      categoryCount,
+      hasVersion: !!activeVersion,
+    };
   }));
 
   return NextResponse.json({ data: updated });
@@ -149,28 +171,35 @@ export async function PATCH(req: Request) {
 
   try {
     const body = await req.json();
-    const { id } = body;
+    const { id, action = 'activate' } = body;
     if (!id) return NextResponse.json({ message: 'ID học kỳ là bắt buộc' }, { status: 400 });
 
     const targetSemester = await prisma.semesters.findUnique({ where: { id } });
     if (!targetSemester) return NextResponse.json({ message: 'Không tìm thấy học kỳ' }, { status: 404 });
     if (targetSemester.status === 'LOCKED') {
-      return NextResponse.json({ message: 'Không thể kích hoạt học kỳ đã Khóa' }, { status: 400 });
+      return NextResponse.json({ message: 'Không thể thay đổi học kỳ đã Khóa' }, { status: 400 });
     }
 
-    // Tắt tất cả HK khác → chỉ kích hoạt HK được chọn
-    await prisma.$transaction([
-      prisma.semesters.updateMany({
-        where: { is_active: 1 },
-        data: { is_active: 0 },
-      }),
-      prisma.semesters.update({
+    if (action === 'deactivate') {
+      await prisma.semesters.update({
         where: { id },
-        data: { is_active: 1 },
-      }),
-    ]);
-
-    return NextResponse.json({ message: 'Đã kích hoạt học kỳ thành công' });
+        data: { is_active: 0 },
+      });
+      return NextResponse.json({ message: 'Đã hủy kích hoạt học kỳ thành công' });
+    } else {
+      // Tắt tất cả HK khác → chỉ kích hoạt HK được chọn
+      await prisma.$transaction([
+        prisma.semesters.updateMany({
+          where: { is_active: 1 },
+          data: { is_active: 0 },
+        }),
+        prisma.semesters.update({
+          where: { id },
+          data: { is_active: 1 },
+        }),
+      ]);
+      return NextResponse.json({ message: 'Đã kích hoạt học kỳ thành công' });
+    }
   } catch {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }

@@ -108,6 +108,132 @@ export class ScoringService {
   }
 
   // =============================================
+  // HELPER: Lấy semester kèm thông tin deadline
+  // =============================================
+  private async getSemesterWithDeadlines(semesterId?: string) {
+    const selectFields = {
+      id: true,
+      student_deadline: true,
+      class_committee_deadline: true,
+      advisor_deadline: true,
+      school_deadline: true,
+    };
+
+    if (semesterId) {
+      return prisma.semesters.findUnique({
+        where: { id: semesterId },
+        select: selectFields,
+      });
+    }
+    return prisma.semesters.findFirst({
+      where: { is_active: 1 },
+      orderBy: { created_at: 'desc' },
+      select: selectFields,
+    });
+  }
+
+  // =============================================
+  // HELPER: Kiểm tra hạn chót theo Role
+  // =============================================
+  private checkDeadline(
+    role: string,
+    semester: {
+      student_deadline: Date | null;
+      class_committee_deadline: Date | null;
+      advisor_deadline: Date | null;
+      school_deadline: Date | null;
+    },
+  ) {
+    const now = new Date();
+    const deadlineMap: Record<string, { deadline: Date | null; label: string }> = {
+      STUDENT: {
+        deadline: semester.student_deadline ? new Date(semester.student_deadline) : null,
+        label: 'sinh viên tự chấm điểm',
+      },
+      CLASS_COMMITTEE: {
+        deadline: semester.class_committee_deadline ? new Date(semester.class_committee_deadline) : null,
+        label: 'Ban cán sự xét duyệt',
+      },
+      ADVISOR: {
+        deadline: semester.advisor_deadline ? new Date(semester.advisor_deadline) : null,
+        label: 'Cố vấn học tập phê duyệt',
+      },
+    };
+
+    const config = deadlineMap[role];
+    if (!config || !config.deadline) return;
+
+    if (now > config.deadline) {
+      const formatted = config.deadline.toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      throw new BadRequestException(
+        `Đã quá hạn ${config.label} (hạn chót: ${formatted}). ` +
+        `Vui lòng liên hệ quản trị viên nếu cần gia hạn.`,
+      );
+    }
+  }
+
+  // =============================================
+  // HELPER: Ghi log điều chỉnh điểm
+  // =============================================
+  private async logScoreAdjustment(
+    scoreDetailId: string,
+    adjustedById: string,
+    oldScore: number,
+    newScore: number,
+    reason?: string,
+  ) {
+    if (oldScore === newScore) return;
+    try {
+      await prisma.score_adjustment_logs.create({
+        data: {
+          id: randomUUID(),
+          score_detail_id: scoreDetailId,
+          adjusted_by_id: adjustedById,
+          old_score: oldScore,
+          new_score: newScore,
+          reason: reason || null,
+        },
+      });
+    } catch (err) {
+      console.warn('Lỗi khi ghi log điều chỉnh điểm:', err);
+    }
+  }
+
+  // =============================================
+  // HELPER: Ghi audit log (nhật ký hệ thống)
+  // =============================================
+  private async logAudit(
+    actorId: string,
+    action: string,
+    entityType: string,
+    entityId: string,
+    oldValue?: any,
+    newValue?: any,
+  ) {
+    try {
+      await prisma.audit_logs.create({
+        data: {
+          id: randomUUID(),
+          actor_id: actorId,
+          action,
+          entity_type: entityType,
+          entity_id: entityId,
+          old_value: oldValue != null ? oldValue : undefined,
+          new_value: newValue != null ? newValue : undefined,
+        },
+      });
+    } catch (err) {
+      console.warn('Lỗi khi ghi audit log:', err);
+    }
+  }
+
+  // =============================================
   // HELPER: Tìm hoặc tự động tạo phiếu DRAFT cho sinh viên
   // ✅ FIX: Gom logic trùng lặp từ 3 hàm về 1 nơi duy nhất
   //    + Xử lý Race Condition an toàn bằng try-catch P2002
@@ -323,6 +449,36 @@ export class ScoringService {
 
     const formStatus = workflowStepMap[form.status] || 'DRAFT';
 
+    const enrollment = await prisma.semester_enrollments.findUnique({
+      where: { id: sheet.enrollment_id }
+    });
+    const actualSemesterId = enrollment?.semester_id || semesterId;
+
+    const studentUser = await prisma.users.findUnique({
+      where: { id: studentId },
+      include: {
+        semester_enrollments: {
+          where: { semester_id: actualSemesterId },
+          include: {
+            classes: {
+              include: { departments: true }
+            }
+          }
+        }
+      }
+    });
+
+    const semesterData = actualSemesterId ? await prisma.semesters.findUnique({
+      where: { id: actualSemesterId }
+    }) : null;
+
+    const studentInfo = {
+      name: studentUser?.full_name || '',
+      studentId: studentUser?.student_id || '',
+      className: studentUser?.semester_enrollments?.[0]?.classes?.name || '',
+      departmentName: studentUser?.semester_enrollments?.[0]?.classes?.departments?.name || '',
+    };
+
     return {
       message: 'Lấy danh sách điểm thành công',
       data: scores,
@@ -331,6 +487,8 @@ export class ScoringService {
       formStatusDetail: form.status,
       currentStep: form.current_step,
       rejectionReason: form.rejection_reason || null,
+      studentInfo,
+      semesterName: semesterData ? `Học kỳ ${semesterData.name} - Năm học ${semesterData.academic_year}` : '',
       totals: {
         student: form.student_total,
         class: form.class_total,
@@ -389,6 +547,12 @@ export class ScoringService {
       );
     }
 
+    // 3b-2. ✅ KIỂM TRA HẠN CHÓT THEO ROLE
+    const semester = await this.getSemesterWithDeadlines(semesterId);
+    if (semester) {
+      this.checkDeadline(role, semester);
+    }
+
     // 3c. Kiểm tra tiêu chí
     const criteria = await prisma.criteria.findUnique({
       where: { id: criteriaId },
@@ -402,9 +566,33 @@ export class ScoringService {
       throw new BadRequestException('Tiêu chí này đã bị vô hiệu hóa!');
     }
 
+    const QUANTITY_MULTIPLIERS: Record<string, number> = {
+      '1.2.1': 1, '3.2.1': 1,
+      '1.2.2': 1, '3.2.2': 1, '4.2.1': 1,
+      '1.2.3': 2, '3.2.3': 2, '4.2.2': 2, '5.3.1': 2,
+      '1.2.4': 3, '3.2.4': 3, '5.2.2': 3,
+      '1.2.5': 4,
+      '5.3.4': 5,
+      '1.1.3': -2, '1.2.7': -2, '2.3': -2, '3.1.2': -2, '3.3': -2, '4.3': -2
+    };
+
+    const isQuantityBased = criteria.code in QUANTITY_MULTIPLIERS;
+
     // 3d. Validate điểm: không được thấp hơn min / vượt quá max
     // max_points KHÔNG giới hạn ở leaf — chỉ giới hạn bởi trần điểm mục cha (frontend tính)
-    if (criteria.score_type === 'DEDUCTION' || criteria.max_points < 0) {
+    if (isQuantityBased) {
+      const multiplier = QUANTITY_MULTIPLIERS[criteria.code];
+      const inputQuantity = score / multiplier;
+      const isDeduction = criteria.score_type === 'DEDUCTION' || criteria.max_points < 0;
+      const maxQuantity = isDeduction ? 40 : 30;
+      
+      if (inputQuantity < 0) {
+        throw new BadRequestException(`Số lượng không được nhỏ hơn 0 (tiêu chí "${criteria.code}")`);
+      }
+      if (inputQuantity > maxQuantity) {
+        throw new BadRequestException(`Số lượng không được vượt quá ${maxQuantity} lần (tiêu chí "${criteria.code}")`);
+      }
+    } else if (criteria.score_type === 'DEDUCTION' || criteria.max_points < 0) {
       // Đối với tiêu chí điểm trừ (deduction), max_points là số âm (ví dụ: -2), min_score là 0
       // Điểm hợp lệ phải nằm trong khoảng [max_points, min_score] (ví dụ: [-2, 0])
       if (score < criteria.max_points) {
@@ -426,7 +614,7 @@ export class ScoringService {
       }
       // ✅ FIX: Kiểm tra score không được vượt quá max_points
       // Trước đây bỏ check ở đây dẫn đến lỗi Decimal(5,2) overflow → 500 khi nhập số quá lớn
-      if (criteria.max_points > 0 && score > criteria.max_points) {
+      if (!isQuantityBased && criteria.max_points > 0 && score > criteria.max_points) {
         throw new BadRequestException(
           `Điểm không được vượt quá ${criteria.max_points} (tiêu chí "${criteria.code}")`,
         );
@@ -447,6 +635,15 @@ export class ScoringService {
     proofUrl?: string,
   ) {
     await this.validateBeforeScore(formId, criteriaId, score, 'STUDENT', studentId);
+
+    // ✅ Lấy điểm cũ trước khi cập nhật (để ghi log)
+    const existingStudentDetail = await prisma.score_details.findUnique({
+      where: { scoring_sheet_id_criteria_id: { scoring_sheet_id: formId, criteria_id: criteriaId } },
+      include: { score_entries: { where: { scorer_role: 'STUDENT' } } },
+    });
+    const oldStudentScore = existingStudentDetail?.score_entries?.[0]?.score != null
+      ? Number(existingStudentDetail.score_entries[0].score)
+      : null;
 
     const updateData: Record<string, any> = {};
     if (proofUrl !== undefined) {
@@ -486,6 +683,17 @@ export class ScoringService {
       },
     });
 
+    // ✅ Ghi log điều chỉnh điểm (nếu điểm cũ khác điểm mới)
+    if (oldStudentScore !== null && oldStudentScore !== score) {
+      await this.logScoreAdjustment(detail.id, studentId, oldStudentScore, score, 'Sinh viên tự chấm điểm');
+    }
+
+    // ✅ Ghi audit log
+    await this.logAudit(studentId, 'SCORE_CRITERIA', 'score_details', detail.id,
+      { criteria_id: criteriaId, old_score: oldStudentScore },
+      { criteria_id: criteriaId, new_score: score, role: 'STUDENT' },
+    );
+
     return {
       message: 'Lưu điểm sinh viên thành công',
       data: detail,
@@ -502,6 +710,7 @@ export class ScoringService {
     score: number,
     role: string,
     studentId: string,
+    actorId: string,
     proofUrl?: string,
     semesterId?: string,
   ) {
@@ -550,7 +759,16 @@ export class ScoringService {
       throw new BadRequestException('Không tìm thấy phiếu điểm cho sinh viên này!');
     }
 
-    // 5d. Upsert
+    // 5d. Lấy điểm cũ trước khi cập nhật (để ghi log)
+    const existingScoreDetail = await prisma.score_details.findUnique({
+      where: { scoring_sheet_id_criteria_id: { scoring_sheet_id: scoreRecord.id, criteria_id: criteriaId } },
+      include: { score_entries: { where: { scorer_role: role as any } } },
+    });
+    const oldScore = existingScoreDetail?.score_entries?.[0]?.score != null
+      ? Number(existingScoreDetail.score_entries[0].score)
+      : null;
+
+    // 5e. Upsert
     const savedScore = await prisma.score_details.upsert({
       where: {
         scoring_sheet_id_criteria_id: {
@@ -588,6 +806,17 @@ export class ScoringService {
       },
     });
 
+    // ✅ Ghi log điều chỉnh điểm (nếu điểm cũ khác điểm mới)
+    if (oldScore !== null && oldScore !== score) {
+      await this.logScoreAdjustment(savedScore.id, actorId, oldScore, score, `Chấm điểm bởi ${role}`);
+    }
+
+    // ✅ Ghi audit log
+    await this.logAudit(actorId, 'SCORE_CRITERIA', 'score_details', savedScore.id,
+      { criteria_id: criteriaId, old_score: oldScore },
+      { criteria_id: criteriaId, new_score: score, role },
+    );
+
     return {
       message: `Lưu điểm thành công (${role})`,
       data: savedScore,
@@ -599,9 +828,15 @@ export class ScoringService {
   //    Gộp từ cả 2 phiên bản: NestJS exceptions + Role-based transitions
   //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
   // =============================================
-  async submitForm(formId: string, role: string, studentId: string, semesterId?: string) {
+  async submitForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string) {
     // 6a. ✅ FIX: Dùng helper chung thay vì copy-paste logic tạo phiếu
     const form = await this.getOrCreateDraftSheet(studentId, semesterId);
+
+    // 6a-2. ✅ KIỂM TRA HẠN CHÓT TRƯỚC KHI CHUYỂN TRẠNG THÁI
+    const semester = await this.getSemesterWithDeadlines(semesterId);
+    if (semester) {
+      this.checkDeadline(role, semester);
+    }
 
     // 6b. Lấy cấu hình chuyển trạng thái cho Role này
     const transition = STATE_TRANSITIONS[role];
@@ -652,6 +887,12 @@ export class ScoringService {
       data: updateData,
     });
 
+    // ✅ Ghi audit log cho việc chuyển trạng thái phiếu
+    await this.logAudit(actorId, 'SUBMIT_FORM', 'scoring_sheets', form.id,
+      { status: form.status, current_step: form.current_step },
+      { status: transition.nextStatus, current_step: transition.currentStep, role },
+    );
+
     // BẮN THÔNG BÁO CHO NGƯỜI NHẬN TIẾP THEO (LỚP TRƯỞNG / CỐ VẤN)
     try {
       if (role === 'STUDENT') {
@@ -688,6 +929,65 @@ export class ScoringService {
             });
           }
         }
+      } else if (role === 'CLASS_COMMITTEE') {
+        // Lấy thông tin sinh viên + class_id qua enrollment
+        const sheetWithEnrollment = await prisma.scoring_sheets.findUnique({
+          where: { id: form.id },
+          select: {
+            semester_enrollments: {
+              select: {
+                class_id: true,
+                user_id: true,
+                users: { select: { full_name: true } },
+              },
+            },
+          },
+        });
+        const enrollInfo = sheetWithEnrollment?.semester_enrollments;
+        if (enrollInfo) {
+          // 1. Thông báo cho sinh viên: BCS đã duyệt
+          await prisma.notifications.create({
+            data: {
+              id: randomUUID(),
+              user_id: enrollInfo.user_id,
+              type: 'SCORE_REVIEWED',
+              title: 'Phiếu rèn luyện đã được Ban cán sự duyệt',
+              content: 'Phiếu tự đánh giá của bạn đã được Ban cán sự lớp duyệt và chuyển cho Cố vấn học tập.',
+              is_read: 0,
+            },
+          });
+
+          // 2. Thông báo cho Cố vấn học tập
+          const advisorRoles = await prisma.class_roles.findMany({
+            where: { class_id: enrollInfo.class_id, is_active: 1, role_type: 'ADVISOR' },
+            select: { user_id: true },
+          });
+          const advisorIds = advisorRoles.map(cr => cr.user_id);
+          if (advisorIds.length > 0) {
+            await prisma.notifications.createMany({
+              data: advisorIds.map(uid => ({
+                id: randomUUID(),
+                user_id: uid,
+                type: 'SCORE_REVIEWED' as const,
+                title: 'Có phiếu rèn luyện chờ phê duyệt',
+                content: `Phiếu của sinh viên ${enrollInfo.users.full_name} đã được BCS duyệt. Vui lòng phê duyệt.`,
+                is_read: 0,
+              })),
+            });
+          }
+        }
+      } else if (role === 'ADVISOR') {
+        // Thông báo cho sinh viên: CVHT đã phê duyệt
+        await prisma.notifications.create({
+          data: {
+            id: randomUUID(),
+            user_id: studentId,
+            type: 'SCORE_APPROVED',
+            title: 'Phiếu rèn luyện đã được phê duyệt',
+            content: 'Phiếu tự đánh giá của bạn đã được Cố vấn học tập phê duyệt và chốt sổ.',
+            is_read: 0,
+          },
+        });
       }
     } catch (err) {
       console.warn('Lỗi khi gửi thông báo nội bộ:', err);
@@ -702,7 +1002,7 @@ export class ScoringService {
   // =============================================
   // 6.1 ✅ XÓA VÀ LÀM MỚI PHIẾU (Thay cho chức năng Trả lại)
   // =============================================
-  async rejectForm(formId: string, role: string, studentId: string, semesterId?: string) {
+  async rejectForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string) {
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
       const activeSemester = await this.getActiveSemester();
@@ -738,6 +1038,29 @@ export class ScoringService {
         where: { id: form.id }
       })
     ]);
+
+    // ✅ Ghi audit log cho việc xóa/reset phiếu
+    await this.logAudit(actorId, 'REJECT_FORM', 'scoring_sheets', form.id,
+      { status: form.status, score_details_count: form.score_details?.length ?? 0 },
+      { action: 'DELETED_AND_RESET', role },
+    );
+
+    // Thông báo cho sinh viên: phiếu bị trả lại
+    try {
+      const rejecterLabel = role === 'CLASS_COMMITTEE' ? 'Ban cán sự lớp' : 'Cố vấn học tập';
+      await prisma.notifications.create({
+        data: {
+          id: randomUUID(),
+          user_id: studentId,
+          type: 'SCORE_REJECTED',
+          title: 'Phiếu rèn luyện đã bị trả lại',
+          content: `Phiếu tự đánh giá của bạn đã bị ${rejecterLabel} trả lại. Vui lòng chấm lại từ đầu.`,
+          is_read: 0,
+        },
+      });
+    } catch (notifErr) {
+      console.warn('Lỗi khi gửi thông báo trả lại:', notifErr);
+    }
 
     return {
       message: 'Đã xóa phiếu điểm thành công! Sinh viên có thể bắt đầu lại từ đầu.',
@@ -802,13 +1125,17 @@ export class ScoringService {
       const rawClass = byCategoryClass.get(catId) || 0;
       const rawAdvisor = byCategoryAdvisor.get(catId) || 0;
 
-      // ✅ FIX: Áp cả trần (max_score) VÀ sàn (0) cho mỗi danh mục
-      //    - Math.min: không vượt quá max_score của danh mục
-      //    - Math.max(0, ...): điểm danh mục không được âm (dù bị trừ nặng)
-      studentTotal += Math.max(0, Math.min(rawStudent, maxScore));
-      classTotal += Math.max(0, Math.min(rawClass, maxScore));
-      advisorTotal += Math.max(0, Math.min(rawAdvisor, maxScore));
+      // ✅ FIX: Chỉ áp trần (max_score), KHÔNG áp sàn 0 để điểm trừ có thể trừ vào tổng điểm các mục khác
+      // Math.min: không vượt quá max_score của danh mục
+      studentTotal += Math.min(rawStudent, maxScore);
+      classTotal += Math.min(rawClass, maxScore);
+      advisorTotal += Math.min(rawAdvisor, maxScore);
     }
+
+    // Đảm bảo tổng điểm cuối cùng không bị âm (đến khi tổng điểm phiếu về không thì dừng)
+    studentTotal = Math.max(0, studentTotal);
+    classTotal = Math.max(0, classTotal);
+    advisorTotal = Math.max(0, advisorTotal);
 
     // ✅ FIX: Làm tròn về 1 chữ số thập phân — khớp kiểu Decimal(5,1) trong DB
     //    Tránh sai lệch xếp loại do JS float precision (79.999... vs 80.0)
