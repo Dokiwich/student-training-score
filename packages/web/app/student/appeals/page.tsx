@@ -46,9 +46,10 @@ interface CriteriaItem {
 }
 
 const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> = {
-  PENDING: { label: 'Đang chờ xử lý', bg: '#fef3c7', color: '#d97706' },
-  ACCEPTED: { label: 'Đã chấp nhận', bg: '#ecfdf5', color: '#059669' },
-  REJECTED: { label: 'Đã từ chối', bg: '#fef2f2', color: '#dc2626' },
+  PENDING: { label: 'Đang chờ Khoa xem xét', bg: '#fef3c7', color: '#d97706' },
+  DEPT_REVIEWED: { label: 'Khoa đã xem xét — Chờ Admin', bg: '#e0e7ff', color: '#4338ca' },
+  ACCEPTED: { label: 'Đã chấp nhận (Admin)', bg: '#ecfdf5', color: '#059669' },
+  REJECTED: { label: 'Đã từ chối (Admin)', bg: '#fef2f2', color: '#dc2626' },
 };
 
 export default function StudentAppealsPage() {
@@ -105,7 +106,7 @@ export default function StudentAppealsPage() {
       if (r.ok) {
         const j = await r.json();
         const opts: SheetOption[] = (j.data || [])
-          .filter((d: any) => d.hasSheet)
+          .filter((d: any) => d.hasSheet && (d.status === 'ADVISOR_APPROVED' || d.status === 'FINALIZED'))
           .map((d: any) => ({
             sheetId: d.sheetId,
             semesterName: d.semesterName,
@@ -195,7 +196,22 @@ export default function StudentAppealsPage() {
   const selectedCriteria = criteriaList.filter((c) => selectedCriteriaIds.has(c.id));
 
   const rootCriteria = criteriaList.filter(c => c.parent_id === null || c.parent_id === 0);
-  const getChildren = (parentId: number) => criteriaList.filter(c => c.parent_id === parentId);
+  
+  const getLeafDescendants = (parentId: number): CriteriaItem[] => {
+    const children = criteriaList.filter(c => c.parent_id === parentId);
+    if (children.length === 0) return [];
+    
+    let leaves: CriteriaItem[] = [];
+    for (const child of children) {
+      const childLeaves = getLeafDescendants(child.id);
+      if (childLeaves.length > 0) {
+        leaves = leaves.concat(childLeaves);
+      } else {
+        leaves.push(child);
+      }
+    }
+    return leaves;
+  };
 
 
   return (
@@ -311,9 +327,47 @@ export default function StudentAppealsPage() {
                   <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
                     {rootCriteria.map(parent => {
                       const isExpanded = expandedParents.has(parent.id);
-                      const children = getChildren(parent.id);
-                      if (children.length === 0) return null; // Only show parents that have children
+                      const children = getLeafDescendants(parent.id);
+                      
+                      if (children.length === 0) {
+                        // Root criteria without children -> Render as selectable item
+                        const isSelected = selectedCriteriaIds.has(parent.id);
+                        return (
+                          <div key={parent.id} style={{ borderBottom: '1px solid var(--border)', padding: '8px 16px', background: '#fff' }}>
+                            <div 
+                              onClick={() => toggleSelectedCriteria(parent.id)}
+                              style={{
+                                padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
+                                border: isSelected ? '2px solid var(--accent)' : '1px solid var(--border)',
+                                background: isSelected ? 'var(--accent-light)' : '#f8fafc',
+                                display: 'flex', alignItems: 'center', gap: 12
+                              }}
+                            >
+                              <input 
+                                type="checkbox" 
+                                checked={isSelected} 
+                                onChange={() => {}}
+                                style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
+                              />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  [{parent.code}] {parent.content}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'class' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>BCS chấm</div>
+                                <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'class' ? '#dc2626' : 'var(--text-primary)' }}>{parent.classScore ?? '—'}</div>
+                              </div>
+                              <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>CVHT chấm</div>
+                                <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)' }}>{parent.advisorScore ?? '—'}</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
 
+                      // Root criteria with children -> Render as accordion
                       return (
                         <div key={parent.id} style={{ borderBottom: '1px solid var(--border)' }}>
                           <div 
@@ -332,7 +386,7 @@ export default function StudentAppealsPage() {
                           
                           {isExpanded && (
                             <div style={{ padding: '0 16px 12px 16px', background: 'var(--bg-surface)' }}>
-                              {children.map(child => {
+                              {children.map((child: CriteriaItem) => {
                                 const isSelected = selectedCriteriaIds.has(child.id);
                                 return (
                                   <div 
@@ -348,16 +402,21 @@ export default function StudentAppealsPage() {
                                     <input 
                                       type="checkbox" 
                                       checked={isSelected} 
-                                      readOnly
-                                      style={{ margin: 0, cursor: 'pointer', width: 16, height: 16, accentColor: 'var(--accent)' }}
+                                      onChange={() => {}}
+                                      style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
                                     />
                                     <div style={{ flex: 1 }}>
                                       <div style={{ fontSize: 13, fontWeight: isSelected ? 600 : 500, color: 'var(--text-primary)' }}>
                                         [{child.code}] {child.content}
                                       </div>
-                                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                        Tối đa: {child.max_points} điểm
-                                      </div>
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'class' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>BCS chấm</div>
+                                      <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'class' ? '#dc2626' : 'var(--text-primary)' }}>{child.classScore ?? '—'}</div>
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>CVHT chấm</div>
+                                      <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)' }}>{child.advisorScore ?? '—'}</div>
                                     </div>
                                   </div>
                                 );
@@ -372,33 +431,26 @@ export default function StudentAppealsPage() {
                   {/* Hiện chi tiết điểm của tiêu chí đã chọn */}
                   {selectedCriteria.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        Chi tiết các tiêu chí đang chọn ({selectedCriteria.length}):
-                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>Chi tiết các tiêu chí đang chọn ({selectedCriteria.length}):</div>
                       {selectedCriteria.map(sc => (
                         <div key={sc.id} style={{
                           background: '#f8fafc', border: '1px solid var(--border)',
                           borderRadius: 8, padding: 14, display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center',
                         }}>
                           <div style={{ flex: 1, minWidth: 200 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-                              [{sc.code}] {sc.content}
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                              Điểm tối đa: {sc.max_points}
-                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>[{sc.code}] {sc.content}</div>
                           </div>
                           <div style={{ display: 'flex', gap: 16 }}>
                             <div style={{ textAlign: 'center' }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>SV chấm</div>
-                              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{sc.studentScore ?? '—'}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>SV</div>
+                              <div style={{ fontSize: 18, fontWeight: 700 }}>{sc.studentScore ?? '—'}</div>
                             </div>
                             <div style={{ textAlign: 'center' }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'class' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>BCS chấm</div>
-                              <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'class' ? '#dc2626' : 'var(--text-primary)' }}>{sc.classScore ?? '—'}</div>
+                              <div style={{ fontSize: 10, color: appealType === 'class' ? '#dc2626' : 'var(--text-muted)' }}>BCS</div>
+                              <div style={{ fontSize: 18, fontWeight: 700 }}>{sc.classScore ?? '—'}</div>
                             </div>
                             <div style={{ textAlign: 'center' }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>CVHT chấm</div>
+                              <div style={{ fontSize: 10, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-muted)' }}>CVHT</div>
                               <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)' }}>{sc.advisorScore ?? '—'}</div>
                             </div>
                           </div>

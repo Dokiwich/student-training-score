@@ -23,7 +23,7 @@ interface StudentRow {
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   NO_SHEET: { label: 'Chưa tạo', color: '#9ca3af', bg: '#f3f4f6' },
-  DRAFT: { label: 'Nháp', color: '#6b7280', bg: '#f3f4f6' },
+  DRAFT: { label: 'Chưa nộp', color: '#6b7280', bg: '#f3f4f6' },
   STUDENT_SUBMITTED: { label: 'SV đã nộp', color: '#991b1b', bg: '#fef2f2' },
   CLASS_REVIEWING: { label: 'Đang xét', color: '#d97706', bg: '#fffbeb' },
   CLASS_REVIEWED: { label: 'Đã duyệt', color: '#059669', bg: '#ecfdf5' },
@@ -287,7 +287,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
               </div>
             </div>
           </div>
-          
+
 
           <div style={{ flex: 1, padding: '0 32px 24px', overflowY: 'auto' }}>
             {isLoading ? (
@@ -319,14 +319,14 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
                       const st = STATUS_MAP[student.status] || { label: student.status, color: '#6b7280', bg: '#f3f4f6' };
                       const score = student[meta.scoreCol];
                       const isWarning = student.status === 'NO_SHEET' || student.status === 'DRAFT';
-                      
+
                       return (
-                        <tr 
-                          key={`${student.id}-${index}`} 
+                        <tr
+                          key={`${student.id}-${index}`}
                           onClick={() => handleStudentClick(student.id)}
                           className="staggered-item"
-                          style={{ 
-                            '--index': index > 20 ? 0 : index, 
+                          style={{
+                            '--index': index > 20 ? 0 : index,
                             borderBottom: '1px solid var(--border-light)', cursor: 'pointer', transition: 'background 0.2s'
                           } as React.CSSProperties}
                           onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-surface-hover)'}
@@ -336,8 +336,8 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
                           <td style={{ padding: '16px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)' }}>{student.studentCode}</td>
                           <td style={{ padding: '16px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{student.name}</td>
                           <td style={{ padding: '16px' }}>
-                            <span style={{ 
-                              display: 'inline-block', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 9999, 
+                            <span style={{
+                              display: 'inline-block', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 9999,
                               background: st.bg, color: st.color,
                               animation: isWarning ? 'pulseWarning 2s infinite' : 'none'
                             }}>
@@ -360,17 +360,17 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
 
       {/* MODAL OVERLAY & CONTENT */}
       {(isDrawerOpen || closingDrawer) && selectedStudent && (
-        <div 
+        <div
           className="modal-overlay"
           style={{ animation: closingDrawer ? 'fadeIn 0.3s reverse forwards' : 'fadeIn 0.3s forwards' }}
           onClick={handleCloseDrawer}
         >
           {/* Modal Content */}
-          <div 
+          <div
             className="modal-content"
-            style={{ 
+            style={{
               maxWidth: '1200px', width: '96vw', height: '90vh', display: 'flex', flexDirection: 'column',
-              animation: closingDrawer ? 'modalSlideUp 0.3s reverse forwards' : 'modalSlideUp 0.3s forwards' 
+              animation: closingDrawer ? 'modalSlideUp 0.3s reverse forwards' : 'modalSlideUp 0.3s forwards'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -378,38 +378,38 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
               <h3 className="modal-header-title">
                 Chấm điểm: <span style={{ color: 'var(--accent)' }}>{selectedStudent.name}</span>
               </h3>
-              <button 
-                onClick={handleCloseDrawer} 
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', transition: 'background 0.2s' }} 
-                onMouseOver={e => e.currentTarget.style.background = 'var(--bg-inset)'} 
+              <button
+                onClick={handleCloseDrawer}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', transition: 'background 0.2s' }}
+                onMouseOver={e => e.currentTarget.style.background = 'var(--bg-inset)'}
                 onMouseOut={e => e.currentTarget.style.background = 'transparent'}
                 title="Đóng"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             </div>
-            
+
             <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: 'var(--bg-page)' }}>
-               {role === 'ADVISOR' && (
-                 <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-                   <button
-                      onClick={() => handleResetSheet(selectedStudent.id, selectedStudent.name)}
-                      disabled={isResetting}
-                      style={{
-                        padding: '6px 14px', fontSize: 12, fontWeight: 600,
-                        borderRadius: 8, border: '1px solid #ef4444', color: '#ef4444', background: '#fff',
-                        cursor: isResetting ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
-                        display: 'flex', gap: 6, alignItems: 'center'
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.background = '#fef2f2'}
-                      onMouseOut={(e) => e.currentTarget.style.background = '#fff'}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                      {isResetting ? 'Đang xóa...' : 'Xóa & Reset phiếu'}
-                    </button>
-                 </div>
-               )}
-               <ScoringForm key={`${selectedStudent.id}-${resetKey}`} forcedRole={role} studentId={selectedStudent.id} studentName={selectedStudent.name} stickyTop="top-0" />
+              {role === 'ADVISOR' && (
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => handleResetSheet(selectedStudent.id, selectedStudent.name)}
+                    disabled={isResetting}
+                    style={{
+                      padding: '6px 14px', fontSize: 12, fontWeight: 600,
+                      borderRadius: 8, border: '1px solid #ef4444', color: '#ef4444', background: '#fff',
+                      cursor: isResetting ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                      display: 'flex', gap: 6, alignItems: 'center'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = '#fef2f2'}
+                    onMouseOut={(e) => e.currentTarget.style.background = '#fff'}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    {isResetting ? 'Đang xóa...' : 'Xóa & Reset phiếu'}
+                  </button>
+                </div>
+              )}
+              <ScoringForm key={`${selectedStudent.id}-${resetKey}`} forcedRole={role} studentId={selectedStudent.id} studentName={selectedStudent.name} stickyTop="top-0" />
             </div>
           </div>
         </div>

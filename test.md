@@ -1,27 +1,20 @@
-# THÔNG TIN TÀI KHOẢN VÀ EMAIL HỆ THỐNG
+# THÔNG TIN TÀI KHOẢN VÀ EMAIL Test Hệ Thống Lớp 24IT
 
 ## 1. Tài khoản dành cho Sinh viên và Lớp học
-* **Mật khẩu chung cho tất cả:** `123456`
-* **Email Ban cán sự (BCS):** `bcs.{mã_lớp}@edu.vn`  
-    *(Ví dụ: `bcs.23av@edu.vn`)*
-* **Email Cố vấn học tập (CVHT):** `cv.{mã_lớp}@edu.vn`  
-    *(Ví dụ: `cv.23av@edu.vn`)*
-* **Email Sinh viên (SV):** `{mã_lớp}{001-xxx}@student.edu.vn`  
-    *(Ví dụ: `23av001@student.edu.vn`)*
+
+* **Sinh viên:** `linhttt0050@student.mit.vn` / Mật khẩu: `Sv@0324110050`
+* **Ban cán sự lớp:** `bcs24it@classcommittee.mit.vn` / Mật khẩu: `bcs24it789`
+* **Cố vấn học tập:** `cvht24it@advisor.mit.vn` / Mật khẩu: `cvht24it789`
 
 ## 2. Tài khoản dành cho Khoa / Phòng ban
-* **Email:** `khoa.cntt@university.edu.vn` (hoặc `khoa.nn@university.edu.vn`)
-* **Mật khẩu (Password):** `dept123`
+
+* **Tài khoản Khoa:** `khoacnkt@department.mit.vn` / Mật khẩu: `khoacnkt`
 
 ## 3. Tài khoản dành cho Admin
-* **Email:** `admin@edu.vn`
-* **Mật khẩu (Password):** `admin`
 
-## 4. Danh sách tài khoản đã chuẩn bị sẵn để Test nhanh (Đã nạp vào DB)
-Dưới đây là các tài khoản đã được đồng bộ chuẩn mật khẩu để đăng nhập thành công vào hệ thống.
-
-* **Sinh viên:** `25tq058@student.edu.vn` / Mật khẩu: `123456`
-* **Ban cán sự lớp:** `bcs.25tq@edu.vn` / Mật khẩu: `123456`
-* **Cố vấn học tập:** `cv.25tq@edu.vn` / Mật khẩu: `123456`
-* **Tài khoản Khoa:** `khoa.nn@university.edu.vn` / Mật khẩu: `dept123`
 * **Admin Trường:** `admin@edu.vn` / Mật khẩu: `admin`
+
+
+
+
+

@@ -41,7 +41,7 @@ export class ScoringController {
     } else if (!role) {
       activeRole = req.user?.role || 'STUDENT';
     }
-    return this.scoringService.submitCriteria(formId, criteriaId, score, activeRole, studentId, proofUrl, semesterId);
+    return this.scoringService.submitCriteria(formId, criteriaId, score, activeRole, studentId, req.user.id, proofUrl, semesterId);
   }
 
   @Post(':formId/submit')
@@ -56,7 +56,7 @@ export class ScoringController {
     if (studentId === req.user?.id && activeRole === 'STUDENT') {
       activeRole = 'STUDENT';
     }
-    return this.scoringService.submitForm(formId, activeRole, studentId, semesterId);
+    return this.scoringService.submitForm(formId, activeRole, studentId, req.user.id, semesterId);
   }
 
   @Post(':formId/reject')
@@ -71,6 +71,6 @@ export class ScoringController {
     if (studentId === req.user?.id && activeRole === 'STUDENT') {
       activeRole = 'STUDENT';
     }
-    return this.scoringService.rejectForm(formId, activeRole, studentId, semesterId);
+    return this.scoringService.rejectForm(formId, activeRole, studentId, req.user.id, semesterId);
   }
 }
