@@ -580,10 +580,22 @@ export class ScoringService {
 
     // 3d. Validate điểm: không được thấp hơn min / vượt quá max
     // max_points KHÔNG giới hạn ở leaf — chỉ giới hạn bởi trần điểm mục cha (frontend tính)
-    if (criteria.score_type === 'DEDUCTION' || criteria.max_points < 0) {
+    if (isQuantityBased) {
+      const multiplier = QUANTITY_MULTIPLIERS[criteria.code];
+      const inputQuantity = score / multiplier;
+      const isDeduction = criteria.score_type === 'DEDUCTION' || criteria.max_points < 0;
+      const maxQuantity = isDeduction ? 40 : 30;
+      
+      if (inputQuantity < 0) {
+        throw new BadRequestException(`Số lượng không được nhỏ hơn 0 (tiêu chí "${criteria.code}")`);
+      }
+      if (inputQuantity > maxQuantity) {
+        throw new BadRequestException(`Số lượng không được vượt quá ${maxQuantity} lần (tiêu chí "${criteria.code}")`);
+      }
+    } else if (criteria.score_type === 'DEDUCTION' || criteria.max_points < 0) {
       // Đối với tiêu chí điểm trừ (deduction), max_points là số âm (ví dụ: -2), min_score là 0
       // Điểm hợp lệ phải nằm trong khoảng [max_points, min_score] (ví dụ: [-2, 0])
-      if (!isQuantityBased && score < criteria.max_points) {
+      if (score < criteria.max_points) {
         throw new BadRequestException(
           `Điểm không được thấp hơn ${criteria.max_points} (tiêu chí "${criteria.code}")`,
         );
@@ -1113,13 +1125,17 @@ export class ScoringService {
       const rawClass = byCategoryClass.get(catId) || 0;
       const rawAdvisor = byCategoryAdvisor.get(catId) || 0;
 
-      // ✅ FIX: Áp cả trần (max_score) VÀ sàn (0) cho mỗi danh mục
-      //    - Math.min: không vượt quá max_score của danh mục
-      //    - Math.max(0, ...): điểm danh mục không được âm (dù bị trừ nặng)
-      studentTotal += Math.max(0, Math.min(rawStudent, maxScore));
-      classTotal += Math.max(0, Math.min(rawClass, maxScore));
-      advisorTotal += Math.max(0, Math.min(rawAdvisor, maxScore));
+      // ✅ FIX: Chỉ áp trần (max_score), KHÔNG áp sàn 0 để điểm trừ có thể trừ vào tổng điểm các mục khác
+      // Math.min: không vượt quá max_score của danh mục
+      studentTotal += Math.min(rawStudent, maxScore);
+      classTotal += Math.min(rawClass, maxScore);
+      advisorTotal += Math.min(rawAdvisor, maxScore);
     }
+
+    // Đảm bảo tổng điểm cuối cùng không bị âm (đến khi tổng điểm phiếu về không thì dừng)
+    studentTotal = Math.max(0, studentTotal);
+    classTotal = Math.max(0, classTotal);
+    advisorTotal = Math.max(0, advisorTotal);
 
     // ✅ FIX: Làm tròn về 1 chữ số thập phân — khớp kiểu Decimal(5,1) trong DB
     //    Tránh sai lệch xếp loại do JS float precision (79.999... vs 80.0)

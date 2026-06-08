@@ -377,8 +377,8 @@ export function ScoringForm({
           (acc, child) => acc + calculateScoreFromMap(child.id, scoreMap, visited),
           0,
         );
-        if (item.max_points > 0) return Math.max(0, Math.min(sum, item.max_points));
-        if (item.max_points < 0) return Math.min(0, Math.max(sum, item.max_points));
+        if (item.max_points > 0) return Math.min(sum, item.max_points);
+        if (item.max_points < 0) return Math.min(0, sum);
         return sum;
       }
       return scoreMap[itemId] ?? 0;
@@ -399,8 +399,8 @@ export function ScoringForm({
           (acc, child) => acc + calculateAutoScore(child.id, visited),
           0,
         );
-        if (item.max_points > 0) return Math.max(0, Math.min(sum, item.max_points));
-        if (item.max_points < 0) return Math.min(0, Math.max(sum, item.max_points));
+        if (item.max_points > 0) return Math.min(sum, item.max_points);
+        if (item.max_points < 0) return Math.min(0, sum);
         return sum;
       }
       return parseFloat(inputValues[itemId]) || 0;
@@ -409,7 +409,7 @@ export function ScoringForm({
   );
 
   const totalScore = useMemo(() => {
-    return TAB_GROUPS.reduce((acc, tab) => {
+    const rawTotal = TAB_GROUPS.reduce((acc, tab) => {
       const tabRoots = criteria.filter(
         (c) =>
           (c.parent_id === null || c.parent_id === 0) &&
@@ -419,9 +419,10 @@ export function ScoringForm({
             c.code.startsWith('TC_' + tab.id)),
       );
       const tabSum = tabRoots.reduce((sum, root) => sum + calculateAutoScore(root.id), 0);
-      const safeTabSum = Math.max(0, Math.min(tabSum, tab.max));
+      const safeTabSum = Math.min(tabSum, tab.max);
       return acc + safeTabSum;
     }, 0);
+    return Math.max(0, rawTotal);
   }, [criteria, calculateAutoScore]);
 
   const handleInputChange = (criteriaId: number, value: string) => {
@@ -430,13 +431,27 @@ export function ScoringForm({
     if (item && value !== '' && value !== '-') {
       const num = parseFloat(value);
       if (!isNaN(num)) {
+        const isQuantityBased = !!QUANTITY_MULTIPLIERS[item.code];
         const isDeduction = item.score_type === 'DEDUCTION' || item.max_points < 0;
-        if (isDeduction) {
-          if (num > 0) finalValue = '0';
-          else if (num < item.max_points) finalValue = item.max_points.toString();
+        if (isQuantityBased) {
+          const multiplier = QUANTITY_MULTIPLIERS[item.code];
+          const inputQuantity = num / multiplier;
+          const maxQuantity = isDeduction ? 40 : 30;
+          
+          if (inputQuantity > maxQuantity) {
+            finalValue = (maxQuantity * multiplier).toString();
+          } else if (inputQuantity < 0) {
+            finalValue = '0';
+          }
         } else {
-          if (num < 0) finalValue = '0';
-          else if (item.max_points > 0 && num > item.max_points) finalValue = item.max_points.toString();
+          // Non-quantity: clamp theo max_points bình thường
+          if (isDeduction) {
+            if (num > 0) finalValue = '0';
+            else if (num < item.max_points) finalValue = item.max_points.toString();
+          } else {
+            if (num < 0) finalValue = '0';
+            else if (item.max_points > 0 && num > item.max_points) finalValue = item.max_points.toString();
+          }
         }
       }
     }
@@ -472,11 +487,19 @@ export function ScoringForm({
 
         // Validate score against max_points before sending to API
         const isDeduction = item.score_type === 'DEDUCTION' || item.max_points < 0;
-        if (isDeduction) {
-          if (score < item.max_points || score > 0) return null;
+        const isQuantityBased = !!QUANTITY_MULTIPLIERS[item.code];
+        if (isQuantityBased) {
+          const multiplier = QUANTITY_MULTIPLIERS[item.code];
+          const inputQuantity = score / multiplier;
+          const maxQuantity = isDeduction ? 40 : 30;
+          if (inputQuantity > maxQuantity || inputQuantity < 0) return null;
         } else {
-          if (score < 0) return null;
-          if (item.max_points > 0 && score > item.max_points) return null;
+          if (isDeduction) {
+            if (score < item.max_points || score > 0) return null;
+          } else {
+            if (score < 0) return null;
+            if (item.max_points > 0 && score > item.max_points) return null;
+          }
         }
 
         try {
@@ -534,7 +557,7 @@ export function ScoringForm({
     const raw = inputValues[criteriaId];
     const score = parseFloat(raw);
     if (isNaN(score)) return addToast('error', 'Vui lòng nhập số');
-    
+
     const isDeduction = maxPoints < 0;
     if (isDeduction) {
       if (score < maxPoints) return addToast('error', `Điểm không được thấp hơn ${maxPoints}`);
@@ -656,7 +679,7 @@ export function ScoringForm({
     return false;
   })();
 
-  const canDeleteForm = 
+  const canDeleteForm =
     (currentRole === 'CLASS_COMMITTEE' && !['NOT_CREATED', 'DRAFT'].includes(formStatus)) ||
     (currentRole === 'ADVISOR' && !['NOT_CREATED', 'DRAFT'].includes(formStatus)) ||
     (allowResetAnytime && !['NOT_CREATED'].includes(formStatus));
@@ -674,7 +697,7 @@ export function ScoringForm({
 
   // Stepper Logic
   const steps = [
-    { id: 'DRAFT', label: 'Nháp', num: 1 },
+    { id: 'DRAFT', label: 'Chưa nộp', num: 1 },
     { id: 'STUDENT_SUBMITTED', label: 'Ban cán sự', num: 2 },
     { id: 'CLASS_REVIEWED', label: 'Cố vấn học tập', num: 3 },
     { id: 'APPROVED', label: 'Hoàn thành', num: 4 }
@@ -698,80 +721,82 @@ export function ScoringForm({
         </div>
       )}
 
-      <div className="bg-stone-50/40 flex-1 flex flex-col h-full overflow-y-auto p-4 md:p-6">
-        <div className="w-full mx-auto space-y-4">
+      <div className="bg-stone-50/40 flex-1 flex flex-col h-full overflow-y-auto p-2 md:p-3">
+        <div className="w-full mx-auto space-y-2">
 
           {/* Header: Stepper + Actions — fixed layout, no scroll */}
-          <div className="bg-white rounded-2xl px-6 py-4 flex flex-col md:flex-row md:items-center justify-between border border-stone-200 shadow-sm gap-3">
-            {/* Stepper — evenly spaced */}
-            <div className="flex items-center flex-1 min-w-0">
-              {steps.map((step, idx) => {
-                const isActive = idx === Math.max(0, currentStepIndex);
-                const isCompleted = idx < Math.max(0, currentStepIndex);
-                return (
-                  <div key={step.id} className="flex items-center flex-1 last:flex-none">
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all ${isActive ? 'bg-stone-500 text-white' : isCompleted ? 'bg-red-100 text-red-900' : 'bg-gray-100 text-gray-400'}`}>
-                        {isCompleted ? <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg> : step.num}
+          {viewMode !== 'history' && (
+            <div className="bg-white rounded-2xl px-6 py-4 flex flex-col md:flex-row md:items-center justify-between border border-stone-200 shadow-sm gap-3">
+              {/* Stepper — evenly spaced */}
+              <div className="flex items-center flex-1 min-w-0">
+                {steps.map((step, idx) => {
+                  const isActive = idx === Math.max(0, currentStepIndex);
+                  const isCompleted = idx < Math.max(0, currentStepIndex);
+                  return (
+                    <div key={step.id} className="flex items-center flex-1 last:flex-none">
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all ${isActive ? 'bg-stone-500 text-white' : isCompleted ? 'bg-red-100 text-red-900' : 'bg-gray-100 text-gray-400'}`}>
+                          {isCompleted ? <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg> : step.num}
+                        </div>
+                        <span className={`text-xs ${isActive ? 'text-red-900 font-semibold' : isCompleted ? 'text-red-900' : 'text-gray-400'}`}>{step.label}</span>
                       </div>
-                      <span className={`text-xs ${isActive ? 'text-red-900 font-semibold' : isCompleted ? 'text-red-900' : 'text-gray-400'}`}>{step.label}</span>
+                      {idx < steps.length - 1 && (
+                        <div className={`flex-1 h-[1.5px] mx-2 rounded-full ${isCompleted ? 'bg-red-200' : 'bg-gray-100'}`} />
+                      )}
                     </div>
-                    {idx < steps.length - 1 && (
-                      <div className={`flex-1 h-[1.5px] mx-2 rounded-full ${isCompleted ? 'bg-red-200' : 'bg-gray-100'}`} />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-2 shrink-0">
-              {effectiveCanEdit && (
-                <>
-                  <button onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting || isDeleting} className="px-4 py-2 rounded-xl text-xs font-semibold text-red-900 bg-white border border-stone-300 hover:bg-stone-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
-                    {isSavingDraft ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-stone-300 border-t-red-900 animate-spin"></span> Đang lưu...</> : 'Lưu Nháp'}
+              {/* Actions */}
+              <div className="flex items-center gap-2 shrink-0">
+                {effectiveCanEdit && (
+                  <>
+                    <button onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting || isDeleting} className="px-4 py-2 rounded-xl text-xs font-semibold text-red-900 bg-white border border-stone-300 hover:bg-stone-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                      {isSavingDraft ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-stone-300 border-t-red-900 animate-spin"></span> Đang lưu...</> : 'Lưu Nháp'}
+                    </button>
+                    <button onClick={handleSubmitForm} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-800 hover:bg-red-900 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                      {isSubmitting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Đang xác nhận...' : 'Đang nộp...'}</> : <>{(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Xác nhận' : 'Nộp Phiếu'} <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></>}
+                    </button>
+                  </>
+                )}
+                {canDeleteForm && (
+                  <button onClick={() => setShowDeleteConfirm(true)} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ml-2">
+                    {isDeleting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> Đang xóa...</> : <>Xóa Phiếu <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></>}
                   </button>
-                  <button onClick={handleSubmitForm} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-800 hover:bg-red-900 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
-                    {isSubmitting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Đang xác nhận...' : 'Đang nộp...'}</> : <>{(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Xác nhận' : 'Nộp Phiếu'} <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></>}
-                  </button>
-                </>
-              )}
-              {canDeleteForm && (
-                <button onClick={() => setShowDeleteConfirm(true)} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ml-2">
-                  {isDeleting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> Đang xóa...</> : <>Xóa Phiếu <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></>}
-                </button>
-              )}
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Horizontal Score Card */}
-          <div className="bg-white rounded-2xl px-6 py-5 shadow-sm border border-stone-200 flex flex-col md:flex-row items-center gap-6">
+          <div className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-stone-200 flex flex-col md:flex-row items-center gap-4">
             {/* Circle */}
             <div className="flex flex-col items-center shrink-0">
-              <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-widest mb-2">Tổng điểm</span>
+              <span className="text-xs font-semibold text-stone-500 uppercase tracking-widest mb-1">Tổng điểm</span>
               <div className="relative w-24 h-24 flex items-center justify-center">
                 <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                   <circle cx="50" cy="50" r="40" fill="none" stroke="#fef2f2" strokeWidth="7" />
                   <circle cx="50" cy="50" r="40" fill="none" stroke="#991b1b" strokeWidth="7" strokeLinecap="round" strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * totalScore) / 100} className="transition-all duration-1000 ease-out" />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-bold text-red-900 leading-none">{totalScore}</span>
-                  <span className="text-[10px] text-stone-500 font-medium">/ 100</span>
+                  <span className="text-3xl font-bold text-red-900 leading-none">{totalScore}</span>
+                  <span className="text-xs text-stone-500 font-medium">/ 100</span>
                 </div>
               </div>
             </div>
 
             {/* Category chips */}
-            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 w-full">
+            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full">
               {TAB_GROUPS.map((tab, idx) => {
                 const tabRoots = criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
                 const tabScore = Math.min(tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0), tab.max);
                 const isFull = tabScore === tab.max;
                 const isEmpty = tabScore === 0;
                 return (
-                  <div key={tab.id} className={`flex flex-col items-center px-3 py-3 rounded-xl border transition-colors ${isFull ? 'bg-stone-50 border-stone-300' : isEmpty ? 'bg-gray-50 border-gray-100' : 'bg-white border-stone-200'}`}>
-                    <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wide text-center leading-tight mb-1.5 line-clamp-1" title={tab.short}>Mục {idx + 1}</span>
-                    <span className={`text-lg font-bold leading-none ${isFull ? 'text-red-900' : isEmpty ? 'text-gray-300' : 'text-red-900'}`}>{tabScore}<span className="text-xs text-stone-400 font-medium">/{tab.max}</span></span>
+                  <div key={tab.id} className={`flex flex-col items-center px-2 py-2 rounded-xl border transition-colors ${isFull ? 'bg-stone-50 border-stone-300' : isEmpty ? 'bg-gray-50 border-gray-100' : 'bg-white border-stone-200'}`}>
+                    <span className="text-xs font-semibold text-stone-500 uppercase tracking-wide text-center leading-tight mb-1 line-clamp-1" title={tab.short}>Mục {idx + 1}</span>
+                    <span className={`text-xl font-bold leading-none ${isFull ? 'text-red-900' : isEmpty ? 'text-gray-300' : 'text-red-900'}`}>{tabScore}<span className="text-sm text-stone-400 font-medium">/{tab.max}</span></span>
                   </div>
                 );
               })}
@@ -779,7 +804,7 @@ export function ScoringForm({
           </div>
 
           {/* Accordion List for Criteria */}
-          <div className="space-y-3 pb-8">
+          <div className="space-y-2 pb-4">
             {TAB_GROUPS.map((tab, idx) => {
               const isTabExpanded = expandedTabs.has(tab.id);
               const tabRoots = criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
@@ -795,19 +820,19 @@ export function ScoringForm({
               return (
                 <div key={tab.id} className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-all duration-200 ${isTabExpanded ? 'border-stone-300' : 'border-stone-200 hover:border-stone-300'}`}>
                   {/* Accordion Header */}
-                  <button onClick={() => toggleTab(tab.id)} className="w-full px-5 py-4 flex items-center justify-between gap-3 outline-none group">
-                    <div className="flex items-center gap-3 text-left min-w-0">
-                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-semibold text-sm shrink-0 transition-colors ${isTabExpanded ? 'bg-red-800 text-white' : 'bg-stone-50 text-red-900 group-hover:bg-red-100'}`}>
+                  <button onClick={() => toggleTab(tab.id)} className="w-full px-3 py-2.5 flex items-center justify-between gap-2 outline-none group">
+                    <div className="flex items-center gap-2 text-left min-w-0">
+                      <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-semibold text-base shrink-0 transition-colors ${isTabExpanded ? 'bg-red-800 text-white' : 'bg-stone-50 text-red-900 group-hover:bg-red-100'}`}>
                         {idx + 1}
                       </span>
                       <div className="min-w-0">
-                        <h4 className="text-sm font-semibold text-red-900 truncate">Mục {idx + 1}: {tab.short}</h4>
-                        {isTabExpanded && <p className="text-[11px] text-stone-500 mt-0.5 leading-snug line-clamp-2">{tab.title}</p>}
+                        <h4 className="text-base font-semibold text-red-900 truncate">Mục {idx + 1}: {tab.short}</h4>
+                        {isTabExpanded && <p className="text-sm text-stone-500 mt-0.5 leading-snug line-clamp-2">{tab.title}</p>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg ${isFull ? 'bg-red-100 text-red-900' : 'bg-gray-50 text-red-900'}`}>
-                        {tabScore}<span className="text-xs text-stone-400 font-medium">/{tab.max}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-base font-semibold px-2 py-0.5 rounded-lg ${isFull ? 'bg-red-100 text-red-900' : 'bg-gray-50 text-red-900'}`}>
+                        {tabScore}<span className="text-sm text-stone-400 font-medium">/{tab.max}</span>
                       </span>
                       <div className={`w-6 h-6 rounded-md bg-stone-50 flex items-center justify-center transition-transform duration-200 ${isTabExpanded ? 'rotate-180' : ''}`}>
                         <svg className="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -820,24 +845,25 @@ export function ScoringForm({
                     <div className="border-t border-stone-200 overflow-x-auto">
                       <table className="w-full text-left border-collapse min-w-[700px]">
                         <thead className="bg-stone-50/60">
-                          <tr className="text-red-900 text-[11px] font-semibold uppercase tracking-wider border-b border-stone-200">
-                            <th className="px-4 py-2.5 w-16">Mã</th>
-                            <th className="px-4 py-2.5">Nội dung</th>
-                            <th className="px-4 py-2.5 w-16 text-center">Điểm</th>
-                            <th className="px-4 py-2.5 w-20 text-center">Sinh viên</th>
+                          <tr className="text-red-900 text-sm font-semibold uppercase tracking-wider border-b border-stone-200">
+                            <th className="px-2 py-1.5 w-16">Mã</th>
+                            <th className="px-2 py-1.5">Nội dung</th>
+                            <th className="px-2 py-1.5 w-16 text-center">Điểm</th>
+                            <th className="px-2 py-1.5 w-20 text-center">Số lượng</th>
+                            <th className="px-2 py-1.5 w-24 text-center">Tổng điểm</th>
                             {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
-                              <th className="px-4 py-2.5 w-20 text-center">BCS Lớp</th>
+                              <th className="px-2 py-1.5 w-24 text-center">BCS Lớp</th>
                             )}
                             {currentRole === 'ADVISOR' && (
-                              <th className="px-4 py-2.5 w-20 text-center">Cố vấn</th>
+                              <th className="px-2 py-1.5 w-24 text-center">Cố vấn</th>
                             )}
-                            <th className="px-4 py-2.5 w-48">Minh chứng</th>
-                            <th className="px-4 py-2.5 w-12 text-center"></th>
+                            <th className="px-2 py-1.5 w-48">Minh chứng</th>
+                            <th className="px-2 py-1.5 w-12 text-center"></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-red-50">
                           {filtered.length === 0 ? (
-                            <tr><td colSpan={currentRole === 'STUDENT' ? 6 : currentRole === 'CLASS_COMMITTEE' ? 7 : 8} className="p-8 text-center text-stone-400 text-sm">Không có tiêu chí nào.</td></tr>
+                            <tr><td colSpan={currentRole === 'STUDENT' ? 7 : currentRole === 'CLASS_COMMITTEE' ? 8 : 9} className="p-4 text-center text-stone-400 text-base">Không có tiêu chí nào.</td></tr>
                           ) : (
                             filtered.map((item) => {
                               const isParent = parentIds.has(item.id);
@@ -857,127 +883,150 @@ export function ScoringForm({
                               const displayVal = isQuantityBased && val ? String(Number(val) / multiplier) : val;
                               const displayMinVal = isQuantityBased ? 0 : minVal;
                               const displayMaxVal = isQuantityBased ? (multiplier < 0 ? minVal / multiplier : maxVal / multiplier) : maxVal;
-                              const onChangeFn = isQuantityBased 
+                              const onChangeFn = isQuantityBased
                                 ? (e: React.ChangeEvent<HTMLInputElement>) => {
-                                    if (e.target.value === '') {
-                                      handleInputChange(item.id, '');
-                                    } else {
-                                      const num = Number(e.target.value);
-                                      handleInputChange(item.id, String(num * multiplier));
-                                    }
+                                  if (e.target.value === '') {
+                                    handleInputChange(item.id, '');
+                                  } else {
+                                    const num = Number(e.target.value);
+                                    handleInputChange(item.id, String(num * multiplier));
                                   }
+                                }
                                 : (e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(item.id, e.target.value);
 
                               if (isParent) {
                                 return (
                                   <tr key={item.id} className="bg-stone-50/30 hover:bg-stone-50/60 cursor-pointer transition-colors" onClick={() => toggleExpand(item.id)}>
-                                    <td className="px-4 py-2.5 text-[11px] font-medium text-stone-500">{item.code}</td>
-                                    <td className="px-4 py-2.5">
+                                    <td className="px-2 py-1.5 text-sm font-medium text-stone-500">{item.code}</td>
+                                    <td className="px-2 py-1.5">
                                       <div className="flex items-center" style={{ paddingLeft: `${depth * 1.2}rem` }}>
-                                        <span className={`w-4 h-4 rounded flex items-center justify-center mr-2 text-[10px] font-semibold ${isExpanded ? 'bg-red-100 text-red-900' : 'bg-red-800 text-white'}`}>{isExpanded ? '−' : '+'}</span>
-                                        <span className="text-xs font-semibold text-red-900">{item.content}</span>
+                                        <span className={`w-5 h-5 rounded flex items-center justify-center mr-2 text-xs font-semibold ${isExpanded ? 'bg-red-100 text-red-900' : 'bg-red-800 text-white'}`}>{isExpanded ? '−' : '+'}</span>
+                                        <span className="text-sm font-semibold text-red-900">{item.content}</span>
                                       </div>
                                     </td>
-                                    <td className="px-4 py-2.5 text-center text-xs text-stone-500">{item.max_points}</td>
-                                    <td className="px-4 py-2.5 text-center text-xs font-semibold text-red-900">
+                                    <td className="px-2 py-1.5 text-center text-sm text-stone-500">{item.max_points}</td>
+                                    <td className="px-2 py-1.5"></td>
+                                    <td className="px-2 py-1.5 text-center text-sm font-semibold text-red-900">
                                       {currentRole === 'STUDENT' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedStudentScores)}
                                     </td>
                                     {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
-                                      <td className="px-4 py-2.5 text-center text-xs font-semibold text-red-900">
+                                      <td className="px-2 py-1.5 text-center text-sm font-semibold text-red-900">
                                         {currentRole === 'CLASS_COMMITTEE' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedClassScores)}
                                       </td>
                                     )}
                                     {currentRole === 'ADVISOR' && (
-                                      <td className="px-4 py-2.5 text-center text-xs font-semibold text-red-900">
+                                      <td className="px-2 py-1.5 text-center text-sm font-semibold text-red-900">
                                         {calculateAutoScore(item.id)}
                                       </td>
                                     )}
-                                    <td className="px-4 py-2.5"></td>
-                                    <td className="px-4 py-2.5 text-center"><span className="text-[9px] uppercase font-semibold text-stone-400 bg-stone-50 px-1.5 py-0.5 rounded">Auto</span></td>
+                                    <td className="px-2 py-1.5"></td>
+                                    <td className="px-2 py-1.5 text-center"><span className="text-xs uppercase font-semibold text-stone-400 bg-stone-50 px-1.5 py-0.5 rounded">Auto</span></td>
                                   </tr>
                                 );
                               }
 
                               return (
                                 <tr key={item.id} className={`hover:bg-stone-50/30 transition-colors group ${isRowSaving ? 'opacity-50' : ''}`}>
-                                  <td className="px-4 py-2.5 text-[11px] text-stone-500">{item.code}</td>
-                                  <td className="px-4 py-2.5">
+                                  <td className="px-2 py-1.5 text-sm text-stone-500">{item.code}</td>
+                                  <td className="px-2 py-1.5">
                                     <div style={{ paddingLeft: `${depth * 1.2}rem` }}>
-                                      <span className="text-xs text-red-900 leading-snug">{item.content}</span>
-                                      {item.description && <span className="text-[10px] text-stone-400 mt-0.5 block leading-relaxed">{item.description}</span>}
-                                      {isQuantityBased && <span className="text-[10px] text-blue-600 font-semibold mt-0.5 block">Nhập số lượng (Hệ số: {multiplier > 0 ? `+${multiplier}` : multiplier}đ/lần)</span>}
+                                      <span className="text-sm text-red-900 leading-snug">{item.content}</span>
+                                      {item.description && <span className="text-xs text-stone-400 mt-0.5 block leading-relaxed">{item.description}</span>}
                                     </div>
                                   </td>
-                                  <td className="px-4 py-2.5 text-center text-xs text-stone-500">{item.max_points}</td>
-                                  
-                                  {/* Student Score Column */}
-                                  <td className="px-4 py-2.5 text-center">
-                                    {isFixed ? (
-                                      <span className="text-xs font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
-                                    ) : currentRole === 'STUDENT' ? (
-                                      <div className="flex flex-col items-center gap-1">
-                                        <div className="relative inline-block">
-                                          <input type="number" min={displayMinVal} max={displayMaxVal} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
-                                          {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
-                                        </div>
-                                        {isQuantityBased && val && <span className="text-[10px] font-semibold text-red-700">= {val} đ</span>}
+                                  <td className="px-2 py-1.5 text-center text-sm text-stone-500">
+                                    {isQuantityBased ? (multiplier > 0 ? `+${multiplier}` : multiplier) : item.max_points}
+                                  </td>
+
+                                  {/* Số lượng Column */}
+                                  <td className="px-2 py-1.5 text-center">
+                                    {!isFixed && isQuantityBased ? (
+                                      <div className="relative inline-block">
+                                        <input type="number" min={0} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-16 h-9 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                        {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
                                       </div>
                                     ) : (
-                                      <span className="text-xs font-medium text-red-900">{savedStudentScores[item.id] ?? '-'}</span>
+                                      <span className="text-sm text-stone-400">-</span>
+                                    )}
+                                  </td>
+
+                                  {/* Student Score Column (Tổng điểm) */}
+                                  <td className="px-2 py-1.5 text-center">
+                                    {isFixed ? (
+                                      <span className="text-sm font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                    ) : currentRole === 'STUDENT' ? (
+                                      isQuantityBased ? (
+                                        <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
+                                      ) : (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <div className="relative inline-block">
+                                            <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-16 h-9 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                            {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                          </div>
+                                        </div>
+                                      )
+                                    ) : (
+                                      <span className="text-sm font-medium text-red-900">{savedStudentScores[item.id] ?? '-'}</span>
                                     )}
                                   </td>
 
                                   {/* BCS Score Column */}
                                   {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
-                                    <td className="px-4 py-2.5 text-center">
+                                    <td className="px-2 py-1.5 text-center">
                                       {isFixed ? (
-                                        <span className="text-xs font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                        <span className="text-sm font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                       ) : currentRole === 'CLASS_COMMITTEE' ? (
-                                        <div className="flex flex-col items-center gap-1">
-                                          <div className="relative inline-block">
-                                            <input type="number" min={displayMinVal} max={displayMaxVal} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
-                                            {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                        isQuantityBased ? (
+                                          <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
+                                        ) : (
+                                          <div className="flex flex-col items-center gap-1">
+                                            <div className="relative inline-block">
+                                              <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-16 h-9 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                              {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                            </div>
                                           </div>
-                                          {isQuantityBased && val && <span className="text-[10px] font-semibold text-red-700">= {val} đ</span>}
-                                        </div>
+                                        )
                                       ) : (
-                                        <span className="text-xs font-medium text-red-900">{savedClassScores[item.id] ?? '-'}</span>
+                                        <span className="text-sm font-medium text-red-900">{savedClassScores[item.id] ?? '-'}</span>
                                       )}
                                     </td>
                                   )}
 
                                   {/* Advisor Score Column */}
                                   {currentRole === 'ADVISOR' && (
-                                    <td className="px-4 py-2.5 text-center">
+                                    <td className="px-2 py-1.5 text-center">
                                       {isFixed ? (
-                                        <span className="text-xs font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                        <span className="text-sm font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
                                       ) : (
-                                        <div className="flex flex-col items-center gap-1">
-                                          <div className="relative inline-block">
-                                            <input type="number" min={displayMinVal} max={displayMaxVal} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-14 h-8 text-center text-xs font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
-                                            {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                        isQuantityBased ? (
+                                          <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
+                                        ) : (
+                                          <div className="flex flex-col items-center gap-1">
+                                            <div className="relative inline-block">
+                                              <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-16 h-9 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                              {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                            </div>
                                           </div>
-                                          {isQuantityBased && val && <span className="text-[10px] font-semibold text-red-700">= {val} đ</span>}
-                                        </div>
+                                        )
                                       )}
                                     </td>
                                   )}
-                                  <td className="px-4 py-2.5">
+                                  <td className="px-2 py-1.5">
                                     {!isFixed && (
                                       <div className="relative flex items-center">
-                                        <input type="text" placeholder="Link minh chứng..." value={evidence} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => setEvidenceValues(prev => ({ ...prev, [item.id]: e.target.value }))} className="w-full h-8 px-3 text-[11px] text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all pr-8 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300 placeholder-red-200" />
+                                        <input type="text" placeholder="Link minh chứng..." value={evidence} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => setEvidenceValues(prev => ({ ...prev, [item.id]: e.target.value }))} className="w-full h-9 px-3 text-sm text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all pr-8 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300 placeholder-red-200" />
                                         {evidence && (
-                                          <a href={evidence.startsWith('http') ? evidence : `https://${evidence}`} target="_blank" rel="noopener noreferrer" className="absolute right-2 w-5 h-5 bg-red-100 hover:bg-red-200 rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer z-10" title="Mở liên kết minh chứng">
-                                            <svg className="w-3 h-3 text-red-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                          <a href={evidence.startsWith('http') ? evidence : `https://${evidence}`} target="_blank" rel="noopener noreferrer" className="absolute right-2 w-6 h-6 bg-red-100 hover:bg-red-200 rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer z-10" title="Mở liên kết minh chứng">
+                                            <svg className="w-4 h-4 text-red-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
                                           </a>
                                         )}
                                       </div>
                                     )}
                                   </td>
-                                  <td className="px-4 py-2.5 text-center">
+                                  <td className="px-2 py-1.5 text-center">
                                     {!isFixed && effectiveCanEdit && (
-                                      <button onClick={() => { handleInputChange(item.id, ''); setEvidenceValues(prev => ({ ...prev, [item.id]: '' })); }} disabled={isRowSaving || isSavingDraft || isSubmitting} className="w-6 h-6 rounded-md flex items-center justify-center text-stone-400 hover:text-stone-500 hover:bg-stone-50 transition-colors mx-auto opacity-0 group-hover:opacity-100 disabled:opacity-0" title="Xóa">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                      <button onClick={() => { handleInputChange(item.id, ''); setEvidenceValues(prev => ({ ...prev, [item.id]: '' })); }} disabled={isRowSaving || isSavingDraft || isSubmitting} className="w-7 h-7 rounded-md flex items-center justify-center text-stone-400 hover:text-stone-500 hover:bg-stone-50 transition-colors mx-auto opacity-0 group-hover:opacity-100 disabled:opacity-0" title="Xóa">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                       </button>
                                     )}
                                   </td>
