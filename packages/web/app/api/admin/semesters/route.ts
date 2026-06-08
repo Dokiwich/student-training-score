@@ -171,28 +171,35 @@ export async function PATCH(req: Request) {
 
   try {
     const body = await req.json();
-    const { id } = body;
+    const { id, action = 'activate' } = body;
     if (!id) return NextResponse.json({ message: 'ID học kỳ là bắt buộc' }, { status: 400 });
 
     const targetSemester = await prisma.semesters.findUnique({ where: { id } });
     if (!targetSemester) return NextResponse.json({ message: 'Không tìm thấy học kỳ' }, { status: 404 });
     if (targetSemester.status === 'LOCKED') {
-      return NextResponse.json({ message: 'Không thể kích hoạt học kỳ đã Khóa' }, { status: 400 });
+      return NextResponse.json({ message: 'Không thể thay đổi học kỳ đã Khóa' }, { status: 400 });
     }
 
-    // Tắt tất cả HK khác → chỉ kích hoạt HK được chọn
-    await prisma.$transaction([
-      prisma.semesters.updateMany({
-        where: { is_active: 1 },
-        data: { is_active: 0 },
-      }),
-      prisma.semesters.update({
+    if (action === 'deactivate') {
+      await prisma.semesters.update({
         where: { id },
-        data: { is_active: 1 },
-      }),
-    ]);
-
-    return NextResponse.json({ message: 'Đã kích hoạt học kỳ thành công' });
+        data: { is_active: 0 },
+      });
+      return NextResponse.json({ message: 'Đã hủy kích hoạt học kỳ thành công' });
+    } else {
+      // Tắt tất cả HK khác → chỉ kích hoạt HK được chọn
+      await prisma.$transaction([
+        prisma.semesters.updateMany({
+          where: { is_active: 1 },
+          data: { is_active: 0 },
+        }),
+        prisma.semesters.update({
+          where: { id },
+          data: { is_active: 1 },
+        }),
+      ]);
+      return NextResponse.json({ message: 'Đã kích hoạt học kỳ thành công' });
+    }
   } catch {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }

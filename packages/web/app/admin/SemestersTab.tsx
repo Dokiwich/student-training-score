@@ -69,7 +69,16 @@ export function SemestersTab() {
   const activateSemester = async (id: string) => {
     if (!confirm('Bạn có chắc muốn kích hoạt học kỳ này (các học kỳ khác sẽ bị vô hiệu hóa)?')) return;
     try {
-      const r = await fetch('/api/admin/semesters', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+      const r = await fetch('/api/admin/semesters', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action: 'activate' }) });
+      const d = await r.json();
+      if (r.ok) { fetchAll(); } else { alert(d.message); }
+    } catch { alert('Lỗi kết nối'); }
+  };
+
+  const deactivateSemester = async (id: string) => {
+    if (!confirm('Bạn có chắc muốn hủy kích hoạt học kỳ này?')) return;
+    try {
+      const r = await fetch('/api/admin/semesters', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action: 'deactivate' }) });
       const d = await r.json();
       if (r.ok) { fetchAll(); } else { alert(d.message); }
     } catch { alert('Lỗi kết nối'); }
@@ -135,6 +144,7 @@ export function SemestersTab() {
             </button>
           )}
           {Number(s.is_active) !== 1 && <button onClick={() => activateSemester(s.id)} className="btn-secondary" style={{ padding: '4px 8px', fontSize: 11, borderColor: '#10b981', color: '#10b981' }}>Kích hoạt</button>}
+          {Number(s.is_active) === 1 && <button onClick={() => deactivateSemester(s.id)} className="btn-secondary" style={{ padding: '4px 8px', fontSize: 11, borderColor: '#8a8f98', color: '#62666d' }}>Hủy kích hoạt</button>}
           <button onClick={() => startEdit(s)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
         </div>
       )
