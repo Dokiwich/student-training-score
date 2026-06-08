@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
+import { AlertTriangle } from 'lucide-react';
 
 const API_BASE = '/proxy-api';
 
@@ -704,7 +705,7 @@ export function ScoringForm({
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
         <div className="bg-red-50 text-red-600 p-6 rounded-xl flex flex-col items-center gap-4 max-w-md text-center shadow-sm border border-red-100">
-          <span className="text-3xl">⚠️</span>
+          <AlertTriangle size={36} strokeWidth={2} />
           <span className="font-medium">{fetchError}</span>
         </div>
       </div>

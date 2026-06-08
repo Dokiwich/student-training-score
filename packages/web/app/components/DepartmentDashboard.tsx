@@ -5,6 +5,7 @@ import { DataTable } from './DataTable';
 import { ScoringForm } from './ScoringForm';
 import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { CheckCircle, FileText } from 'lucide-react';
 
 const API_BASE = '/proxy-api';
 
@@ -709,7 +710,7 @@ export function DepartmentDashboard() {
           {/* Semester selector */}
           <select value={selectedSemesterId} onChange={e => setSelectedSemesterId(e.target.value)} className="form-input" style={{ width: 220, fontWeight: 500, fontSize: 13 }}>
             {semesters.map(s => (
-              <option key={s.id} value={s.id}>{s.name} {Number(s.is_active) === 1 ? '●' : ''}</option>
+              <option key={s.id} value={s.id}>{s.name} {Number(s.is_active) === 1 ? '(Active)' : ''}</option>
             ))}
           </select>
           {/* Class filter for export */}
@@ -944,8 +945,8 @@ export function DepartmentDashboard() {
             onClick={e => e.stopPropagation()}
           >
             <div className="modal-header">
-              <h3 className="modal-header-title">
-                📋 Phiếu điểm rèn luyện:{' '}
+              <h3 className="modal-header-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <FileText size={18} strokeWidth={2} /> Phiếu điểm rèn luyện:{' '}
                 <span style={{ color: 'var(--accent)' }}>{selectedStudentForEdit.name}</span>
                 <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>({selectedStudentForEdit.studentCode})</span>
               </h3>
@@ -1029,7 +1030,7 @@ export function DepartmentDashboard() {
             <div className="modal-body" style={{ flex: 1, overflowY: 'auto' }}>
               {!importResults && (
                 <>
-                  {manageClassId && <div style={{ padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#15803d', fontWeight: 500 }}>✅ Lớp đã chọn: <strong>{deptClasses.find(c => c.id === manageClassId)?.code}</strong></div>}
+                  {manageClassId && <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#15803d', fontWeight: 500 }}><CheckCircle size={14} strokeWidth={2} /> Lớp đã chọn: <strong>{deptClasses.find(c => c.id === manageClassId)?.code}</strong></div>}
                   {!manageClassId && <div style={{ padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#92400e', fontWeight: 500 }}>⚠ Chưa chọn lớp — File cần cột &quot;Lớp&quot;</div>}
                   <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
                     <button onClick={downloadDeptTemplate} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>

@@ -1,8 +1,9 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { DataTable } from '../components/DataTable';
+import { Check, CheckCircle2, Circle, Copy, Loader2 } from 'lucide-react';
 
-interface Semester { id: string; code: string; name: string; academic_year: string; semester_number: number; start_date: string; end_date: string; student_deadline: string; class_committee_deadline: string; advisor_deadline: string; school_deadline: string; status: string; is_active: number; }
+interface Semester { id: string; code: string; name: string; academic_year: string; semester_number: number; start_date: string; end_date: string; student_deadline: string; class_committee_deadline: string; advisor_deadline: string; school_deadline: string; status: string; is_active: number; criteriaCount?: number; categoryCount?: number; hasVersion?: boolean; }
 
 const STATUS_LABELS: Record<string, string> = { UPCOMING: 'Sắp tới', STUDENT_SCORING: 'SV chấm', CLASS_REVIEWING: 'Lớp xét', ADVISOR_REVIEWING: 'CVHT xét', SCHOOL_REVIEWING: 'Trường xét', FINALIZED: 'Đã chốt', LOCKED: 'Khóa' };
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
@@ -22,6 +23,7 @@ export function SemestersTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Semester | null>(null);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
   const [form, setForm] = useState({ code: '', name: '', academic_year: '2025-2026', semester_number: '1', start_date: '', end_date: '', student_deadline: '', class_committee_deadline: '', advisor_deadline: '', school_deadline: '', status: 'UPCOMING' });
 
   const fetchAll = useCallback(async (silent = false) => {
@@ -73,6 +75,29 @@ export function SemestersTab() {
     } catch { alert('Lỗi kết nối'); }
   };
 
+  const applyCriteria = async (semesterId: string, semesterName: string) => {
+    if (!confirm(`Áp dụng bộ tiêu chí hiện tại cho học kỳ "${semesterName}"?\n\nHệ thống sẽ sao chép toàn bộ mục và tiêu chí sang học kỳ này.`)) return;
+    setApplyingId(semesterId);
+    try {
+      const r = await fetch('/api/admin/semesters/apply-criteria', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetSemesterId: semesterId }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        alert(`${d.message}`);
+        fetchAll();
+      } else {
+        alert(`${d.message}`);
+      }
+    } catch {
+      alert('Lỗi kết nối');
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
 
   const columns = [
@@ -87,11 +112,28 @@ export function SemestersTab() {
         return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: sc.bg, color: sc.color }}>{STATUS_LABELS[s.status] || s.status}</span>;
       }
     },
+    { header: 'Tiêu chí', width: 100, align: 'center' as const, render: (s: Semester) => {
+        if (s.criteriaCount && s.criteriaCount > 0) {
+          return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: '#ecfdf5', color: '#10b981' }}><Check size={12} strokeWidth={2.5} /> {s.criteriaCount} TC</span>;
+        }
+        return <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 9999, background: '#fef2f2', color: '#ef4444' }}>Chưa có</span>;
+      }
+    },
     { header: 'Kích hoạt', width: 80, align: 'center' as const, render: (s: Semester) => (
-        Number(s.is_active) === 1 ? <span style={{ color: '#10b981', fontWeight: 600, fontSize: 12 }}>● Active</span> : <span style={{ color: '#d1d5db', fontSize: 12 }}>○</span>
+        Number(s.is_active) === 1 ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#10b981', fontWeight: 600, fontSize: 12 }}><CheckCircle2 size={14} strokeWidth={2} /> Active</span> : <span style={{ display: 'inline-flex', alignItems: 'center', color: '#d1d5db', fontSize: 12 }}><Circle size={14} strokeWidth={2} /></span>
     ) },
-    { header: 'Thao tác', width: 140, align: 'center' as const, render: (s: Semester) => (
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+    { header: 'Thao tác', width: 220, align: 'center' as const, render: (s: Semester) => (
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {(!s.criteriaCount || s.criteriaCount === 0) && (
+            <button
+              onClick={() => applyCriteria(s.id, s.name)}
+              disabled={applyingId === s.id}
+              className="btn-primary"
+              style={{ padding: '4px 10px', fontSize: 11, opacity: applyingId === s.id ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              {applyingId === s.id ? <><Loader2 size={14} className="spin" strokeWidth={2} /> Đang áp dụng...</> : <><Copy size={14} strokeWidth={2} /> Áp dụng TC</>}
+            </button>
+          )}
           {Number(s.is_active) !== 1 && <button onClick={() => activateSemester(s.id)} className="btn-secondary" style={{ padding: '4px 8px', fontSize: 11, borderColor: '#10b981', color: '#10b981' }}>Kích hoạt</button>}
           <button onClick={() => startEdit(s)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
         </div>

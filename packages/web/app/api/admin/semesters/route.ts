@@ -35,6 +35,16 @@ export async function GET() {
 
   const semesters = await prisma.semesters.findMany({
     orderBy: { start_date: 'desc' },
+    include: {
+      criteria_versions: {
+        where: { is_active: 1 },
+        include: {
+          criteria_categories: {
+            include: { _count: { select: { criteria: true } } },
+          },
+        },
+      },
+    },
   });
 
   // Auto-compute & sync status cho tất cả HK
@@ -50,13 +60,25 @@ export async function GET() {
           ...(shouldDeactivate ? { is_active: 0 } : {})
         },
       });
-      return { 
-        ...s, 
-        status: computed as any,
-        ...(shouldDeactivate ? { is_active: 0 } : {})
-      };
     }
-    return s;
+
+    // Tính tổng criteria cho semester này
+    const activeVersion = s.criteria_versions?.[0];
+    const criteriaCount = activeVersion
+      ? activeVersion.criteria_categories.reduce((a, c) => a + c._count.criteria, 0)
+      : 0;
+    const categoryCount = activeVersion?.criteria_categories.length || 0;
+
+    // Remove nested data, chỉ trả về count
+    const { criteria_versions, ...semesterData } = s;
+    return {
+      ...semesterData,
+      status: (computed !== s.status || shouldDeactivate) ? computed : s.status,
+      ...(shouldDeactivate ? { is_active: 0 } : {}),
+      criteriaCount,
+      categoryCount,
+      hasVersion: !!activeVersion,
+    };
   }));
 
   return NextResponse.json({ data: updated });
