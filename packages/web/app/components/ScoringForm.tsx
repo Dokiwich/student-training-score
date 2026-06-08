@@ -125,6 +125,7 @@ export function ScoringForm({
 
   const [currentRole] = useState<Role>(forcedRole || 'STUDENT');
   const [formStatus, setFormStatus] = useState<string>('DRAFT');
+  const [actualFormId, setActualFormId] = useState<string>(formId);
   const [isDirty, setIsDirty] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -184,7 +185,7 @@ export function ScoringForm({
       if (criteriaRes.ok) {
         const data = await criteriaRes.json();
         const rootItems = (data.data || [])
-          .filter((c: Criterion) => c.parent_id === null || c.parent_id === 0)
+          .filter((c: Criterion) => !c.parent_id)
           .map((c: Criterion) => c.id);
         setCriteria(data.data || []);
         setExpandedIds(new Set(rootItems));
@@ -241,6 +242,10 @@ export function ScoringForm({
         } else if (scoresData.formStatus) {
           setFormStatus(scoresData.formStatus);
         }
+        // ✅ Cập nhật actualFormId
+        if (scoresData.formId) {
+          setActualFormId(scoresData.formId);
+        }
       }
     } finally {
       setIsLoading(false);
@@ -271,7 +276,7 @@ export function ScoringForm({
     const childrenMap = new Map<number | null, Criterion[]>();
     const criteriaIds = new Set(criteria.map((c) => c.id));
     criteria.forEach((c) => {
-      const isRoot = c.parent_id === null || !criteriaIds.has(c.parent_id);
+      const isRoot = !c.parent_id || !criteriaIds.has(c.parent_id);
       const pid = isRoot ? null : c.parent_id;
       if (!childrenMap.has(pid)) childrenMap.set(pid, []);
       childrenMap.get(pid)!.push(c);
@@ -330,7 +335,7 @@ export function ScoringForm({
     (itemId: number): boolean => {
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return false;
-      if (item.parent_id === null || item.parent_id === 0) return true;
+      if (!item.parent_id) return true;
       if (!expandedIds.has(item.parent_id)) return false;
       return isVisible(item.parent_id);
     },
@@ -341,7 +346,7 @@ export function ScoringForm({
     const map = new Map<number, number>();
     const getDepth = (item: Criterion): number => {
       if (map.has(item.id)) return map.get(item.id)!;
-      if (item.parent_id === null || item.parent_id === 0) {
+      if (!item.parent_id) {
         map.set(item.id, 0);
         return 0;
       }
@@ -358,7 +363,7 @@ export function ScoringForm({
     (itemId: number): Criterion | null => {
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return null;
-      if (item.parent_id === null || item.parent_id === 0) return item;
+      if (!item.parent_id) return item;
       return getRoot(item.parent_id);
     },
     [criteria],
@@ -412,7 +417,7 @@ export function ScoringForm({
     const rawTotal = TAB_GROUPS.reduce((acc, tab) => {
       const tabRoots = criteria.filter(
         (c) =>
-          (c.parent_id === null || c.parent_id === 0) &&
+          (!c.parent_id) &&
           (c.code === tab.id ||
             c.code.startsWith(tab.id + '.') ||
             c.code.startsWith('TC_0' + tab.id) ||
@@ -503,7 +508,7 @@ export function ScoringForm({
         }
 
         try {
-          const r = await fetch(`${API_BASE}/scoring/${formId}/submit-criteria`, {
+          const r = await fetch(`${API_BASE}/scoring/${actualFormId}/submit-criteria`, {
             method: 'POST', credentials: 'include', headers: headersInit,
             body: JSON.stringify({ criteriaId: item.id, score, role: currentRole, studentId, proofUrl: evidenceValues[item.id] || undefined, isDraft: true, semesterId }),
           });
@@ -576,7 +581,7 @@ export function ScoringForm({
         'Authorization': `Bearer ${customJwt}`,
       };
 
-      const response = await fetch(`${API_BASE}/scoring/${formId}/submit-criteria`, {
+      const response = await fetch(`${API_BASE}/scoring/${actualFormId}/submit-criteria`, {
         method: 'POST',
         credentials: 'include',
         headers: headers,
@@ -613,7 +618,7 @@ export function ScoringForm({
         'Authorization': `Bearer ${customJwt}`,
       };
 
-      const response = await fetch(`${API_BASE}/scoring/${formId}/submit`, {
+      const response = await fetch(`${API_BASE}/scoring/${actualFormId}/submit`, {
         method: 'POST',
         credentials: 'include',
         headers: headers,
@@ -649,7 +654,7 @@ export function ScoringForm({
         'Authorization': `Bearer ${customJwt}`,
       };
 
-      const response = await fetch(`${API_BASE}/scoring/${formId}/reject`, {
+      const response = await fetch(`${API_BASE}/scoring/${actualFormId}/reject`, {
         method: 'POST',
         credentials: 'include',
         headers: headers,
@@ -686,10 +691,21 @@ export function ScoringForm({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full min-h-[400px]">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 rounded-full border-4 border-stone-200 border-t-red-900 animate-spin"></div>
           <span className="text-red-900 text-sm">Đang tải dữ liệu...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <div className="bg-red-50 text-red-600 p-6 rounded-xl flex flex-col items-center gap-4 max-w-md text-center shadow-sm border border-red-100">
+          <span className="text-3xl">⚠️</span>
+          <span className="font-medium">{fetchError}</span>
         </div>
       </div>
     );
@@ -789,7 +805,7 @@ export function ScoringForm({
             {/* Category chips */}
             <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full">
               {TAB_GROUPS.map((tab, idx) => {
-                const tabRoots = criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
+                const tabRoots = criteria.filter(c => (!c.parent_id) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
                 const tabScore = Math.min(tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0), tab.max);
                 const isFull = tabScore === tab.max;
                 const isEmpty = tabScore === 0;
@@ -807,7 +823,7 @@ export function ScoringForm({
           <div className="space-y-2 pb-4">
             {TAB_GROUPS.map((tab, idx) => {
               const isTabExpanded = expandedTabs.has(tab.id);
-              const tabRoots = criteria.filter(c => (c.parent_id === null || c.parent_id === 0) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
+              const tabRoots = criteria.filter(c => (!c.parent_id) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
               const tabScore = Math.min(tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0), tab.max);
               const isFull = tabScore === tab.max;
               const filtered = sortedCriteria.filter(item => {
