@@ -43,12 +43,10 @@ interface ScoringDashboardProps {
 const ROLE_META = {
   CLASS_COMMITTEE: {
     title: 'Ban Can Su Cham Diem',
-    subtitle: 'Xet duyet ren luyen HK1 - 2026',
     scoreCol: 'classTotal' as const,
   },
   ADVISOR: {
     title: 'Co Van Duyet Diem',
-    subtitle: 'Xet duyet ren luyen HK1 - 2026',
     scoreCol: 'advisorTotal' as const,
   },
 };
@@ -148,7 +146,8 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
     } catch { /* silent */ }
   }, [session]);
 
-  const handleResetSheet = async (studentId: string, studentName: string) => {
+  const handleResetSheet = async (studentId: string, studentName: string, formId: string | null) => {
+    if (!formId) { alert('Sinh viên chưa có phiếu điểm để xóa.'); return; }
     if (!window.confirm(`CẢNH BÁO: Hành động này sẽ XÓA HOÀN TOÀN phiếu điểm của "${studentName}" và tạo phiếu mới trắng. Tiếp tục?`)) return;
     setIsResetting(true);
     try {
@@ -158,7 +157,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${customJwt}`,
       };
-      const res = await fetch(`${API_BASE}/scoring/reset/reject`, {
+      const res = await fetch(`${API_BASE}/scoring/${formId}/reject`, {
         method: 'POST', credentials: 'include', headers,
         body: JSON.stringify({ studentId }),
       });
@@ -393,7 +392,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
               {role === 'ADVISOR' && (
                 <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
                   <button
-                    onClick={() => handleResetSheet(selectedStudent.id, selectedStudent.name)}
+                    onClick={() => handleResetSheet(selectedStudent.id, selectedStudent.name, selectedStudent.formId)}
                     disabled={isResetting}
                     style={{
                       padding: '6px 14px', fontSize: 12, fontWeight: 600,

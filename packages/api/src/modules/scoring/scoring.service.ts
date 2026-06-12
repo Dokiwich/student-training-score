@@ -345,6 +345,9 @@ export class ScoringService {
             email: true,
           },
         },
+        classes: {
+          select: { name: true },
+        },
         scoring_sheets: {
           select: {
             id: true,
@@ -372,6 +375,7 @@ export class ScoringService {
         studentCode: s.student_id,
         name: s.full_name,
         email: s.email,
+        className: e.classes?.name || null,
         formId: sheet?.id || null,
         status: sheet?.status || 'NO_SHEET',
         studentTotal: sheet?.student_total != null ? Number(sheet.student_total) : null,
@@ -1028,13 +1032,37 @@ export class ScoringService {
       throw new BadRequestException('Chỉ Ban cán sự và Cố vấn học tập mới có quyền xóa/reset phiếu!');
     }
 
-    // Xóa toàn bộ dữ liệu liên quan để "làm mới hoàn toàn"
+    // ✅ FIX BUG-04: Kiểm tra trạng thái phiếu theo role
+    if (role === 'CLASS_COMMITTEE' && !['STUDENT_SUBMITTED', 'CLASS_REVIEWING'].includes(form.status)) {
+      throw new BadRequestException('Ban cán sự chỉ được trả lại phiếu khi sinh viên đã nộp.');
+    }
+    if (role === 'ADVISOR' && !['STUDENT_SUBMITTED', 'CLASS_REVIEWING', 'CLASS_REVIEWED', 'ADVISOR_REVIEWING', 'ADVISOR_APPROVED'].includes(form.status)) {
+      throw new BadRequestException('Cố vấn chỉ được trả lại phiếu khi phiếu đã được xét duyệt.');
+    }
+
+    // ✅ FIX BUG-01: Xóa toàn bộ dữ liệu liên quan (bao gồm appeals, comments, evidences, review_actions)
     await prisma.$transaction([
-      // 1. Xóa chi tiết điểm
+      // 1. Xóa khiếu nại liên quan
+      prisma.appeals.deleteMany({
+        where: { scoring_sheet_id: form.id }
+      }),
+      // 2. Xóa bình luận
+      prisma.comments.deleteMany({
+        where: { scoring_sheet_id: form.id }
+      }),
+      // 3. Xóa minh chứng
+      prisma.evidences.deleteMany({
+        where: { scoring_sheet_id: form.id }
+      }),
+      // 4. Xóa lịch sử duyệt
+      prisma.review_actions.deleteMany({
+        where: { scoring_sheet_id: form.id }
+      }),
+      // 5. Xóa chi tiết điểm (score_entries cascade tự động)
       prisma.score_details.deleteMany({
         where: { scoring_sheet_id: form.id }
       }),
-      // 2. Xóa chính phiếu điểm
+      // 6. Xóa chính phiếu điểm
       prisma.scoring_sheets.delete({
         where: { id: form.id }
       })
