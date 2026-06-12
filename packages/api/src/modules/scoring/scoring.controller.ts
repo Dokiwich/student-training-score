@@ -13,14 +13,14 @@ export class ScoringController {
     return this.scoringService.getStudentListByUser(userId);
   }
 
-  @Get(':formId/scores')
-  async getFormScores(@Param('formId') formId: string, @Query('studentId') studentId: string, @Query('semesterId') semesterId?: string) {
-    return this.scoringService.getScoresByFormId(formId, studentId, semesterId);
-  }
-
   @Get('criteria')
   async getAllCriteria() {
     return this.scoringService.getAllCriteria();
+  }
+
+  @Get(':formId/scores')
+  async getFormScores(@Param('formId') formId: string, @Query('studentId') studentId: string, @Query('semesterId') semesterId?: string) {
+    return this.scoringService.getScoresByFormId(formId, studentId, semesterId);
   }
 
   @Post(':formId/submit-criteria')

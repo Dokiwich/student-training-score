@@ -827,10 +827,17 @@ export class AppealService {
       const rawClass = byCategoryClass.get(catId) || 0;
       const rawAdvisor = byCategoryAdvisor.get(catId) || 0;
 
-      studentTotal += Math.max(0, Math.min(rawStudent, maxScore));
-      classTotal += Math.max(0, Math.min(rawClass, maxScore));
-      advisorTotal += Math.max(0, Math.min(rawAdvisor, maxScore));
+      // ✅ FIX BUG-05: Chỉ áp trần (max_score), KHÔNG áp sàn 0 per-category
+      // → Đồng bộ logic với ScoringService.calculateTotals
+      studentTotal += Math.min(rawStudent, maxScore);
+      classTotal += Math.min(rawClass, maxScore);
+      advisorTotal += Math.min(rawAdvisor, maxScore);
     }
+
+    // Đảm bảo tổng điểm cuối cùng không bị âm
+    studentTotal = Math.max(0, studentTotal);
+    classTotal = Math.max(0, classTotal);
+    advisorTotal = Math.max(0, advisorTotal);
 
     // Làm tròn 1 chữ số thập phân
     studentTotal = Math.round(studentTotal * 10) / 10;

@@ -187,12 +187,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <div className="login-remember-me">
-            <label className="login-checkbox-label">
-              <input type="checkbox" className="login-checkbox" />
-              <span>Duy trì đăng nhập</span>
-            </label>
-          </div>
+
 
           <button
             type="submit"
