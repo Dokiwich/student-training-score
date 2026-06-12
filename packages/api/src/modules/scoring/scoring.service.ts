@@ -397,6 +397,7 @@ export class ScoringService {
   // =============================================
   async getAllCriteria() {
     const criteriaList = await prisma.criteria.findMany({
+      where: { is_active: 1 },
       orderBy: { id: 'asc' },
     });
 
