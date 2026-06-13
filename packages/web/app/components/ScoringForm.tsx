@@ -40,7 +40,7 @@ interface Criterion {
   id: number;
   code: string;
   content: string;
-  max_points: number;
+  point: number;
   score_type: string;
   parent_id: number | null;
   description?: string;
@@ -376,15 +376,15 @@ export function ScoringForm({
       visited.add(itemId);
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return 0;
-      if (FIXED_CODES.includes(item.code)) return item.max_points;
+      if (FIXED_CODES.includes(item.code)) return item.point;
       const children = criteria.filter((c) => c.parent_id === itemId);
       if (children.length > 0) {
         const sum = children.reduce(
           (acc, child) => acc + calculateScoreFromMap(child.id, scoreMap, visited),
           0,
         );
-        if (item.max_points > 0) return Math.min(sum, item.max_points);
-        if (item.max_points < 0) return Math.min(0, sum);
+        if (item.point > 0) return Math.min(sum, item.point);
+        if (item.point < 0) return Math.min(0, sum);
         return sum;
       }
       return scoreMap[itemId] ?? 0;
@@ -398,15 +398,15 @@ export function ScoringForm({
       visited.add(itemId);
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return 0;
-      if (FIXED_CODES.includes(item.code)) return item.max_points;
+      if (FIXED_CODES.includes(item.code)) return item.point;
       const children = criteria.filter((c) => c.parent_id === itemId);
       if (children.length > 0) {
         const sum = children.reduce(
           (acc, child) => acc + calculateAutoScore(child.id, visited),
           0,
         );
-        if (item.max_points > 0) return Math.min(sum, item.max_points);
-        if (item.max_points < 0) return Math.min(0, sum);
+        if (item.point > 0) return Math.min(sum, item.point);
+        if (item.point < 0) return Math.min(0, sum);
         return sum;
       }
       return parseFloat(inputValues[itemId]) || 0;
@@ -438,7 +438,7 @@ export function ScoringForm({
       const num = parseFloat(value);
       if (!isNaN(num)) {
         const isQuantityBased = !!QUANTITY_MULTIPLIERS[item.code];
-        const isDeduction = item.score_type === 'DEDUCTION' || item.max_points < 0;
+        const isDeduction = item.score_type === 'DEDUCTION' || item.point < 0;
         if (isQuantityBased) {
           const multiplier = QUANTITY_MULTIPLIERS[item.code];
           const inputQuantity = num / multiplier;
@@ -450,13 +450,13 @@ export function ScoringForm({
             finalValue = '0';
           }
         } else {
-          // Non-quantity: clamp theo max_points bình thường
+          // Non-quantity: clamp theo point bình thường
           if (isDeduction) {
             if (num > 0) finalValue = '0';
-            else if (num < item.max_points) finalValue = item.max_points.toString();
+            else if (num < item.point) finalValue = item.point.toString();
           } else {
             if (num < 0) finalValue = '0';
-            else if (item.max_points > 0 && num > item.max_points) finalValue = item.max_points.toString();
+            else if (item.point > 0 && num > item.point) finalValue = item.point.toString();
           }
         }
       }
@@ -484,15 +484,15 @@ export function ScoringForm({
       const saveSingleItem = async (item: typeof leafItems[0]) => {
         let score = 0;
         if (FIXED_CODES.includes(item.code)) {
-          score = item.max_points;
+          score = item.point;
         } else {
           const raw = inputValues[item.id] ?? '';
           score = raw === '' ? 0 : parseFloat(raw);
         }
         if (isNaN(score)) return null;
 
-        // Validate score against max_points before sending to API
-        const isDeduction = item.score_type === 'DEDUCTION' || item.max_points < 0;
+        // Validate score against point before sending to API
+        const isDeduction = item.score_type === 'DEDUCTION' || item.point < 0;
         const isQuantityBased = !!QUANTITY_MULTIPLIERS[item.code];
         if (isQuantityBased) {
           const multiplier = QUANTITY_MULTIPLIERS[item.code];
@@ -501,10 +501,10 @@ export function ScoringForm({
           if (inputQuantity > maxQuantity || inputQuantity < 0) return null;
         } else {
           if (isDeduction) {
-            if (score < item.max_points || score > 0) return null;
+            if (score < item.point || score > 0) return null;
           } else {
             if (score < 0) return null;
-            if (item.max_points > 0 && score > item.max_points) return null;
+            if (item.point > 0 && score > item.point) return null;
           }
         }
 
@@ -891,9 +891,9 @@ export function ScoringForm({
                               const evidence = evidenceValues?.[item.id] || '';
                               const isRowSaving = savingId === item.id;
 
-                              const isDeduction = item.score_type === 'DEDUCTION' || item.max_points < 0;
-                              const minVal = isDeduction ? item.max_points : 0;
-                              const maxVal = isDeduction ? 0 : (item.max_points > 0 ? item.max_points : 100);
+                              const isDeduction = item.score_type === 'DEDUCTION' || item.point < 0;
+                              const minVal = isDeduction ? item.point : 0;
+                              const maxVal = isDeduction ? 0 : (item.point > 0 ? item.point : 100);
 
                               const multiplier = QUANTITY_MULTIPLIERS[item.code];
                               const isQuantityBased = !!multiplier;
@@ -921,7 +921,7 @@ export function ScoringForm({
                                         <span className="text-sm font-semibold text-red-900">{item.content}</span>
                                       </div>
                                     </td>
-                                    <td className="px-2 py-1.5 text-center text-sm text-stone-500">{item.max_points}</td>
+                                    <td className="px-2 py-1.5 text-center text-sm text-stone-500">{item.point}</td>
                                     <td className="px-2 py-1.5"></td>
                                     <td className="px-2 py-1.5 text-center text-sm font-semibold text-red-900">
                                       {currentRole === 'STUDENT' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedStudentScores)}
@@ -952,7 +952,7 @@ export function ScoringForm({
                                     </div>
                                   </td>
                                   <td className="px-2 py-1.5 text-center text-sm text-stone-500">
-                                    {isQuantityBased ? (multiplier > 0 ? `+${multiplier}` : multiplier) : item.max_points}
+                                    {isQuantityBased ? (multiplier > 0 ? `+${multiplier}` : multiplier) : item.point}
                                   </td>
 
                                   {/* Số lượng Column */}
@@ -970,7 +970,7 @@ export function ScoringForm({
                                   {/* Student Score Column (Tổng điểm) */}
                                   <td className="px-2 py-1.5 text-center">
                                     {isFixed ? (
-                                      <span className="text-sm font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                      <span className="text-sm font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.point}</span>
                                     ) : currentRole === 'STUDENT' ? (
                                       isQuantityBased ? (
                                         <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
@@ -991,7 +991,7 @@ export function ScoringForm({
                                   {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
                                     <td className="px-2 py-1.5 text-center">
                                       {isFixed ? (
-                                        <span className="text-sm font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                        <span className="text-sm font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.point}</span>
                                       ) : currentRole === 'CLASS_COMMITTEE' ? (
                                         isQuantityBased ? (
                                           <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
@@ -1013,7 +1013,7 @@ export function ScoringForm({
                                   {currentRole === 'ADVISOR' && (
                                     <td className="px-2 py-1.5 text-center">
                                       {isFixed ? (
-                                        <span className="text-sm font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.max_points}</span>
+                                        <span className="text-sm font-semibold text-red-900 bg-stone-50 px-2 py-1 rounded-lg">{item.point}</span>
                                       ) : (
                                         isQuantityBased ? (
                                           <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>

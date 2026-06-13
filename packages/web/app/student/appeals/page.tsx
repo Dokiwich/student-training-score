@@ -38,7 +38,7 @@ interface CriteriaItem {
   id: number;
   code: string;
   content: string;
-  max_points: number;
+  point: number;
   parent_id: number | null;
   studentScore: number | null;
   classScore: number | null;

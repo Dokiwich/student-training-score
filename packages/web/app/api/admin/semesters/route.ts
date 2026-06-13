@@ -105,7 +105,7 @@ export async function POST(req: Request) {
 
     const semester = await prisma.semesters.create({
       data: {
-        id: randomUUID(),
+        id: `sem_${code}`,
         code,
         name,
         academic_year,
