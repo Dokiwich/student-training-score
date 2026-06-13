@@ -72,7 +72,7 @@ function Toast({
   }, [message.id, onDismiss]);
 
   return (
-    <div className={`px-4 py-3 text-xs font-medium border rounded-xl shadow-lg ${message.type === 'success' ? 'bg-stone-50 border-stone-300 text-red-900' : 'bg-stone-50 border-stone-300 text-red-900'}`}>
+    <div className={`px-4 py-3 text-xs font-medium border rounded-xl shadow-lg ${message.type === 'success' ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-red-50 border-red-300 text-red-900'}`}>
       <span className="font-semibold">{message.type === 'success' ? 'Thành công:' : 'Lỗi:'}</span>{' '}
       {message.text}
     </div>
@@ -91,6 +91,7 @@ interface ScoringFormProps {
   requiredStatuses?: string[];
   semesterId?: string;
   allowResetAnytime?: boolean;
+  setTopBarExtra?: (node: React.ReactNode) => void;
 }
 
 export function ScoringForm({
@@ -104,6 +105,7 @@ export function ScoringForm({
   requiredStatuses,
   semesterId,
   allowResetAnytime,
+  setTopBarExtra,
 }: ScoringFormProps) {
   const { data: session } = useSession();
 
@@ -251,7 +253,7 @@ export function ScoringForm({
     } finally {
       setIsLoading(false);
     }
-  }, [formId, studentId, session]);
+  }, [formId, studentId, session, semesterId]);
 
   useEffect(() => {
     fetchData();
