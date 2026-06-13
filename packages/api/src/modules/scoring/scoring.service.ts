@@ -584,11 +584,11 @@ export class ScoringService {
     const isQuantityBased = criteria.code in QUANTITY_MULTIPLIERS;
 
     // 3d. Validate điểm: không được thấp hơn min / vượt quá max
-    // max_points KHÔNG giới hạn ở leaf — chỉ giới hạn bởi trần điểm mục cha (frontend tính)
+    // point KHÔNG giới hạn ở leaf — chỉ giới hạn bởi trần điểm mục cha (frontend tính)
     if (isQuantityBased) {
       const multiplier = QUANTITY_MULTIPLIERS[criteria.code];
       const inputQuantity = score / multiplier;
-      const isDeduction = criteria.score_type === 'DEDUCTION' || criteria.max_points < 0;
+      const isDeduction = criteria.score_type === 'DEDUCTION' || criteria.point < 0;
       const maxQuantity = isDeduction ? 40 : 30;
       
       if (inputQuantity < 0) {
@@ -597,31 +597,31 @@ export class ScoringService {
       if (inputQuantity > maxQuantity) {
         throw new BadRequestException(`Số lượng không được vượt quá ${maxQuantity} lần (tiêu chí "${criteria.code}")`);
       }
-    } else if (criteria.score_type === 'DEDUCTION' || criteria.max_points < 0) {
-      // Đối với tiêu chí điểm trừ (deduction), max_points là số âm (ví dụ: -2), min_score là 0
-      // Điểm hợp lệ phải nằm trong khoảng [max_points, min_score] (ví dụ: [-2, 0])
-      if (score < criteria.max_points) {
+    } else if (criteria.score_type === 'DEDUCTION' || criteria.point < 0) {
+      // Đối với tiêu chí điểm trừ (deduction), điểm là số âm (ví dụ: -2)
+      // Điểm hợp lệ phải nằm trong khoảng [point, 0] (ví dụ: [-2, 0])
+      if (score < criteria.point) {
         throw new BadRequestException(
-          `Điểm không được thấp hơn ${criteria.max_points} (tiêu chí "${criteria.code}")`,
+          `Điểm không được thấp hơn ${criteria.point} (tiêu chí "${criteria.code}")`,
         );
       }
-      if (score > (criteria.min_score ?? 0)) {
+      if (score > 0) {
         throw new BadRequestException(
-          `Điểm không được vượt quá ${criteria.min_score ?? 0} (tiêu chí "${criteria.code}")`,
+          `Điểm không được vượt quá 0 (tiêu chí "${criteria.code}")`,
         );
       }
     } else {
       // Đối với tiêu chí điểm cộng thông thường
-      if (score < (criteria.min_score ?? 0)) {
+      if (score < 0) {
         throw new BadRequestException(
-          `Điểm không được thấp hơn ${criteria.min_score} (tiêu chí "${criteria.code}")`,
+          `Điểm không được thấp hơn 0 (tiêu chí "${criteria.code}")`,
         );
       }
-      // ✅ FIX: Kiểm tra score không được vượt quá max_points
+      // ✅ FIX: Kiểm tra score không được vượt quá point
       // Trước đây bỏ check ở đây dẫn đến lỗi Decimal(5,2) overflow → 500 khi nhập số quá lớn
-      if (!isQuantityBased && criteria.max_points > 0 && score > criteria.max_points) {
+      if (!isQuantityBased && criteria.point > 0 && score > criteria.point) {
         throw new BadRequestException(
-          `Điểm không được vượt quá ${criteria.max_points} (tiêu chí "${criteria.code}")`,
+          `Điểm không được vượt quá ${criteria.point} (tiêu chí "${criteria.code}")`,
         );
       }
     }

@@ -50,7 +50,7 @@ export async function GET(req: Request) {
         id: true,
         code: true,
         content: true,
-        max_points: true,
+        point: true,
         parent_id: true,
       },
     });
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
         id: c.id,
         code: c.code,
         content: c.content,
-        max_points: c.max_points,
+        point: c.point,
         parent_id: c.parent_id,
         studentScore: student ? Number(student.score) : null,
         classScore: classC ? Number(classC.score) : null,

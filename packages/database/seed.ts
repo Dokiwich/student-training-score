@@ -236,42 +236,42 @@ async function main() {
   // Mục I - Ý thức tham gia học tập
   await prisma.criteria.createMany({
     data: [
-      { category_id: catA_id, code: 'I.1', content: 'Đi học đầy đủ, đúng giờ', max_points: 5, min_score: 0, sort_order: 1, is_active: 1 },
-      { category_id: catA_id, code: 'I.2', content: 'Chuẩn bị bài trước khi đến lớp', max_points: 5, min_score: 0, sort_order: 2, is_active: 1 },
-      { category_id: catA_id, code: 'I.3', content: 'Hoàn thành đầy đủ các bài tập', max_points: 5, min_score: 0, sort_order: 3, is_active: 1 },
-      { category_id: catA_id, code: 'I.4', content: 'Tích cực phát biểu xây dựng bài', max_points: 5, min_score: 0, sort_order: 4, is_active: 1 },
+      { category_id: catA_id, code: 'I.1', content: 'Đi học đầy đủ, đúng giờ', point: 5, sort_order: 1, is_active: 1 },
+      { category_id: catA_id, code: 'I.2', content: 'Chuẩn bị bài trước khi đến lớp', point: 5, sort_order: 2, is_active: 1 },
+      { category_id: catA_id, code: 'I.3', content: 'Hoàn thành đầy đủ các bài tập', point: 5, sort_order: 3, is_active: 1 },
+      { category_id: catA_id, code: 'I.4', content: 'Tích cực phát biểu xây dựng bài', point: 5, sort_order: 4, is_active: 1 },
     ],
   });
 
   // Mục II - Ý thức chấp hành nội quy
   await prisma.criteria.createMany({
     data: [
-      { category_id: catB_id, code: 'II.1', content: 'Chấp hành tốt quy chế, nội quy của trường', max_points: 5, min_score: 0, sort_order: 1, is_active: 1 },
-      { category_id: catB_id, code: 'II.2', content: 'Đóng học phí đầy đủ, đúng hạn', max_points: 5, min_score: 0, sort_order: 2, is_active: 1 },
-      { category_id: catB_id, code: 'II.3', content: 'Giữ gìn vệ sinh, bảo vệ tài sản nhà trường', max_points: 5, min_score: 0, sort_order: 3, is_active: 1 },
-      { category_id: catB_id, code: 'II.4', content: 'Không vi phạm pháp luật, nội quy ký túc xá', max_points: 5, min_score: 0, sort_order: 4, is_active: 1 },
-      { category_id: catB_id, code: 'II.5', content: 'Không gian lận thi cử', max_points: 5, min_score: 0, sort_order: 5, is_active: 1 },
+      { category_id: catB_id, code: 'II.1', content: 'Chấp hành tốt quy chế, nội quy của trường', point: 5, sort_order: 1, is_active: 1 },
+      { category_id: catB_id, code: 'II.2', content: 'Đóng học phí đầy đủ, đúng hạn', point: 5, sort_order: 2, is_active: 1 },
+      { category_id: catB_id, code: 'II.3', content: 'Giữ gìn vệ sinh, bảo vệ tài sản nhà trường', point: 5, sort_order: 3, is_active: 1 },
+      { category_id: catB_id, code: 'II.4', content: 'Không vi phạm pháp luật, nội quy ký túc xá', point: 5, sort_order: 4, is_active: 1 },
+      { category_id: catB_id, code: 'II.5', content: 'Không gian lận thi cử', point: 5, sort_order: 5, is_active: 1 },
     ],
   });
 
   // Mục III - Ý thức tham gia hoạt động
   await prisma.criteria.createMany({
     data: [
-      { category_id: catC_id, code: 'III.1', content: 'Tham gia các hoạt động Đoàn, Hội', max_points: 5, min_score: 0, sort_order: 1, is_active: 1 },
-      { category_id: catC_id, code: 'III.2', content: 'Tham gia hoạt động tình nguyện', max_points: 5, min_score: 0, sort_order: 2, is_active: 1 },
-      { category_id: catC_id, code: 'III.3', content: 'Tham gia hoạt động văn nghệ, thể thao', max_points: 5, min_score: 0, sort_order: 3, is_active: 1 },
-      { category_id: catC_id, code: 'III.4', content: 'Tham gia câu lạc bộ, đội nhóm', max_points: 5, min_score: 0, sort_order: 4, is_active: 1 },
+      { category_id: catC_id, code: 'III.1', content: 'Tham gia các hoạt động Đoàn, Hội', point: 5, sort_order: 1, is_active: 1 },
+      { category_id: catC_id, code: 'III.2', content: 'Tham gia hoạt động tình nguyện', point: 5, sort_order: 2, is_active: 1 },
+      { category_id: catC_id, code: 'III.3', content: 'Tham gia hoạt động văn nghệ, thể thao', point: 5, sort_order: 3, is_active: 1 },
+      { category_id: catC_id, code: 'III.4', content: 'Tham gia câu lạc bộ, đội nhóm', point: 5, sort_order: 4, is_active: 1 },
     ],
   });
 
   // Mục IV - Ý thức công dân
   await prisma.criteria.createMany({
     data: [
-      { category_id: catD_id, code: 'IV.1', content: 'Có tinh thần đoàn kết, giúp đỡ bạn bè', max_points: 5, min_score: 0, sort_order: 1, is_active: 1 },
-      { category_id: catD_id, code: 'IV.2', content: 'Tham gia phòng chống tệ nạn xã hội', max_points: 5, min_score: 0, sort_order: 2, is_active: 1 },
-      { category_id: catD_id, code: 'IV.3', content: 'Có ý thức bảo vệ môi trường', max_points: 5, min_score: 0, sort_order: 3, is_active: 1 },
-      { category_id: catD_id, code: 'IV.4', content: 'Tham gia hiến máu nhân đạo', max_points: 5, min_score: 0, sort_order: 4, is_active: 1 },
-      { category_id: catD_id, code: 'IV.5', content: 'Được biểu dương, khen thưởng', max_points: 5, min_score: 0, sort_order: 5, is_active: 1 },
+      { category_id: catD_id, code: 'IV.1', content: 'Có tinh thần đoàn kết, giúp đỡ bạn bè', point: 5, sort_order: 1, is_active: 1 },
+      { category_id: catD_id, code: 'IV.2', content: 'Tham gia phòng chống tệ nạn xã hội', point: 5, sort_order: 2, is_active: 1 },
+      { category_id: catD_id, code: 'IV.3', content: 'Có ý thức bảo vệ môi trường', point: 5, sort_order: 3, is_active: 1 },
+      { category_id: catD_id, code: 'IV.4', content: 'Tham gia hiến máu nhân đạo', point: 5, sort_order: 4, is_active: 1 },
+      { category_id: catD_id, code: 'IV.5', content: 'Được biểu dương, khen thưởng', point: 5, sort_order: 5, is_active: 1 },
     ],
   });
   console.log('✅ 18 Criteria created across 4 categories');

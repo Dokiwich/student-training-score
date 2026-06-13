@@ -99,8 +99,7 @@ model criteria {
   parent_id           Int?
   code                String              @db.VarChar(20)
   content             String              @db.VarChar(500)
-  max_points          Float               @default(0) @db.Real
-  min_score           Float               @default(0) @db.Real
+  point               Float               @default(0) @db.Real
   score_type          criteria_score_type @default(RANGE)
   score_options       Json?
   require_evidence    Int                 @default(0) @db.SmallInt

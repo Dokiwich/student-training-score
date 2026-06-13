@@ -13,20 +13,43 @@ function checkAdmin(session: any) {
 }
 
 // GET: list all criteria + categories
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!checkAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const versionId = searchParams.get('versionId');
+
+  const versions = await prisma.criteria_versions.findMany({
+    include: { semesters: { select: { name: true } } },
+    orderBy: { created_at: 'desc' },
+  });
+
+  const activeVersion = await prisma.criteria_versions.findFirst({
+    where: { is_active: 1 },
+    orderBy: { created_at: 'desc' },
+  });
+
+  const targetVersionId = versionId || activeVersion?.id;
+
   const [criteriaList, categoriesList] = await Promise.all([
-    prisma.criteria.findMany({ orderBy: { id: 'asc' } }),
-    prisma.criteria_categories.findMany({ orderBy: { sort_order: 'asc' } }),
+    prisma.criteria.findMany({ 
+      where: targetVersionId ? { criteria_categories: { criteria_version_id: targetVersionId } } : {},
+      orderBy: { id: 'asc' } 
+    }),
+    prisma.criteria_categories.findMany({ 
+      where: targetVersionId ? { criteria_version_id: targetVersionId } : {},
+      orderBy: { sort_order: 'asc' } 
+    }),
   ]);
 
   return NextResponse.json({
     data: criteriaList,
     categories: categoriesList,
+    activeVersion,
+    versions,
   });
 }
 
@@ -39,6 +62,18 @@ export async function PUT(req: Request) {
 
   try {
     const body = await req.json();
+
+    if (body._type === 'version') {
+      const { id, version } = body;
+      if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
+
+      const updated = await prisma.criteria_versions.update({
+        where: { id },
+        data: { version: parseInt(version) },
+      });
+
+      return NextResponse.json({ message: 'Cập nhật phiên bản thành công', data: updated });
+    }
 
     if (body._type === 'category') {
       const { id, name, max_score, code } = body;
@@ -58,13 +93,14 @@ export async function PUT(req: Request) {
     }
 
     // Update criterion
-    const { id, max_points, content, code } = body;
+    const { id, point, content, code, category_id } = body;
     if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
 
     const updateData: Record<string, unknown> = { updated_at: new Date() };
-    if (max_points !== undefined) updateData.max_points = parseFloat(max_points);
+    if (point !== undefined) updateData.point = parseFloat(point);
     if (content !== undefined) updateData.content = content;
     if (code !== undefined) updateData.code = code;
+    if (category_id !== undefined) updateData.category_id = category_id;
 
     const updated = await prisma.criteria.update({
       where: { id: typeof id === 'string' ? parseInt(id) : id },
@@ -93,25 +129,24 @@ export async function POST(req: Request) {
       const { code, name, max_score } = body;
       if (!code || !name) return NextResponse.json({ message: 'Thiếu mã hoặc tên mục' }, { status: 400 });
 
-      // Get active criteria version
-      const activeVersion = await prisma.criteria_versions.findFirst({
-        where: { is_active: 1 },
-        orderBy: { created_at: 'desc' },
-      });
+      // Get target criteria version
+      const targetVersion = body.criteria_version_id
+        ? await prisma.criteria_versions.findUnique({ where: { id: body.criteria_version_id } })
+        : await prisma.criteria_versions.findFirst({ where: { is_active: 1 }, orderBy: { created_at: 'desc' } });
 
-      if (!activeVersion) {
-        return NextResponse.json({ message: 'Không tìm thấy phiên bản tiêu chí đang hoạt động' }, { status: 400 });
+      if (!targetVersion) {
+        return NextResponse.json({ message: 'Không tìm thấy phiên bản tiêu chí' }, { status: 400 });
       }
 
       const maxOrder = await prisma.criteria_categories.aggregate({
         _max: { sort_order: true },
-        where: { criteria_version_id: activeVersion.id },
+        where: { criteria_version_id: targetVersion.id },
       });
 
       const newCat = await prisma.criteria_categories.create({
         data: {
           id: randomUUID(),
-          criteria_version_id: activeVersion.id,
+          criteria_version_id: targetVersion.id,
           code,
           name,
           max_score: parseFloat(max_score) || 0,
@@ -123,7 +158,7 @@ export async function POST(req: Request) {
     }
 
     // Create criterion
-    const { code, content, max_points, parent_id, category_id } = body;
+    const { code, content, point, parent_id, category_id } = body;
     if (!code || !content) return NextResponse.json({ message: 'Thiếu mã hoặc nội dung tiêu chí' }, { status: 400 });
 
     const newCriteria = await prisma.criteria.create({
@@ -131,7 +166,7 @@ export async function POST(req: Request) {
         category_id,
         code,
         content,
-        max_points: parseFloat(max_points) || 0,
+        point: parseFloat(point) || 0,
         parent_id: parent_id ? parseInt(parent_id) : null,
         sort_order: 0,
         is_active: 1,

@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { targetSemesterId, sourceSemesterId } = body;
+    const { targetSemesterId, sourceSemesterId, sourceVersionId } = body;
 
     if (!targetSemesterId) {
       return NextResponse.json({ message: 'Thiếu ID học kỳ đích' }, { status: 400 });
@@ -52,8 +52,18 @@ export async function POST(req: Request) {
     }
 
     // 3. Tìm version nguồn
-    let sourceVersion;
-    if (sourceSemesterId) {
+    let sourceVersion = null;
+    if (sourceVersionId && sourceVersionId !== 'BLANK') {
+      sourceVersion = await prisma.criteria_versions.findUnique({
+        where: { id: sourceVersionId },
+        include: {
+          criteria_categories: {
+            include: { criteria: { orderBy: { id: 'asc' } } },
+            orderBy: { sort_order: 'asc' },
+          },
+        },
+      });
+    } else if (sourceSemesterId) {
       sourceVersion = await prisma.criteria_versions.findFirst({
         where: { semester_id: sourceSemesterId, is_active: 1 },
         include: {
@@ -65,7 +75,7 @@ export async function POST(req: Request) {
       });
     }
 
-    if (!sourceVersion) {
+    if (!sourceVersion && sourceVersionId !== 'BLANK') {
       // Fallback: tìm version active có nhiều criteria nhất
       const allVersions = await prisma.criteria_versions.findMany({
         where: { is_active: 1 },
@@ -86,14 +96,14 @@ export async function POST(req: Request) {
         .sort((a, b) => b.totalCriteria - a.totalCriteria)[0];
     }
 
-    if (!sourceVersion) {
+    if (!sourceVersion && sourceVersionId !== 'BLANK') {
       return NextResponse.json({ message: 'Không tìm thấy bộ tiêu chí nguồn nào' }, { status: 400 });
     }
 
-    const sourceCatCount = sourceVersion.criteria_categories.length;
-    const sourceCriteriaCount = sourceVersion.criteria_categories.reduce((a, c) => a + c.criteria.length, 0);
+    const sourceCatCount = sourceVersion ? sourceVersion.criteria_categories.length : 0;
+    const sourceCriteriaCount = sourceVersion ? sourceVersion.criteria_categories.reduce((a, c) => a + c.criteria.length, 0) : 0;
 
-    if (sourceCriteriaCount === 0) {
+    if (sourceCriteriaCount === 0 && sourceVersionId !== 'BLANK') {
       return NextResponse.json({ message: 'Bộ tiêu chí nguồn không có tiêu chí nào' }, { status: 400 });
     }
 
@@ -104,22 +114,35 @@ export async function POST(req: Request) {
       `SELECT setval(pg_get_serial_sequence('criteria', 'id'), ${maxId}, true)`
     );
 
-    // 5. Tạo version mới cho học kỳ đích
-    const newVersionId = randomUUID();
+    // 5. Tính version number mới và tạo version cho học kỳ đích
+    const maxVersionInSemester = await prisma.criteria_versions.findFirst({
+      where: { semester_id: targetSemesterId },
+      orderBy: { version: 'desc' }
+    });
+    const nextVersionNum = maxVersionInSemester ? maxVersionInSemester.version + 1 : 1;
+    const newVersionId = `ver_${targetSemester.code}_v${nextVersionNum}`;
+
     await prisma.criteria_versions.create({
       data: {
         id: newVersionId,
         semester_id: targetSemesterId,
-        version: 1,
+        version: nextVersionNum,
         is_active: 1,
         applied_at: new Date(),
       },
     });
 
+    if (sourceVersionId === 'BLANK') {
+      return NextResponse.json({
+        message: `Đã tạo phiên bản bộ tiêu chí (trống) thành công cho học kỳ "${targetSemester.name}"!`,
+        data: { versionId: newVersionId }
+      });
+    }
+
     // 6. Clone categories
     const catIdMap = new Map<string, string>();
     for (const cat of sourceVersion.criteria_categories) {
-      const newCatId = randomUUID();
+      const newCatId = `cat_${targetSemester.code}_${cat.code}`;
       catIdMap.set(cat.id, newCatId);
       await prisma.criteria_categories.create({
         data: {
@@ -150,8 +173,8 @@ export async function POST(req: Request) {
           parent_id: null,
           code: c.code,
           content: c.content,
-          max_points: c.max_points,
-          min_score: c.min_score,
+          point: c.point,
+          
           score_type: c.score_type,
           score_options: c.score_options || undefined,
           require_evidence: c.require_evidence,
@@ -184,8 +207,8 @@ export async function POST(req: Request) {
           parent_id: newParentId || null,
           code: c.code,
           content: c.content,
-          max_points: c.max_points,
-          min_score: c.min_score,
+          point: c.point,
+          
           score_type: c.score_type,
           score_options: c.score_options || undefined,
           require_evidence: c.require_evidence,
@@ -197,7 +220,7 @@ export async function POST(req: Request) {
       criteriaIdMap.set(c.id, newCrit.id);
     }
 
-    const clonedTotal = criteriaIdMap.size;
+    const clonedTotal = sourceVersionId === 'BLANK' ? 0 : criteriaIdMap.size;
 
     return NextResponse.json({
       message: `Đã áp dụng ${clonedTotal} tiêu chí (${sourceCatCount} mục) vào học kỳ "${targetSemester.name}" thành công!`,
