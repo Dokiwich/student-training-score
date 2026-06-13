@@ -192,7 +192,15 @@ export async function DELETE(req: Request) {
 
     if (body._type === 'category') {
       // Delete all criteria in this category first
-      await prisma.criteria.deleteMany({ where: { category_id: body.id } });
+      const crits = await prisma.criteria.findMany({ where: { category_id: body.id } });
+      const critIds = crits.map(c => c.id);
+      
+      // Delete children first to avoid FK constraint
+      if (critIds.length > 0) {
+        await prisma.criteria.deleteMany({ where: { parent_id: { in: critIds } } });
+        await prisma.criteria.deleteMany({ where: { category_id: body.id } });
+      }
+      
       await prisma.criteria_categories.delete({ where: { id: body.id } });
       return NextResponse.json({ message: 'Đã xóa mục và tất cả tiêu chí liên quan' });
     }

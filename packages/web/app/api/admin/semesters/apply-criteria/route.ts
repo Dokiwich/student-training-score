@@ -141,7 +141,7 @@ export async function POST(req: Request) {
 
     // 6. Clone categories
     const catIdMap = new Map<string, string>();
-    for (const cat of sourceVersion.criteria_categories) {
+    for (const cat of sourceVersion!.criteria_categories) {
       const newCatId = `cat_${targetSemester.code}_${cat.code}`;
       catIdMap.set(cat.id, newCatId);
       await prisma.criteria_categories.create({
@@ -158,7 +158,7 @@ export async function POST(req: Request) {
     }
 
     // 7. Clone criteria (roots first, then children in topological order)
-    const allCriteria = sourceVersion.criteria_categories.flatMap(cat =>
+    const allCriteria = sourceVersion!.criteria_categories.flatMap(cat =>
       cat.criteria.map(c => ({ ...c, newCategoryId: catIdMap.get(cat.id)! }))
     );
 
