@@ -72,8 +72,8 @@ export function DepartmentsTab() {
     },
     { header: 'Thao tác', width: 140, align: 'center' as const, render: (d: Dept) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-          <button onClick={() => startEdit(d)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
-          <button onClick={() => handleDelete(d)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
+          <button onClick={(e) => { e.stopPropagation(); startEdit(d); }} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
+          <button onClick={(e) => { e.stopPropagation(); handleDelete(d); }} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
         </div>
       )
     }

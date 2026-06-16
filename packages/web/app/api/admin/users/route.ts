@@ -101,6 +101,13 @@ export async function POST(req: Request) {
       }
     }
 
+    // Auto-detect department from class if not provided
+    let resolvedDeptId = department_id || null;
+    if (!resolvedDeptId && class_id) {
+      const cls = await prisma.classes.findUnique({ where: { id: class_id }, select: { department_id: true } });
+      if (cls?.department_id) resolvedDeptId = cls.department_id;
+    }
+
     const password_hash = await bcrypt.hash(password, 10);
     const newUser = await prisma.users.create({
       data: {
@@ -110,7 +117,7 @@ export async function POST(req: Request) {
         password_hash,
         student_id: student_id || null,
         role,
-        department_id: department_id || null,
+        department_id: resolvedDeptId,
         is_active: 1
       }
     });
@@ -167,6 +174,12 @@ export async function PUT(req: Request) {
     if (phone !== undefined) updateData.phone = phone;
     if (student_id !== undefined) updateData.student_id = student_id || null;
 
+    // Auto-detect department from class if not explicitly set
+    if (class_id && department_id === undefined) {
+      const cls = await prisma.classes.findUnique({ where: { id: class_id }, select: { department_id: true } });
+      if (cls?.department_id) updateData.department_id = cls.department_id;
+    }
+
     if (student_id) {
       const existingStudentId = await prisma.users.findUnique({ where: { student_id } });
       if (existingStudentId && existingStudentId.id !== id) {
@@ -180,29 +193,38 @@ export async function PUT(req: Request) {
     });
 
     // ✅ Auto-upsert enrollment khi thay đổi class_id
-    if (class_id !== undefined && class_id) {
+    if (class_id !== undefined) {
       const activeSemester = await prisma.semesters.findFirst({
         where: { is_active: 1 },
         orderBy: { created_at: 'desc' },
         select: { id: true },
       });
       if (activeSemester) {
-        await prisma.semester_enrollments.upsert({
-          where: {
-            user_id_semester_id: {
+        if (class_id) {
+          // Gán lớp mới
+          await prisma.semester_enrollments.upsert({
+            where: {
+              user_id_semester_id: {
+                user_id: id,
+                semester_id: activeSemester.id,
+              },
+            },
+            update: { class_id, is_active: 1 },
+            create: {
+              id: randomUUID(),
               user_id: id,
               semester_id: activeSemester.id,
+              class_id,
+              is_active: 1,
             },
-          },
-          update: { class_id, is_active: 1 },
-          create: {
-            id: randomUUID(),
-            user_id: id,
-            semester_id: activeSemester.id,
-            class_id,
-            is_active: 1,
-          },
-        });
+          });
+        } else {
+          // Gỡ lớp: deactivate enrollment hiện tại
+          await prisma.semester_enrollments.updateMany({
+            where: { user_id: id, semester_id: activeSemester.id },
+            data: { is_active: 0 },
+          });
+        }
       }
     }
 

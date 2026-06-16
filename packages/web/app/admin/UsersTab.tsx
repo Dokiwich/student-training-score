@@ -1,9 +1,9 @@
 'use client';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { DataTable } from '../components/DataTable';interface UserItem { id: string; student_id: string | null; email: string; full_name: string; phone: string | null; role: string; class_id: string | null; department_id: string | null; className: string; departmentName: string; is_active: number; }
+import { DataTable } from '../components/DataTable'; interface UserItem { id: string; student_id: string | null; email: string; full_name: string; phone: string | null; role: string; class_id: string | null; department_id: string | null; className: string; departmentName: string; is_active: number; }
 interface Dept { id: string; code: string; name: string; }
-interface ClassItem { id: string; code: string; name: string; }
+interface ClassItem { id: string; code: string; name: string; department_id?: string; }
 
 const ROLE_LABELS: Record<string, string> = { STUDENT: 'Sinh viên', CLASS_COMMITTEE: 'Ban cán sự', ADVISOR: 'Cố vấn', SCHOOL_ADMIN: 'Admin', DEPARTMENT: 'Khoa' };
 const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
@@ -42,6 +42,11 @@ export function UsersTab() {
   const urlRole = searchParams.get('role');
   const [filterRole, setFilterRole] = useState(urlRole || '');
   const [filterDept, setFilterDept] = useState('');
+
+  // Sync filterRole with URL param when navigating
+  useEffect(() => {
+    setFilterRole(urlRole || '');
+  }, [urlRole]);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<UserItem | null>(null);
   const [editRole, setEditRole] = useState('');
@@ -57,6 +62,57 @@ export function UsersTab() {
   const [newStudentId, setNewStudentId] = useState('');
   const [newDeptId, setNewDeptId] = useState('');
   const [newClassId, setNewClassId] = useState('');
+
+  // Filtered classes based on selected department
+  const filteredNewClasses = newDeptId
+    ? classes.filter(c => c.department_id === newDeptId)
+    : classes;
+  const filteredEditClasses = editDeptId
+    ? classes.filter(c => c.department_id === editDeptId)
+    : classes;
+
+  // Auto-set department when selecting a class (Add modal)
+  const handleNewClassChange = (classId: string) => {
+    setNewClassId(classId);
+    if (classId) {
+      const cls = classes.find(c => c.id === classId);
+      if (cls?.department_id && cls.department_id !== newDeptId) {
+        setNewDeptId(cls.department_id);
+      }
+    }
+  };
+
+  // Auto-set department when selecting a class (Edit modal)
+  const handleEditClassChange = (classId: string) => {
+    setEditClassId(classId);
+    if (classId) {
+      const cls = classes.find(c => c.id === classId);
+      if (cls?.department_id && cls.department_id !== editDeptId) {
+        setEditDeptId(cls.department_id);
+      }
+    }
+  };
+
+  // When changing department, reset class if it doesn't belong to the new department
+  const handleNewDeptChange = (deptId: string) => {
+    setNewDeptId(deptId);
+    if (deptId && newClassId) {
+      const cls = classes.find(c => c.id === newClassId);
+      if (cls && cls.department_id !== deptId) {
+        setNewClassId('');
+      }
+    }
+  };
+
+  const handleEditDeptChange = (deptId: string) => {
+    setEditDeptId(deptId);
+    if (deptId && editClassId) {
+      const cls = classes.find(c => c.id === editClassId);
+      if (cls && cls.department_id !== deptId) {
+        setEditClassId('');
+      }
+    }
+  };
 
   // Import Excel state
   const [showImportModal, setShowImportModal] = useState(false);
@@ -276,14 +332,16 @@ export function UsersTab() {
     { header: 'MSSV', width: 100, render: (u: UserItem) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{u.student_id || '-'}</span> },
     { header: 'Họ tên', render: (u: UserItem) => <span style={{ fontWeight: 500 }}>{u.full_name}</span> },
     { header: 'Email', render: (u: UserItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.email}</span> },
-    { header: 'Vai trò', width: 110, render: (u: UserItem) => {
+    {
+      header: 'Vai trò', width: 110, render: (u: UserItem) => {
         const rc = ROLE_COLORS[u.role] || { bg: '#f3f4f6', color: '#6b7280' };
         return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: rc.bg, color: rc.color }}>{ROLE_LABELS[u.role] || u.role}</span>;
       }
     },
     { header: 'Lớp', render: (u: UserItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.className || '-'}</span> },
     { header: 'Khoa', render: (u: UserItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.departmentName || '-'}</span> },
-    { header: 'Thao tác', width: 80, align: 'center' as const, render: (u: UserItem) => (
+    {
+      header: 'Thao tác', width: 80, align: 'center' as const, render: (u: UserItem) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
           <button onClick={() => startEdit(u)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
           <button onClick={() => handleDelete(u)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>Xóa</button>
@@ -310,7 +368,7 @@ export function UsersTab() {
               onMouseOver={e => { e.currentTarget.style.background = '#e0e7ff'; }}
               onMouseOut={e => { e.currentTarget.style.background = '#eef2ff'; }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
               Import Excel
             </button>
             <button className="btn-primary" onClick={() => setShowAddModal(true)}>
@@ -357,16 +415,16 @@ export function UsersTab() {
               </div>
               <div style={{ marginBottom: 16 }}>
                 <label className="form-label">Khoa</label>
-                <select value={editDeptId} onChange={e => setEditDeptId(e.target.value)} className="form-select">
+                <select value={editDeptId} onChange={e => handleEditDeptChange(e.target.value)} className="form-select">
                   <option value="">-- Không chọn --</option>
                   {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="form-label">Lớp</label>
-                <select value={editClassId} onChange={e => setEditClassId(e.target.value)} className="form-select">
+                <label className="form-label">Lớp {editDeptId && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(lọc theo khoa)</span>}</label>
+                <select value={editClassId} onChange={e => handleEditClassChange(e.target.value)} className="form-select">
                   <option value="">-- Không chọn --</option>
-                  {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+                  {filteredEditClasses.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
                 </select>
               </div>
             </div>
@@ -411,16 +469,16 @@ export function UsersTab() {
               </div>
               <div style={{ marginBottom: 16 }}>
                 <label className="form-label">Khoa (Tùy chọn)</label>
-                <select value={newDeptId} onChange={e => setNewDeptId(e.target.value)} className="form-select">
+                <select value={newDeptId} onChange={e => handleNewDeptChange(e.target.value)} className="form-select">
                   <option value="">-- Không chọn --</option>
                   {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </div>
               <div style={{ marginBottom: 16 }}>
-                <label className="form-label">Lớp (Tùy chọn)</label>
-                <select value={newClassId} onChange={e => setNewClassId(e.target.value)} className="form-select">
+                <label className="form-label">Lớp (Tùy chọn) {newDeptId && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(lọc theo khoa)</span>}</label>
+                <select value={newClassId} onChange={e => handleNewClassChange(e.target.value)} className="form-select">
                   <option value="">-- Không chọn --</option>
-                  {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+                  {filteredNewClasses.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
                 </select>
               </div>
             </div>
@@ -437,7 +495,7 @@ export function UsersTab() {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
             <div className="modal-header">
-              <h3 className="modal-header-title">📥 Import dữ liệu từ Excel</h3>
+              <h3 className="modal-header-title">Import dữ liệu từ Excel</h3>
               <button onClick={() => setShowImportModal(false)} className="modal-close-btn">✕</button>
             </div>
             <div className="modal-body" style={{ flex: 1, overflowY: 'auto' }}>
@@ -453,7 +511,7 @@ export function UsersTab() {
                         cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
                       }}
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                       Tải file mẫu (.xlsx)
                     </button>
 
@@ -467,7 +525,7 @@ export function UsersTab() {
                           transition: 'all 0.2s',
                         }}
                       >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={importFileName ? '#16a34a' : '#9ca3af'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={importFileName ? '#16a34a' : '#9ca3af'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
                         <span style={{ fontSize: 13, color: importFileName ? '#16a34a' : '#6b7280', fontWeight: 500 }}>
                           {importFileName || 'Chọn file .xlsx hoặc .xls'}
                         </span>

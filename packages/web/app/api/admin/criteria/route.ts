@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const versionId = searchParams.get('versionId');
 
   const versions = await prisma.criteria_versions.findMany({
-    include: { semesters: { select: { name: true } } },
+    include: { semesters: { select: { name: true, code: true } } },
     orderBy: { created_at: 'desc' },
   });
 
@@ -161,6 +161,12 @@ export async function POST(req: Request) {
     const { code, content, point, parent_id, category_id } = body;
     if (!code || !content) return NextResponse.json({ message: 'Thiếu mã hoặc nội dung tiêu chí' }, { status: 400 });
 
+    // Calculate next sort_order
+    const maxCritOrder = await prisma.criteria.aggregate({
+      _max: { sort_order: true },
+      where: { category_id },
+    });
+
     const newCriteria = await prisma.criteria.create({
       data: {
         category_id,
@@ -168,7 +174,7 @@ export async function POST(req: Request) {
         content,
         point: parseFloat(point) || 0,
         parent_id: parent_id ? parseInt(parent_id) : null,
-        sort_order: 0,
+        sort_order: (maxCritOrder._max.sort_order || 0) + 1,
         is_active: 1,
       },
     });
@@ -209,9 +215,30 @@ export async function DELETE(req: Request) {
     const { id } = body;
     if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
 
+    const critId = typeof id === 'string' ? parseInt(id) : id;
+
+    // Check if criterion is being used in score_details
+    const usageCount = await prisma.score_details.count({ where: { criteria_id: critId } });
+    if (usageCount > 0) {
+      return NextResponse.json({
+        message: `Không thể xóa: Tiêu chí đang được ${usageCount} phiếu chấm điểm sử dụng.`
+      }, { status: 400 });
+    }
+
+    // Also check children usage
+    const childIds = (await prisma.criteria.findMany({ where: { parent_id: critId }, select: { id: true } })).map(c => c.id);
+    if (childIds.length > 0) {
+      const childUsage = await prisma.score_details.count({ where: { criteria_id: { in: childIds } } });
+      if (childUsage > 0) {
+        return NextResponse.json({
+          message: `Không thể xóa: Có ${childUsage} phiếu đang sử dụng tiêu chí con.`
+        }, { status: 400 });
+      }
+    }
+
     // Delete child criteria first
-    await prisma.criteria.deleteMany({ where: { parent_id: typeof id === 'string' ? parseInt(id) : id } });
-    await prisma.criteria.delete({ where: { id: typeof id === 'string' ? parseInt(id) : id } });
+    await prisma.criteria.deleteMany({ where: { parent_id: critId } });
+    await prisma.criteria.delete({ where: { id: critId } });
 
     return NextResponse.json({ message: 'Đã xóa tiêu chí thành công' });
   } catch (err) {

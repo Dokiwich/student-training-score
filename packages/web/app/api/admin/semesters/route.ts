@@ -8,22 +8,23 @@ function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
 }
 
-/** Tính trạng thái học kỳ theo thời gian thực */
+/** Tính trạng thái học kỳ theo thời gian thực tế */
 function computeStatus(s: {
   start_date: Date;
   end_date: Date;
-  student_deadline: Date;
-  class_committee_deadline: Date;
-  advisor_deadline: Date;
-  school_deadline: Date;
+  student_deadline: Date | null;
+  class_committee_deadline: Date | null;
+  advisor_deadline: Date | null;
+  school_deadline: Date | null;
 }): string {
   const now = new Date();
+  const endDate = new Date(s.end_date);
   if (now < new Date(s.start_date)) return 'UPCOMING';
-  if (now < new Date(s.student_deadline)) return 'STUDENT_SCORING';
-  if (now < new Date(s.class_committee_deadline)) return 'CLASS_REVIEWING';
-  if (now < new Date(s.advisor_deadline)) return 'ADVISOR_REVIEWING';
-  if (now < new Date(s.school_deadline)) return 'SCHOOL_REVIEWING';
-  if (now <= new Date(s.end_date)) return 'FINALIZED';
+  if (s.student_deadline && now < new Date(s.student_deadline)) return 'STUDENT_SCORING';
+  if (s.class_committee_deadline && now < new Date(s.class_committee_deadline)) return 'CLASS_REVIEWING';
+  if (s.advisor_deadline && now < new Date(s.advisor_deadline)) return 'ADVISOR_REVIEWING';
+  if (s.school_deadline && now < new Date(s.school_deadline)) return 'SCHOOL_REVIEWING';
+  if (now <= endDate) return 'FINALIZED';
   return 'LOCKED';
 }
 
@@ -146,7 +147,10 @@ export async function PUT(req: Request) {
     for (const [key, val] of Object.entries(updates)) {
       if (val === undefined) continue;
       if (dateFields.includes(key) && typeof val === 'string') {
-        updateData[key] = new Date(val);
+        if (val.trim()) {
+          updateData[key] = new Date(val);
+        }
+        // Skip empty strings to avoid Invalid Date
       } else {
         updateData[key] = val;
       }

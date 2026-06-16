@@ -15,7 +15,7 @@ export async function GET(req: Request) {
 
   try {
     const versions = await prisma.criteria_versions.findMany({
-      include: { semesters: { select: { name: true, academic_year: true } } },
+      include: { semesters: { select: { name: true, code: true, academic_year: true } } },
       orderBy: { created_at: 'desc' },
     });
 

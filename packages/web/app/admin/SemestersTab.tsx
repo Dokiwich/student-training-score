@@ -77,7 +77,9 @@ export function SemestersTab() {
     e.preventDefault();
     if (!form.code || !form.name) return alert('Nhập đầy đủ thông tin');
     const method = editing ? 'PUT' : 'POST';
-    const body = editing ? { id: editing.id, ...form, semester_number: parseInt(form.semester_number) } : { ...form, semester_number: parseInt(form.semester_number) };
+    // status bị loại bỏ vì được auto-compute theo thời gian thực
+    const { status: _status, ...formWithoutStatus } = form;
+    const body = editing ? { id: editing.id, ...formWithoutStatus, semester_number: parseInt(form.semester_number) } : { ...formWithoutStatus, semester_number: parseInt(form.semester_number) };
     try {
       const r = await fetch('/api/admin/semesters', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();

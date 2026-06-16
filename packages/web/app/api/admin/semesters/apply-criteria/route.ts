@@ -107,12 +107,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Bộ tiêu chí nguồn không có tiêu chí nào' }, { status: 400 });
     }
 
-    // 4. Đảm bảo auto-increment sequence đúng
-    const maxCriteria = await prisma.criteria.aggregate({ _max: { id: true } });
-    const maxId = maxCriteria._max.id || 0;
-    await prisma.$executeRawUnsafe(
-      `SELECT setval(pg_get_serial_sequence('criteria', 'id'), ${maxId}, true)`
-    );
+    // 4. Đảm bảo auto-increment sequence đúng (PostgreSQL only)
+    try {
+      const maxCriteria = await prisma.criteria.aggregate({ _max: { id: true } });
+      const maxId = maxCriteria._max.id || 0;
+      await prisma.$executeRawUnsafe(
+        `SELECT setval(pg_get_serial_sequence('criteria', 'id'), ${maxId}, true)`
+      );
+    } catch {
+      // Bỏ qua nếu DB không phải PostgreSQL (SQLite, MySQL...)
+    }
 
     // 5. Tính version number mới và tạo version cho học kỳ đích
     const maxVersionInSemester = await prisma.criteria_versions.findFirst({
