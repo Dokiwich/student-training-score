@@ -397,11 +397,39 @@ export class ScoringService {
   }
 
   // =============================================
-  // 1. LẤY TOÀN BỘ TIÊU CHÍ
+  // 1. LẤY TOÀN BỘ TIÊU CHÍ (THEO HỌC KỲ HIỆN TẠI)
   // =============================================
   async getAllCriteria() {
+    const activeSemester = await this.getActiveSemester();
+    if (!activeSemester) {
+      return {
+        message: 'Không có học kỳ nào đang hoạt động',
+        data: [],
+      };
+    }
+
+    const activeVersion = await prisma.criteria_versions.findFirst({
+      where: {
+        semester_id: activeSemester.id,
+        is_active: 1,
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    if (!activeVersion) {
+      return {
+        message: 'Không tìm thấy phiên bản tiêu chí cho học kỳ này',
+        data: [],
+      };
+    }
+
     const criteriaList = await prisma.criteria.findMany({
-      where: { is_active: 1 },
+      where: { 
+        is_active: 1,
+        criteria_categories: {
+          criteria_version_id: activeVersion.id,
+        }
+      },
       orderBy: { id: 'asc' },
     });
 
