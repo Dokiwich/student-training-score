@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 const ROLE_REDIRECTS: Record<string, string> = {
   STUDENT: '/student',
   CLASS_COMMITTEE: '/class-president',
-  CLASS_PRESIDENT: '/class-president',
   ADVISOR: '/advisor',
   DEPARTMENT: '/department',
   SCHOOL_ADMIN: '/admin',
@@ -30,7 +29,7 @@ export default withAuth(
       return NextResponse.redirect(new URL('/', req.url));
     }
     // Class president routes
-    if (path.startsWith('/class-president') && role !== 'CLASS_COMMITTEE' && role !== 'CLASS_PRESIDENT') {
+    if (path.startsWith('/class-president') && role !== 'CLASS_COMMITTEE') {
       return NextResponse.redirect(new URL('/', req.url));
     }
     // Advisor routes

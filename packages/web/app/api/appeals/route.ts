@@ -66,7 +66,25 @@ export async function GET() {
       },
     });
 
-    const data = await Promise.all(appeals.map(async (a) => {
+    // Pre-fetch all criteria for these appeals to avoid N+1 query
+    const criteriaIds = appeals.map(a => {
+      if (a.evidence_note) {
+        const parts = a.evidence_note.split(':');
+        if (parts[1]) return parseInt(parts[1]) || null;
+      }
+      return null;
+    }).filter(id => id !== null) as number[];
+
+    let criteriaMap = new Map();
+    if (criteriaIds.length > 0) {
+      const criteriaList = await prisma.criteria.findMany({
+        where: { id: { in: Array.from(new Set(criteriaIds)) } },
+        select: { id: true, code: true, content: true }
+      });
+      criteriaMap = new Map(criteriaList.map(c => [c.id, c]));
+    }
+
+    const data = appeals.map((a) => {
       const sheet = a.scoring_sheets;
       const enrollment = sheet.semester_enrollments;
 
@@ -83,10 +101,7 @@ export async function GET() {
       let criteriaCode: string | null = null;
       let criteriaContent: string | null = null;
       if (criteriaId) {
-        const crit = await prisma.criteria.findUnique({
-          where: { id: criteriaId },
-          select: { code: true, content: true },
-        });
+        const crit = criteriaMap.get(criteriaId);
         if (crit) {
           criteriaCode = crit.code;
           criteriaContent = crit.content;
@@ -115,7 +130,7 @@ export async function GET() {
         finalTotal: sheet.final_total != null ? Number(sheet.final_total) : null,
         classification: sheet.classification,
       };
-    }));
+    });
 
     return NextResponse.json({ data });
   } catch (err: any) {
