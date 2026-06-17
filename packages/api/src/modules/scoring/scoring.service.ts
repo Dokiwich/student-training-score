@@ -286,7 +286,7 @@ export class ScoringService {
     // Tìm user đang đăng nhập
     const currentUser = await prisma.users.findFirst({
       where: { id: userId },
-      select: { id: true, role: true },
+      select: { id: true, role: true, department_id: true },
     });
 
     if (!currentUser) {
@@ -297,28 +297,36 @@ export class ScoringService {
     let classIds: string[] = [];
     const activeSemester = await this.getActiveSemester();
 
-    if (activeSemester) {
-      const enrollment = await prisma.semester_enrollments.findUnique({
-        where: {
-          user_id_semester_id: {
-            user_id: currentUser.id,
-            semester_id: activeSemester.id,
+    if (currentUser.role === 'DEPARTMENT' && currentUser.department_id) {
+      const deptClasses = await prisma.classes.findMany({
+        where: { department_id: currentUser.department_id },
+        select: { id: true },
+      });
+      classIds = deptClasses.map((c) => c.id);
+    } else {
+      if (activeSemester) {
+        const enrollment = await prisma.semester_enrollments.findUnique({
+          where: {
+            user_id_semester_id: {
+              user_id: currentUser.id,
+              semester_id: activeSemester.id,
+            },
           },
-        },
-        select: { class_id: true },
-      });
-      if (enrollment) {
-        classIds = [enrollment.class_id];
+          select: { class_id: true },
+        });
+        if (enrollment) {
+          classIds = [enrollment.class_id];
+        }
       }
-    }
 
-    // Fallback: class_roles (cho ADVISOR)
-    if (classIds.length === 0) {
-      const classRoles = await prisma.class_roles.findMany({
-        where: { user_id: currentUser.id, is_active: 1 },
-        select: { class_id: true },
-      });
-      classIds = classRoles.map((cr) => cr.class_id);
+      // Fallback: class_roles (cho ADVISOR)
+      if (classIds.length === 0) {
+        const classRoles = await prisma.class_roles.findMany({
+          where: { user_id: currentUser.id, is_active: 1 },
+          select: { class_id: true },
+        });
+        classIds = classRoles.map((cr) => cr.class_id);
+      }
     }
 
     if (classIds.length === 0) {
