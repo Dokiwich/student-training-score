@@ -196,7 +196,7 @@ function AdminPageInner() {
     if (!critForm.category_id) return alert('Vui lòng chọn mục lớn');
     try {
       if (editingCriterion) {
-        const res = await fetch('/api/admin/criteria', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingCriterion.id, code: critForm.code, content: critForm.content, point: critForm.point, category_id: critForm.category_id }) });
+        const res = await fetch('/api/admin/criteria', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingCriterion.id, code: critForm.code, content: critForm.content, point: critForm.point, category_id: critForm.category_id, parent_id: critForm.parent_id || null }) });
         const d = await res.json();
         if (res.ok) { alert(d.message); } else { alert(d.message); return; }
       } else {

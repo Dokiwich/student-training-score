@@ -43,6 +43,7 @@ interface Criterion {
   point: number;
   score_type: string;
   parent_id: number | null;
+  sort_order: number;
   description?: string;
 }
 
@@ -285,7 +286,7 @@ export function ScoringForm({
       childrenMap.get(pid)!.push(c);
     });
     childrenMap.forEach((list) =>
-      list.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })),
+      list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.code.localeCompare(b.code, undefined, { numeric: true })),
     );
     const result: Criterion[] = [];
     const traverse = (parentId: number | null) => {
@@ -443,13 +444,13 @@ export function ScoringForm({
         const isDeduction = item.score_type === 'DEDUCTION' || item.point < 0;
         if (isQuantityBased) {
           const multiplier = QUANTITY_MULTIPLIERS[item.code];
-          const inputQuantity = num / multiplier;
+          const absMultiplier = Math.abs(multiplier);
+          const inputQuantity = Math.abs(num) / absMultiplier;
           const maxQuantity = isDeduction ? 40 : 30;
           
           if (inputQuantity > maxQuantity) {
-            finalValue = (maxQuantity * multiplier).toString();
-          } else if (inputQuantity < 0) {
-            finalValue = '0';
+            const clampedScore = maxQuantity * absMultiplier;
+            finalValue = (multiplier < 0 ? -clampedScore : clampedScore).toString();
           }
         } else {
           // Non-quantity: clamp theo point bình thường
@@ -461,6 +462,9 @@ export function ScoringForm({
             else if (item.point > 0 && num > item.point) finalValue = item.point.toString();
           }
         }
+      } else {
+        // NaN guard: reset to empty
+        finalValue = '';
       }
     }
     setInputValues((prev) => ({ ...prev, [criteriaId]: finalValue }));
@@ -498,9 +502,10 @@ export function ScoringForm({
         const isQuantityBased = !!QUANTITY_MULTIPLIERS[item.code];
         if (isQuantityBased) {
           const multiplier = QUANTITY_MULTIPLIERS[item.code];
-          const inputQuantity = score / multiplier;
+          const absMultiplier = Math.abs(multiplier);
+          const inputQuantity = Math.abs(score) / absMultiplier;
           const maxQuantity = isDeduction ? 40 : 30;
-          if (inputQuantity > maxQuantity || inputQuantity < 0) return null;
+          if (inputQuantity > maxQuantity) return null;
         } else {
           if (isDeduction) {
             if (score < item.point || score > 0) return null;
@@ -899,16 +904,20 @@ export function ScoringForm({
 
                               const multiplier = QUANTITY_MULTIPLIERS[item.code];
                               const isQuantityBased = !!multiplier;
-                              const displayVal = isQuantityBased && val ? String(Number(val) / multiplier) : val;
+                              const absMultiplier = isQuantityBased ? Math.abs(multiplier) : 1;
+                              const displayVal = isQuantityBased && val ? String(Math.abs(Number(val)) / absMultiplier) : val;
                               const displayMinVal = isQuantityBased ? 0 : minVal;
-                              const displayMaxVal = isQuantityBased ? (multiplier < 0 ? minVal / multiplier : maxVal / multiplier) : maxVal;
+                              const displayMaxVal = isQuantityBased ? (isDeduction ? 40 : 30) : maxVal;
                               const onChangeFn = isQuantityBased
                                 ? (e: React.ChangeEvent<HTMLInputElement>) => {
-                                  if (e.target.value === '') {
+                                  if (e.target.value === '' || e.target.value === '-') {
                                     handleInputChange(item.id, '');
                                   } else {
                                     const num = Number(e.target.value);
-                                    handleInputChange(item.id, String(num * multiplier));
+                                    if (isNaN(num)) return;
+                                    const qty = Math.abs(Math.round(num));
+                                    const scoreVal = multiplier < 0 ? -(qty * absMultiplier) : qty * absMultiplier;
+                                    handleInputChange(item.id, String(scoreVal));
                                   }
                                 }
                                 : (e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(item.id, e.target.value);
@@ -954,14 +963,14 @@ export function ScoringForm({
                                     </div>
                                   </td>
                                   <td className="px-2 py-1.5 text-center text-sm text-stone-500">
-                                    {isQuantityBased ? (multiplier > 0 ? `+${multiplier}` : multiplier) : item.point}
+                                    {isQuantityBased ? (multiplier > 0 ? `+${multiplier}` : `${multiplier}`) : item.point}
                                   </td>
 
                                   {/* Số lượng Column */}
                                   <td className="px-2 py-1.5 text-center">
                                     {!isFixed && isQuantityBased ? (
                                       <div className="relative inline-block">
-                                        <input type="number" min={0} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-16 h-9 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                        <input type="number" min={0} max={displayMaxVal} step={1} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-16 h-9 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
                                         {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
                                       </div>
                                     ) : (

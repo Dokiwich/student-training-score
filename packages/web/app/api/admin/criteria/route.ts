@@ -37,7 +37,7 @@ export async function GET(req: Request) {
   const [criteriaList, categoriesList] = await Promise.all([
     prisma.criteria.findMany({ 
       where: targetVersionId ? { criteria_categories: { criteria_version_id: targetVersionId } } : {},
-      orderBy: { id: 'asc' } 
+      orderBy: [{ sort_order: 'asc' }, { code: 'asc' }, { id: 'asc' }] 
     }),
     prisma.criteria_categories.findMany({ 
       where: targetVersionId ? { criteria_version_id: targetVersionId } : {},
@@ -93,7 +93,7 @@ export async function PUT(req: Request) {
     }
 
     // Update criterion
-    const { id, point, content, code, category_id } = body;
+    const { id, point, content, code, category_id, parent_id } = body;
     if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
 
     const updateData: Record<string, unknown> = { updated_at: new Date() };
@@ -101,6 +101,7 @@ export async function PUT(req: Request) {
     if (content !== undefined) updateData.content = content;
     if (code !== undefined) updateData.code = code;
     if (category_id !== undefined) updateData.category_id = category_id;
+    if (parent_id !== undefined) updateData.parent_id = parent_id ? parseInt(parent_id) : null;
 
     const updated = await prisma.criteria.update({
       where: { id: typeof id === 'string' ? parseInt(id) : id },

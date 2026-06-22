@@ -438,7 +438,7 @@ export class ScoringService {
           criteria_version_id: activeVersion.id,
         }
       },
-      orderBy: { id: 'asc' },
+      orderBy: [{ sort_order: 'asc' }, { code: 'asc' }, { id: 'asc' }],
     });
 
     return {
@@ -623,13 +623,11 @@ export class ScoringService {
     // point KHÔNG giới hạn ở leaf — chỉ giới hạn bởi trần điểm mục cha (frontend tính)
     if (isQuantityBased) {
       const multiplier = QUANTITY_MULTIPLIERS[criteria.code];
-      const inputQuantity = score / multiplier;
+      const absMultiplier = Math.abs(multiplier);
+      const inputQuantity = Math.abs(score) / absMultiplier;
       const isDeduction = criteria.score_type === 'DEDUCTION' || criteria.point < 0;
       const maxQuantity = isDeduction ? 40 : 30;
       
-      if (inputQuantity < 0) {
-        throw new BadRequestException(`Số lượng không được nhỏ hơn 0 (tiêu chí "${criteria.code}")`);
-      }
       if (inputQuantity > maxQuantity) {
         throw new BadRequestException(`Số lượng không được vượt quá ${maxQuantity} lần (tiêu chí "${criteria.code}")`);
       }
