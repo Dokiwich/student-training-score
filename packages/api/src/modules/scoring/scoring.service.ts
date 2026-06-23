@@ -17,18 +17,18 @@ const WorkflowStatus = {
 // ✅ MA TRẬN CHUYỂN TRẠNG THÁI (State Machine)
 // Key: Role → Value: { requiredStatus, nextStatus }
 const STATE_TRANSITIONS: Record<string, {
-  requiredStatus: string;
+  requiredStatus: string | string[];
   nextStatus: string;
   timestampField: string;
   currentStep: number;
   errorMessage: string;
 }> = {
   STUDENT: {
-    requiredStatus: WorkflowStatus.DRAFT,
+    requiredStatus: [WorkflowStatus.DRAFT, 'CLASS_REJECTED', 'ADVISOR_REJECTED'],
     nextStatus: WorkflowStatus.SUBMITTED,
     timestampField: 'student_submitted_at',
     currentStep: 2,
-    errorMessage: 'Sinh viên chỉ được nộp khi phiếu đang là Bản Nháp (DRAFT)',
+    errorMessage: 'Sinh viên chỉ được nộp khi phiếu đang là Bản Nháp (DRAFT) hoặc bị Trả lại (REJECTED)',
   },
   CLASS_COMMITTEE: {
     requiredStatus: WorkflowStatus.SUBMITTED,
@@ -46,9 +46,8 @@ const STATE_TRANSITIONS: Record<string, {
   },
 };
 
-
-const SCORING_PERMISSIONS: Record<string, string> = {
-  STUDENT: WorkflowStatus.DRAFT,
+const SCORING_PERMISSIONS: Record<string, string | string[]> = {
+  STUDENT: [WorkflowStatus.DRAFT, 'CLASS_REJECTED', 'ADVISOR_REJECTED'],
   CLASS_COMMITTEE: WorkflowStatus.SUBMITTED,
   ADVISOR: WorkflowStatus.CLASS_APPROVED,
 };
@@ -486,6 +485,8 @@ export class ScoringService {
       SCHOOL_REVIEWING: 'ADVISOR_APPROVED',
       SCHOOL_APPROVED: 'ADVISOR_APPROVED',
       FINALIZED: 'ADVISOR_APPROVED',
+      CLASS_REJECTED: 'REJECTED',
+      ADVISOR_REJECTED: 'REJECTED',
     };
 
     const formStatus = workflowStepMap[form.status] || 'DRAFT';
@@ -568,7 +569,11 @@ export class ScoringService {
       );
     }
 
-    if (form.status !== allowedStatus) {
+    const isAllowed = Array.isArray(allowedStatus) 
+      ? allowedStatus.includes(form.status) 
+      : form.status === allowedStatus;
+
+    if (!isAllowed) {
       const roleLabels: Record<string, string> = {
         STUDENT: 'Sinh viên',
         CLASS_COMMITTEE: 'Lớp trưởng',
@@ -580,10 +585,16 @@ export class ScoringService {
         STUDENT_SUBMITTED: 'Đã nộp',
         CLASS_REVIEWED: 'BCS đã duyệt',
         ADVISOR_APPROVED: 'CVHT đã duyệt',
+        CLASS_REJECTED: 'Bị BCS trả lại',
+        ADVISOR_REJECTED: 'Bị CVHT trả lại',
       };
 
+      const allowedStatusStr = Array.isArray(allowedStatus)
+        ? allowedStatus.map(s => statusLabels[s] || s).join(' hoặc ')
+        : statusLabels[allowedStatus as string] || allowedStatus;
+
       throw new BadRequestException(
-        `${roleLabels[role]} chỉ được chấm khi phiếu ở trạng thái "${statusLabels[allowedStatus]}". ` +
+        `${roleLabels[role]} chỉ được chấm khi phiếu ở trạng thái "${allowedStatusStr}". ` +
         `Hiện tại phiếu đang ở: "${statusLabels[form.status] || form.status}"`,
       );
     }
@@ -887,7 +898,11 @@ export class ScoringService {
     }
 
     // 6c. ✅ KIỂM TRA STATE MACHINE NGHIÊM NGẶT
-    if (form.status !== transition.requiredStatus) {
+    const isAllowed = Array.isArray(transition.requiredStatus)
+      ? transition.requiredStatus.includes(form.status)
+      : form.status === transition.requiredStatus;
+
+    if (!isAllowed) {
       throw new BadRequestException(transition.errorMessage);
     }
 
@@ -1039,9 +1054,9 @@ export class ScoringService {
   }
 
   // =============================================
-  // 6.1 ✅ XÓA VÀ LÀM MỚI PHIẾU (Thay cho chức năng Trả lại)
+  // 6.1 ✅ TRẢ LẠI PHIẾU (Chuyển sang REJECTED)
   // =============================================
-  async rejectForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string) {
+  async rejectForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string, reason?: string) {
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
       const activeSemester = await this.getActiveSemester();
@@ -1055,7 +1070,6 @@ export class ScoringService {
           ...(targetSemesterId ? { semester_id: targetSemesterId } : {}),
         },
       },
-      include: { score_details: true },
     });
 
     if (!form) {
@@ -1063,10 +1077,9 @@ export class ScoringService {
     }
 
     if (role !== 'CLASS_COMMITTEE' && role !== 'ADVISOR') {
-      throw new BadRequestException('Chỉ Ban cán sự và Cố vấn học tập mới có quyền xóa/reset phiếu!');
+      throw new BadRequestException('Chỉ Ban cán sự và Cố vấn học tập mới có quyền trả lại phiếu!');
     }
 
-    // ✅ FIX BUG-04: Kiểm tra trạng thái phiếu theo role
     if (role === 'CLASS_COMMITTEE' && !['STUDENT_SUBMITTED', 'CLASS_REVIEWING'].includes(form.status)) {
       throw new BadRequestException('Ban cán sự chỉ được trả lại phiếu khi sinh viên đã nộp.');
     }
@@ -1074,38 +1087,27 @@ export class ScoringService {
       throw new BadRequestException('Cố vấn chỉ được trả lại phiếu khi phiếu đã được xét duyệt.');
     }
 
-    // ✅ FIX BUG-01: Xóa toàn bộ dữ liệu liên quan (bao gồm appeals, comments, evidences, review_actions)
-    await prisma.$transaction([
-      // 1. Xóa khiếu nại liên quan
-      prisma.appeals.deleteMany({
-        where: { scoring_sheet_id: form.id }
-      }),
-      // 2. Xóa bình luận
-      prisma.comments.deleteMany({
-        where: { scoring_sheet_id: form.id }
-      }),
-      // 3. Xóa minh chứng
-      prisma.evidences.deleteMany({
-        where: { scoring_sheet_id: form.id }
-      }),
-      // 4. Xóa lịch sử duyệt
-      prisma.review_actions.deleteMany({
-        where: { scoring_sheet_id: form.id }
-      }),
-      // 5. Xóa chi tiết điểm (score_entries cascade tự động)
-      prisma.score_details.deleteMany({
-        where: { scoring_sheet_id: form.id }
-      }),
-      // 6. Xóa chính phiếu điểm
-      prisma.scoring_sheets.delete({
-        where: { id: form.id }
-      })
-    ]);
+    if (!reason || reason.trim() === '') {
+      throw new BadRequestException('Vui lòng nhập lý do trả lại phiếu.');
+    }
 
-    // ✅ Ghi audit log cho việc xóa/reset phiếu
+    const newStatus = role === 'CLASS_COMMITTEE' ? 'CLASS_REJECTED' : 'ADVISOR_REJECTED';
+    const rejectStep = role === 'CLASS_COMMITTEE' ? 2 : 3;
+
+    await prisma.scoring_sheets.update({
+      where: { id: form.id },
+      data: {
+        status: newStatus as any,
+        rejection_reason: reason.trim(),
+        rejected_by_step: rejectStep,
+        updated_at: new Date(),
+      }
+    });
+
+    // ✅ Ghi audit log cho việc trả lại phiếu
     await this.logAudit(actorId, 'REJECT_FORM', 'scoring_sheets', form.id,
-      { status: form.status, score_details_count: form.score_details?.length ?? 0 },
-      { action: 'DELETED_AND_RESET', role },
+      { status: form.status },
+      { status: newStatus, role, reason },
     );
 
     // Thông báo cho sinh viên: phiếu bị trả lại
@@ -1117,7 +1119,7 @@ export class ScoringService {
           user_id: studentId,
           type: 'SCORE_REJECTED',
           title: 'Phiếu rèn luyện đã bị trả lại',
-          content: `Phiếu tự đánh giá của bạn đã bị ${rejecterLabel} trả lại. Vui lòng chấm lại từ đầu.`,
+          content: `Phiếu tự đánh giá của bạn đã bị ${rejecterLabel} trả lại với lý do: "${reason.trim()}". Vui lòng xem lại và nộp lại.`,
           is_read: 0,
         },
       });
@@ -1126,7 +1128,7 @@ export class ScoringService {
     }
 
     return {
-      message: 'Đã xóa phiếu điểm thành công! Sinh viên có thể bắt đầu lại từ đầu.',
+      message: 'Đã trả lại phiếu thành công! Sinh viên có thể vào xem lý do và sửa điểm.',
       data: null,
     };
   }

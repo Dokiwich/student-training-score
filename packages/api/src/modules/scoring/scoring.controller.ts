@@ -65,12 +65,13 @@ export class ScoringController {
     @Body('studentId') studentId: string,
     @Req() req: any,
     @Body('role') role?: string,
-    @Body('semesterId') semesterId?: string
+    @Body('semesterId') semesterId?: string,
+    @Body('reason') reason?: string
   ) {
     let activeRole = role || req.user?.role || 'STUDENT';
     if (studentId === req.user?.id && activeRole === 'STUDENT') {
       activeRole = 'STUDENT';
     }
-    return this.scoringService.rejectForm(formId, activeRole, studentId, req.user.id, semesterId);
+    return this.scoringService.rejectForm(formId, activeRole, studentId, req.user.id, semesterId, reason);
   }
 }

@@ -16,7 +16,7 @@ interface Category {
 }
 
 interface Criterion {
-  id: number; code: string; content: string; point: number; parent_id: number | null; category_id: string; is_active: number;
+  id: number; code: string; content: string; point: number; parent_id: number | null; category_id: string; is_active: number; sort_order: number;
 }
 
 type AdminTab = 'criteria' | 'departments' | 'classes' | 'users' | 'semesters' | 'dashboard';
@@ -242,9 +242,39 @@ function AdminPageInner() {
     </div>
   );
 
-  // Group criteria by category for preview
+  // Group criteria by category and sort them in a tree structure for preview
   const previewByCategory: Record<string, Criterion[]> = {};
-  previewCriteria.forEach((c) => { if (!previewByCategory[c.category_id]) previewByCategory[c.category_id] = []; previewByCategory[c.category_id].push(c); });
+  const groupedCat: Record<string, Criterion[]> = {};
+  previewCriteria.forEach((c) => {
+    if (!groupedCat[c.category_id]) groupedCat[c.category_id] = [];
+    groupedCat[c.category_id].push(c);
+  });
+
+  Object.keys(groupedCat).forEach(catId => {
+    const list = groupedCat[catId];
+    const childrenMap = new Map<number | null, Criterion[]>();
+    const ids = new Set(list.map(c => c.id));
+    
+    list.forEach(c => {
+      const pid = (!c.parent_id || !ids.has(c.parent_id)) ? null : c.parent_id;
+      if (!childrenMap.has(pid)) childrenMap.set(pid, []);
+      childrenMap.get(pid)!.push(c);
+    });
+    
+    childrenMap.forEach(childList => {
+      childList.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.code.localeCompare(b.code, undefined, { numeric: true }));
+    });
+    
+    const sortedFlat: Criterion[] = [];
+    const traverse = (pid: number | null) => {
+      (childrenMap.get(pid) || []).forEach(c => {
+        sortedFlat.push(c);
+        traverse(c.id);
+      });
+    };
+    traverse(null);
+    previewByCategory[catId] = sortedFlat;
+  });
 
   return (
     <DashboardLayout pageTitle="Quản trị Hệ thống" pageSubtitle="Quản lý cấu hình hệ thống đánh giá rèn luyện">
