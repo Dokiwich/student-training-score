@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   const departmentId = searchParams.get('departmentId');
 
   const where: any = {};
-  if (role) where.role = role;
+  if (role) where.user_roles = { some: { roles: { code: role }, is_active: 1 } };
   if (departmentId) where.department_id = departmentId;
   if (classId) {
     where.semester_enrollments = { some: { class_id: classId, is_active: 1 } };
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
       email: true,
       full_name: true,
       phone: true,
-      role: true,
+      user_roles: { include: { roles: true } },
       department_id: true,
       is_active: true,
       created_at: true,
@@ -57,7 +57,7 @@ export async function GET(req: Request) {
         email: u.email,
         full_name: u.full_name,
         phone: u.phone,
-        role: u.role,
+        role: u.user_roles?.find((ur: any) => ur.is_active === 1)?.roles?.code || 'STUDENT',
         department_id: u.department_id,
         class_id: activeClass?.id || '',
         className: activeClass?.name || '',
@@ -116,7 +116,13 @@ export async function POST(req: Request) {
         email,
         password_hash,
         student_id: student_id || null,
-        role,
+        user_roles: {
+          create: {
+            id: randomUUID(),
+            roles: { connect: { code: role } },
+            is_active: 1
+          }
+        },
         department_id: resolvedDeptId,
         is_active: 1
       }
@@ -167,7 +173,15 @@ export async function PUT(req: Request) {
     if (!id) return NextResponse.json({ message: 'ID người dùng là bắt buộc' }, { status: 400 });
 
     const updateData: Record<string, unknown> = {};
-    if (role !== undefined) updateData.role = role;
+    if (role !== undefined) {
+      await prisma.user_roles.deleteMany({ where: { user_id: id } });
+      const targetRole = await prisma.roles.findUnique({ where: { code: role } });
+      if (targetRole) {
+        await prisma.user_roles.create({
+          data: { id: randomUUID(), user_id: id, role_id: targetRole.id, is_active: 1 }
+        });
+      }
+    }
     if (department_id !== undefined) updateData.department_id = department_id || null;
     if (is_active !== undefined) updateData.is_active = is_active;
     if (full_name !== undefined) updateData.full_name = full_name;
@@ -278,7 +292,7 @@ export async function DELETE(req: Request) {
       }
 
       // 6. Xóa class_roles, refresh_tokens, notifications, semester_enrollments
-      await tx.class_roles.deleteMany({ where: { user_id: id } });
+      await tx.user_roles.deleteMany({ where: { user_id: id } });
       await tx.refresh_tokens.deleteMany({ where: { user_id: id } });
       await tx.notifications.deleteMany({ where: { user_id: id } });
       await tx.semester_enrollments.deleteMany({ where: { user_id: id } });

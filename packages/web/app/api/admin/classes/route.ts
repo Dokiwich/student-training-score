@@ -140,7 +140,7 @@ export async function DELETE(req: Request) {
     }
 
     // Delete class roles first
-    await prisma.class_roles.deleteMany({ where: { class_id: id } });
+    await prisma.user_roles.deleteMany({ where: { entity_id: id } });
 
     await prisma.classes.delete({ where: { id } });
     return NextResponse.json({ message: 'Xóa lớp thành công' });

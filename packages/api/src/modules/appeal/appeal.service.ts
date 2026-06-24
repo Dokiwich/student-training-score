@@ -34,11 +34,11 @@ export class AppealService {
       };
     } else if (role === 'ADVISOR') {
       // Tìm lớp mà user này làm cố vấn
-      const advisorClasses = await prisma.class_roles.findMany({
-        where: { user_id: userId, role_type: 'ADVISOR', is_active: 1 },
-        select: { class_id: true },
+      const advisorClasses = await prisma.user_roles.findMany({
+        where: { user_id: userId, roles: { code: 'ADVISOR' }, is_active: 1 },
+        select: { entity_id: true },
       });
-      const classIds = advisorClasses.map(c => c.class_id);
+      const classIds = advisorClasses.map(c => c.entity_id as string).filter(Boolean);
 
       if (classIds.length === 0) {
         return { data: [] };
@@ -81,7 +81,7 @@ export class AppealService {
           },
         },
         users_appeals_resolved_byTousers: {
-          select: { full_name: true, role: true },
+          select: { full_name: true },
         },
       },
     });
@@ -276,7 +276,7 @@ export class AppealService {
         const studentName = sheetInfo.semester_enrollments.users.full_name;
 
         const deptUsers = await prisma.users.findMany({
-          where: { role: 'DEPARTMENT', department_id: departmentId },
+          where: { user_roles: { some: { roles: { code: 'DEPARTMENT' }, is_active: 1 } }, department_id: departmentId },
           select: { id: true },
         });
 
@@ -355,10 +355,13 @@ export class AppealService {
     // 3b. Kiểm tra quyền resolver
     const resolver = await prisma.users.findUnique({
       where: { id: resolverId },
-      select: { role: true, department_id: true },
+      include: { user_roles: { include: { roles: true } } },
     });
 
-    if (!resolver || !['DEPARTMENT', 'SCHOOL_ADMIN'].includes(resolver.role)) {
+    const isDept = resolver?.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
+    const isAdmin = resolver?.user_roles.some(ur => ur.roles.code === 'SCHOOL_ADMIN' && ur.is_active === 1);
+
+    if (!resolver || (!isDept && !isAdmin)) {
       throw new ForbiddenException('Bạn không có quyền xử lý khiếu nại (Chỉ Khoa hoặc Admin trường)');
     }
 
@@ -371,7 +374,7 @@ export class AppealService {
     }
 
     // ========== NHÁNH 1: KHOA (DEPARTMENT) XEM XÉT ==========
-    if (resolver.role === 'DEPARTMENT') {
+    if (isDept) {
       if (appeal.status !== 'PENDING') {
         throw new BadRequestException('Khiếu nại này đã được xem xét rồi');
       }
@@ -415,7 +418,7 @@ export class AppealService {
       // Notification cho Admin trường
       try {
         const admins = await prisma.users.findMany({
-          where: { role: 'SCHOOL_ADMIN' },
+          where: { user_roles: { some: { roles: { code: 'SCHOOL_ADMIN' }, is_active: 1 } } },
           select: { id: true },
         });
         const studentId = appeal.scoring_sheets.semester_enrollments.user_id;
@@ -463,7 +466,7 @@ export class AppealService {
     }
 
     // ========== NHÁNH 2: ADMIN TRƯỜNG PHÊ DUYỆT CUỐI ==========
-    if (resolver.role === 'SCHOOL_ADMIN') {
+    if (isAdmin) {
       // Admin có thể duyệt cả PENDING (bỏ qua Khoa) lẫn DEPT_REVIEWED
       if (appeal.status !== 'PENDING' && appeal.status !== 'DEPT_REVIEWED') {
         throw new BadRequestException('Khiếu nại này đã được xử lý rồi');
@@ -622,10 +625,13 @@ export class AppealService {
     // 4a. Kiểm tra quyền
     const resolver = await prisma.users.findUnique({
       where: { id: resolverId },
-      select: { role: true, department_id: true },
+      include: { user_roles: { include: { roles: true } } },
     });
 
-    if (!resolver || !['DEPARTMENT', 'SCHOOL_ADMIN'].includes(resolver.role)) {
+    const isDept = resolver?.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
+    const isAdmin = resolver?.user_roles.some(ur => ur.roles.code === 'SCHOOL_ADMIN' && ur.is_active === 1);
+
+    if (!resolver || (!isDept && !isAdmin)) {
       throw new ForbiddenException('Bạn không có quyền xử lý khiếu nại');
     }
 
@@ -650,7 +656,7 @@ export class AppealService {
     const resolveMessage = defaultResolution?.trim() || 'Đã xem xét, không điều chỉnh điểm';
 
     // ========== NHÁNH DEPARTMENT ==========
-    if (resolver.role === 'DEPARTMENT') {
+    if (isDept) {
       if (resolver.department_id !== sheet.semester_enrollments.classes.department_id) {
         throw new ForbiddenException('Sinh viên này không thuộc khoa của bạn');
       }
@@ -675,7 +681,7 @@ export class AppealService {
 
       // Thông báo cho Admin
       try {
-        const admins = await prisma.users.findMany({ where: { role: 'SCHOOL_ADMIN' }, select: { id: true } });
+        const admins = await prisma.users.findMany({ where: { user_roles: { some: { roles: { code: 'SCHOOL_ADMIN' }, is_active: 1 } } }, select: { id: true } });
         for (const admin of admins) {
           await prisma.notifications.create({
             data: {

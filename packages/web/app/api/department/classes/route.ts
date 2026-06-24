@@ -9,9 +9,9 @@ async function getDepartmentUser(session: any) {
   const userId = (session.user as any).id;
   const user = await prisma.users.findFirst({
     where: { id: userId },
-    select: { id: true, role: true, department_id: true },
+    include: { user_roles: { include: { roles: true } } },
   });
-  if (!user || user.role !== 'DEPARTMENT' || !user.department_id) return null;
+  if (!user || !user.user_roles?.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1) || !user.department_id) return null;
   return user;
 }
 

@@ -61,7 +61,7 @@ export async function GET() {
           },
         },
         users_appeals_resolved_byTousers: {
-          select: { full_name: true, role: true },
+          select: { full_name: true },
         },
       },
     });

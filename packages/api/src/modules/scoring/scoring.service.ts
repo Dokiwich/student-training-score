@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { prisma } from '@student-score/database';
 import { randomUUID } from 'crypto';
 
@@ -285,7 +285,7 @@ export class ScoringService {
     // Tìm user đang đăng nhập
     const currentUser = await prisma.users.findFirst({
       where: { id: userId },
-      select: { id: true, role: true, department_id: true },
+      include: { user_roles: { include: { roles: true } } },
     });
 
     if (!currentUser) {
@@ -296,7 +296,8 @@ export class ScoringService {
     let classIds: string[] = [];
     const activeSemester = await this.getActiveSemester();
 
-    if (currentUser.role === 'DEPARTMENT' && currentUser.department_id) {
+    const isDept = currentUser.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
+    if (isDept && currentUser.department_id) {
       const deptClasses = await prisma.classes.findMany({
         where: { department_id: currentUser.department_id },
         select: { id: true },
@@ -318,13 +319,13 @@ export class ScoringService {
         }
       }
 
-      // Fallback: class_roles (cho ADVISOR)
+      // Fallback: user_roles (cho ADVISOR)
       if (classIds.length === 0) {
-        const classRoles = await prisma.class_roles.findMany({
+        const userRoles = await prisma.user_roles.findMany({
           where: { user_id: currentUser.id, is_active: 1 },
-          select: { class_id: true },
+          select: { entity_id: true },
         });
-        classIds = classRoles.map((cr) => cr.class_id);
+        classIds = userRoles.map((cr) => cr.entity_id as string).filter(Boolean);
       }
     }
 
@@ -339,7 +340,6 @@ export class ScoringService {
         ...(activeSemester ? { semester_id: activeSemester.id } : {}),
         is_active: 1,
         users: {
-          role: { in: ['STUDENT', 'CLASS_COMMITTEE'] },
           is_active: 1,
         },
       },
@@ -543,6 +543,62 @@ export class ScoringService {
         advisorApprovedAt: form.advisor_approved_at,
       },
     };
+  }
+
+  // =============================================
+  // HELPER: Xác định và kiểm tra quyền thực tế của người thao tác
+  // =============================================
+  private async verifyActorRole(actorId: string, studentId: string, requestedRole: string, semesterId?: string): Promise<void> {
+    // 1. Nếu requestedRole là STUDENT, bắt buộc actorId phải là studentId
+    if (requestedRole === 'STUDENT') {
+      if (actorId !== studentId) {
+        throw new ForbiddenException('Chỉ sinh viên mới được thao tác với tư cách STUDENT trên phiếu của mình.');
+      }
+      return;
+    }
+
+    // 2. Nếu là CLASS_COMMITTEE hoặc ADVISOR, kiểm tra trong bảng class_roles
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      targetSemesterId = activeSemester?.id;
+    }
+    
+    if (!targetSemesterId) {
+      throw new BadRequestException('Không tìm thấy học kỳ hoạt động.');
+    }
+
+    const enrollment = await this.resolveEnrollment(studentId, targetSemesterId);
+    if (!enrollment || !enrollment.class_id) {
+      throw new BadRequestException('Không tìm thấy thông tin lớp học của sinh viên.');
+    }
+
+    const classRoles = await prisma.user_roles.findMany({
+      where: {
+        user_id: actorId,
+        entity_id: enrollment.class_id,
+        is_active: 1,
+      },
+      include: { roles: true },
+    });
+
+    if (requestedRole === 'CLASS_COMMITTEE') {
+      const isCommittee = classRoles.some(r => ['MONITOR', 'VICE_MONITOR', 'SECRETARY'].includes(r.roles.code));
+      if (!isCommittee) {
+        throw new ForbiddenException('Bạn không có quyền Ban cán sự tại lớp của sinh viên này.');
+      }
+      return;
+    }
+
+    if (requestedRole === 'ADVISOR') {
+      const isAdvisor = classRoles.some(r => r.roles.code === 'ADVISOR');
+      if (!isAdvisor) {
+        throw new ForbiddenException('Bạn không phải là Cố vấn học tập của lớp này.');
+      }
+      return;
+    }
+
+    throw new BadRequestException(`Vai trò "${requestedRole}" không hợp lệ.`);
   }
 
   // =============================================
@@ -764,6 +820,9 @@ export class ScoringService {
     proofUrl?: string,
     semesterId?: string,
   ) {
+    // 5a-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
+    await this.verifyActorRole(actorId, studentId, role, semesterId);
+
     // 5a. Validate (bao gồm kiểm tra quyền role)
     await this.validateBeforeScore(formId, criteriaId, score, role, studentId, semesterId);
 
@@ -879,6 +938,9 @@ export class ScoringService {
   //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
   // =============================================
   async submitForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string) {
+    // 6a-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
+    await this.verifyActorRole(actorId, studentId, role, semesterId);
+
     // 6a. ✅ FIX: Dùng helper chung thay vì copy-paste logic tạo phiếu
     const form = await this.getOrCreateDraftSheet(studentId, semesterId);
 
@@ -965,8 +1027,8 @@ export class ScoringService {
         const enrollInfo = sheetWithEnrollment?.semester_enrollments;
         if (enrollInfo) {
           // ✅ FIX: Chỉ dùng class_roles (Single Source of Truth), loại bỏ fallback lỏng lẻo
-          const classMonitorRoles = await prisma.class_roles.findMany({
-            where: { class_id: enrollInfo.class_id, is_active: 1, role_type: 'MONITOR' },
+          const classMonitorRoles = await prisma.user_roles.findMany({
+            where: { entity_id: enrollInfo.class_id, is_active: 1, roles: { code: 'MONITOR' } },
             select: { user_id: true },
           });
           const monitorIds = classMonitorRoles.map(cr => cr.user_id);
@@ -1012,8 +1074,8 @@ export class ScoringService {
           });
 
           // 2. Thông báo cho Cố vấn học tập
-          const advisorRoles = await prisma.class_roles.findMany({
-            where: { class_id: enrollInfo.class_id, is_active: 1, role_type: 'ADVISOR' },
+          const advisorRoles = await prisma.user_roles.findMany({
+            where: { entity_id: enrollInfo.class_id, is_active: 1, roles: { code: 'ADVISOR' } },
             select: { user_id: true },
           });
           const advisorIds = advisorRoles.map(cr => cr.user_id);
@@ -1057,6 +1119,9 @@ export class ScoringService {
   // 6.1 ✅ TRẢ LẠI PHIẾU (Chuyển sang REJECTED)
   // =============================================
   async rejectForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string, reason?: string) {
+    // 6.1-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
+    await this.verifyActorRole(actorId, studentId, role, semesterId);
+
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
       const activeSemester = await this.getActiveSemester();

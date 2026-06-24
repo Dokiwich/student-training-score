@@ -38,10 +38,16 @@ export class DepartmentService {
   private async getDepartmentId(userId: string): Promise<string> {
     const user = await prisma.users.findFirst({
       where: { id: userId },
-      select: { role: true, department_id: true },
+      include: {
+        user_roles: {
+          include: { roles: true },
+        },
+      },
     });
     if (!user) throw new BadRequestException('Không tìm thấy người dùng');
-    if (user.role !== 'DEPARTMENT') throw new ForbiddenException('Chỉ Khoa mới có quyền truy cập');
+    
+    const isDepartment = user.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
+    if (!isDepartment) throw new ForbiddenException('Chỉ Khoa mới có quyền truy cập');
     if (!user.department_id) throw new BadRequestException('Tài khoản chưa được gắn với khoa nào');
     return user.department_id;
   }
@@ -97,7 +103,7 @@ export class DepartmentService {
       where: {
         semester_id: semester.id, is_active: 1,
         classes: { department_id: departmentId, is_active: 1 },
-        users: { role: { in: ['STUDENT', 'CLASS_COMMITTEE'] }, is_active: 1 },
+        users: { is_active: 1 },
       },
       select: {
         users: { select: { id: true, student_id: true, full_name: true } },
@@ -139,7 +145,7 @@ export class DepartmentService {
       semester_id: semester.id,
       is_active: 1,
       classes: { department_id: departmentId, is_active: 1 },
-      users: { role: { in: ['STUDENT', 'CLASS_COMMITTEE'] as any }, is_active: 1 },
+      users: { is_active: 1 },
     };
 
     // 1. Tổng số sinh viên

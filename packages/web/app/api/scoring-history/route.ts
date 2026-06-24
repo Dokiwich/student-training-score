@@ -80,7 +80,6 @@ export async function GET(req: Request) {
                 users: {
                   select: {
                     full_name: true,
-                    role: true,
                   },
                 },
               },
@@ -126,7 +125,7 @@ export async function GET(req: Request) {
               type: 'review',
               content: ra.comment,
               author: ra.users?.full_name || 'Hệ thống',
-              authorRole: ra.users?.role || '',
+              authorRole: '',
               createdAt: ra.created_at.toISOString(),
               action: ra.action,
             });

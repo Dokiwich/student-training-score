@@ -162,7 +162,13 @@ export async function POST(req: Request) {
             email: row.email.trim(),
             password_hash: passwordHash,
             student_id: studentId,
-            role: normalRole as any,
+            user_roles: {
+              create: {
+                id: randomUUID(),
+                roles: { connect: { code: normalRole } },
+                is_active: 1
+              }
+            },
             department_id: departmentId,
             is_active: 1,
           },

@@ -10,9 +10,9 @@ async function getDepartmentUser(session: any) {
   const userId = (session.user as any).id;
   const user = await prisma.users.findFirst({
     where: { id: userId },
-    select: { id: true, role: true, department_id: true },
+    include: { user_roles: { include: { roles: true } } },
   });
-  if (!user || user.role !== 'DEPARTMENT' || !user.department_id) return null;
+  if (!user || !user.user_roles?.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1) || !user.department_id) return null;
   return user;
 }
 
@@ -146,7 +146,13 @@ export async function POST(req: Request) {
             email: row.email.trim(),
             password_hash: passwordHash,
             student_id: studentId,
-            role: (row.role || 'STUDENT') as any,
+            user_roles: {
+              create: {
+                id: randomUUID(),
+                roles: { connect: { code: row.role || 'STUDENT' } },
+                is_active: 1
+              }
+            },
             department_id: deptUser.department_id,
             is_active: 1,
           },

@@ -19,12 +19,14 @@ export const authOptions: AuthOptions = {
         
         // Try finding by student_id first, then by email
         let user = await prisma.users.findFirst({
-          where: { student_id: credentials.username }
+          where: { student_id: credentials.username },
+          include: { user_roles: { include: { roles: true } } }
         });
         
         if (!user) {
           user = await prisma.users.findFirst({
-            where: { email: credentials.username }
+            where: { email: credentials.username },
+            include: { user_roles: { include: { roles: true } } }
           });
         }
         
@@ -61,7 +63,14 @@ export const authOptions: AuthOptions = {
           });
         }
 
-        const mappedRole = user.role;
+        let mappedRole = 'STUDENT';
+        if (user.user_roles) {
+          const codes = user.user_roles.filter(ur => ur.is_active === 1).map(ur => ur.roles.code);
+          if (codes.includes('SCHOOL_ADMIN')) mappedRole = 'SCHOOL_ADMIN';
+          else if (codes.includes('DEPARTMENT')) mappedRole = 'DEPARTMENT';
+          else if (codes.includes('ADVISOR')) mappedRole = 'ADVISOR';
+          else if (codes.some(c => ['MONITOR', 'VICE_MONITOR', 'SECRETARY'].includes(c))) mappedRole = 'CLASS_COMMITTEE';
+        }
 
         return {
           id: user.id,

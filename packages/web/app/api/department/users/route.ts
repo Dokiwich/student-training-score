@@ -10,9 +10,9 @@ async function getDepartmentUser(session: any) {
   const userId = (session.user as any).id;
   const user = await prisma.users.findFirst({
     where: { id: userId },
-    select: { id: true, role: true, department_id: true },
+    include: { user_roles: { include: { roles: true } } },
   });
-  if (!user || user.role !== 'DEPARTMENT' || !user.department_id) return null;
+  if (!user || !user.user_roles?.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1) || !user.department_id) return null;
   return user;
 }
 
@@ -67,7 +67,7 @@ export async function GET(req: Request) {
           student_id: true,
           full_name: true,
           email: true,
-          role: true,
+          user_roles: { include: { roles: true } },
         },
       },
     },
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
       student_id: e.users.student_id,
       full_name: e.users.full_name,
       email: e.users.email,
-      role: e.users.role,
+      role: e.users.user_roles?.find((ur: any) => ur.is_active === 1)?.roles?.code || 'STUDENT',
     })),
   });
 }
@@ -137,7 +137,13 @@ export async function POST(req: Request) {
         email,
         password_hash: passwordHash,
         student_id: student_id || null,
-        role: 'STUDENT',
+        user_roles: {
+          create: {
+            id: randomUUID(),
+            roles: { connect: { code: 'STUDENT' } },
+            is_active: 1
+          }
+        },
         department_id: deptUser.department_id,
         is_active: 1,
       },
