@@ -447,10 +447,58 @@ export class ScoringService {
   }
 
   // =============================================
+  // HELPER: Xác định quyền ĐỌC phiếu điểm
+  // =============================================
+  private async verifyReadPermission(actorId: string, studentId: string, semesterId?: string): Promise<void> {
+    if (actorId === studentId) return;
+
+    const actorRoles = await prisma.user_roles.findMany({
+      where: { user_id: actorId, is_active: 1 },
+      include: { roles: true }
+    });
+
+    if (actorRoles.some(r => r.roles.code === 'SCHOOL_ADMIN')) {
+      return;
+    }
+
+    const isDepartment = actorRoles.some(r => r.roles.code === 'DEPARTMENT');
+    if (isDepartment) {
+      const actor = await prisma.users.findUnique({ where: { id: actorId } });
+      const student = await prisma.users.findUnique({ where: { id: studentId } });
+      if (actor?.department_id && actor.department_id === student?.department_id) {
+        return;
+      }
+    }
+
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      targetSemesterId = activeSemester?.id;
+    }
+
+    if (targetSemesterId) {
+      const enrollment = await this.resolveEnrollment(studentId, targetSemesterId);
+      if (enrollment && enrollment.class_id) {
+        const isClassRole = actorRoles.some(r => 
+          ['MONITOR', 'VICE_MONITOR', 'SECRETARY', 'ADVISOR'].includes(r.roles.code) && 
+          r.entity_id === enrollment.class_id
+        );
+        if (isClassRole) {
+          return;
+        }
+      }
+    }
+
+    throw new ForbiddenException('Bạn không có quyền xem phiếu điểm của sinh viên này.');
+  }
+
+  // =============================================
   // 2. LẤY TOÀN BỘ ĐIỂM + TRẠNG THÁI PHIẾU
   //    ✅ MỚI: Trả thêm formStatus để Frontend biết khóa/mở
   // =============================================
-  async getScoresByFormId(formId: string, studentId: string, semesterId?: string) {
+  async getScoresByFormId(formId: string, studentId: string, actorId: string, semesterId?: string) {
+    await this.verifyReadPermission(actorId, studentId, semesterId);
+
     // ✅ FIX: Dùng helper chung thay vì copy-paste logic tạo phiếu
     const sheet = await this.getOrCreateDraftSheet(studentId, semesterId);
     const form = {

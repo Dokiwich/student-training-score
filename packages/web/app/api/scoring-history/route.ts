@@ -19,6 +19,48 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const targetStudentId = url.searchParams.get('studentId') || userId;
 
+  if (targetStudentId !== userId) {
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      include: { user_roles: { include: { roles: true } } }
+    });
+    
+    let isAllowed = false;
+    
+    // Check if SCHOOL_ADMIN
+    if (user?.user_roles.some(r => r.roles.code === 'SCHOOL_ADMIN' && r.is_active === 1)) {
+      isAllowed = true;
+    }
+    
+    // Check if DEPARTMENT
+    if (!isAllowed && user?.user_roles.some(r => r.roles.code === 'DEPARTMENT' && r.is_active === 1)) {
+      const targetUser = await prisma.users.findUnique({ where: { id: targetStudentId } });
+      if (targetUser?.department_id === user.department_id) {
+        isAllowed = true;
+      }
+    }
+    
+    // Check if CLASS_COMMITTEE or ADVISOR
+    if (!isAllowed) {
+      const classRoles = user?.user_roles.filter(r => 
+        ['MONITOR', 'VICE_MONITOR', 'SECRETARY', 'ADVISOR'].includes(r.roles.code) && r.is_active === 1
+      ) || [];
+      const allowedClassIds = classRoles.map(r => r.entity_id).filter(Boolean);
+      
+      const enrollmentsCount = await prisma.semester_enrollments.count({
+        where: { user_id: targetStudentId, class_id: { in: allowedClassIds as string[] } }
+      });
+      
+      if (enrollmentsCount > 0) {
+        isAllowed = true;
+      }
+    }
+    
+    if (!isAllowed) {
+      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+    }
+  }
+
   try {
     // Lấy tất cả enrollment + scoring_sheet của sinh viên
     const enrollments = await prisma.semester_enrollments.findMany({

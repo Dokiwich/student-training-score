@@ -19,8 +19,13 @@ export class ScoringController {
   }
 
   @Get(':formId/scores')
-  async getFormScores(@Param('formId') formId: string, @Query('studentId') studentId: string, @Query('semesterId') semesterId?: string) {
-    return this.scoringService.getScoresByFormId(formId, studentId, semesterId);
+  async getFormScores(
+    @Param('formId') formId: string, 
+    @Query('studentId') studentId: string, 
+    @Req() req: any,
+    @Query('semesterId') semesterId?: string
+  ) {
+    return this.scoringService.getScoresByFormId(formId, studentId, req.user.id, semesterId);
   }
 
   @Post(':formId/submit-criteria')
