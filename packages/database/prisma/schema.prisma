@@ -94,7 +94,7 @@ model criteria {
   is_active           Int                 @default(1) @db.SmallInt
   created_at          DateTime            @default(now()) @db.Timestamp(0)
   updated_at          DateTime            @default(now()) @db.Timestamp(0)
-  criteria_categories criteria_categories @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_criteria_category")
+  criteria_categories criteria_categories @relation(fields: [category_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_criteria_category")
   criteria            criteria?           @relation("criteriaTocriteria", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_criteria_parent")
   other_criteria      criteria[]          @relation("criteriaTocriteria")
   evidences           evidences[]
@@ -114,7 +114,7 @@ model criteria_categories {
   sort_order          Int               @default(0)
   created_at          DateTime          @default(now()) @db.Timestamp(0)
   criteria            criteria[]
-  criteria_versions   criteria_versions @relation(fields: [criteria_version_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_cc_version")
+  criteria_versions   criteria_versions @relation(fields: [criteria_version_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_cc_version")
 
   @@index([criteria_version_id], map: "idx_cc_version")
 }
@@ -152,7 +152,7 @@ model evidences {
   file_size        Int
   description      String?
   uploaded_at      DateTime       @default(now()) @db.Timestamp(0)
-  criteria         criteria?      @relation(fields: [criteria_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ev_criteria")
+  criteria         criteria?      @relation(fields: [criteria_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_ev_criteria")
   scoring_sheets   scoring_sheets @relation(fields: [scoring_sheet_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ev_sheet")
 
   @@index([criteria_id], map: "idx_ev_criteria")
@@ -228,7 +228,7 @@ model score_details {
   proof_url             String?
   score_adjustment_logs score_adjustment_logs[]
   criteria              criteria                @relation(fields: [criteria_id], references: [id])
-  scoring_sheets        scoring_sheets          @relation(fields: [scoring_sheet_id], references: [id])
+  scoring_sheets        scoring_sheets          @relation(fields: [scoring_sheet_id], references: [id], onDelete: Cascade)
   score_entries         score_entries[]
 
   @@unique([scoring_sheet_id, criteria_id])

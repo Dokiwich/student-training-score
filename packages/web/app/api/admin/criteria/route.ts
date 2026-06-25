@@ -64,12 +64,35 @@ export async function PUT(req: Request) {
     const body = await req.json();
 
     if (body._type === 'version') {
-      const { id, version } = body;
+      const { id, version, is_active } = body;
       if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
+
+      // Check for conflicts when activating
+      if (is_active === 1) {
+        const targetVersion = await prisma.criteria_versions.findUnique({ where: { id } });
+        if (targetVersion) {
+          const activeInSameSemester = await prisma.criteria_versions.findFirst({
+            where: { 
+              semester_id: targetVersion.semester_id, 
+              is_active: 1,
+              id: { not: id }
+            }
+          });
+          if (activeInSameSemester) {
+            return NextResponse.json({ 
+              message: 'Học kỳ này đã có một phiên bản đang được áp dụng. Vui lòng hủy kích hoạt phiên bản hiện tại trước khi kích hoạt bản mới.' 
+            }, { status: 400 });
+          }
+        }
+      }
+
+      const updateData: Record<string, any> = {};
+      if (version !== undefined) updateData.version = parseInt(version);
+      if (is_active !== undefined) updateData.is_active = is_active;
 
       const updated = await prisma.criteria_versions.update({
         where: { id },
-        data: { version: parseInt(version) },
+        data: updateData,
       });
 
       return NextResponse.json({ message: 'Cập nhật phiên bản thành công', data: updated });
@@ -78,6 +101,18 @@ export async function PUT(req: Request) {
     if (body._type === 'category') {
       const { id, name, max_score, code } = body;
       if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
+
+      // Double Check: Không cho sửa Category nếu đã có điểm
+      const crits = await prisma.criteria.findMany({ where: { category_id: id }, select: { id: true } });
+      const critIds = crits.map(c => c.id);
+      if (critIds.length > 0) {
+        const usageCount = await prisma.score_details.count({ where: { criteria_id: { in: critIds } } });
+        if (usageCount > 0) {
+          return NextResponse.json({
+            message: `Không thể chỉnh sửa: Mục này đang được ${usageCount} phiếu chấm điểm sử dụng. Vui lòng tạo phiên bản mới.`
+          }, { status: 400 });
+        }
+      }
 
       const updateData: Record<string, unknown> = {};
       if (name !== undefined) updateData.name = name;
@@ -96,15 +131,31 @@ export async function PUT(req: Request) {
     const { id, point, content, code, category_id, parent_id } = body;
     if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
 
+    const critId = typeof id === 'string' ? parseInt(id) : id;
+
+    // Double Check: Không cho sửa Criteria nếu đã có điểm
+    const usageCount = await prisma.score_details.count({ where: { criteria_id: critId } });
+    if (usageCount > 0) {
+      return NextResponse.json({
+        message: `Không thể chỉnh sửa: Tiêu chí này đang được ${usageCount} phiếu chấm điểm sử dụng. Vui lòng tạo phiên bản mới.`
+      }, { status: 400 });
+    }
+
     const updateData: Record<string, unknown> = { updated_at: new Date() };
     if (point !== undefined) updateData.point = parseFloat(point);
     if (content !== undefined) updateData.content = content;
     if (code !== undefined) updateData.code = code;
     if (category_id !== undefined) updateData.category_id = category_id;
-    if (parent_id !== undefined) updateData.parent_id = parent_id ? parseInt(parent_id) : null;
+    if (parent_id !== undefined) {
+      const parsedParentId = parent_id ? parseInt(parent_id) : null;
+      if (parsedParentId === critId) {
+        return NextResponse.json({ message: 'Lỗi Dữ Liệu: Tiêu chí không thể tự nhận chính nó làm cha (Gây lặp vô hạn).' }, { status: 400 });
+      }
+      updateData.parent_id = parsedParentId;
+    }
 
     const updated = await prisma.criteria.update({
-      where: { id: typeof id === 'string' ? parseInt(id) : id },
+      where: { id: critId },
       data: updateData,
     });
 
@@ -198,12 +249,19 @@ export async function DELETE(req: Request) {
     const body = await req.json();
 
     if (body._type === 'category') {
-      // Delete all criteria in this category first
-      const crits = await prisma.criteria.findMany({ where: { category_id: body.id } });
+      // Check if any criteria in this category is being used
+      const crits = await prisma.criteria.findMany({ where: { category_id: body.id }, select: { id: true } });
       const critIds = crits.map(c => c.id);
       
-      // Delete children first to avoid FK constraint
       if (critIds.length > 0) {
+        const usageCount = await prisma.score_details.count({ where: { criteria_id: { in: critIds } } });
+        if (usageCount > 0) {
+          return NextResponse.json({
+            message: `Không thể xóa: Có ${usageCount} phiếu chấm điểm đang sử dụng tiêu chí thuộc mục này.`
+          }, { status: 400 });
+        }
+        
+        // Delete children first to avoid FK constraint
         await prisma.criteria.deleteMany({ where: { parent_id: { in: critIds } } });
         await prisma.criteria.deleteMany({ where: { category_id: body.id } });
       }

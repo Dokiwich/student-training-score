@@ -104,6 +104,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Thiếu thông tin bắt buộc' }, { status: 400 });
     }
 
+    const dStart = new Date(start_date);
+    const dEnd = new Date(end_date);
+    if (dStart >= dEnd) {
+      return NextResponse.json({ message: 'Lỗi Dữ Liệu: Ngày bắt đầu phải diễn ra trước Ngày kết thúc.' }, { status: 400 });
+    }
+
     const semester = await prisma.semesters.create({
       data: {
         id: `sem_${code}`,
@@ -153,6 +159,17 @@ export async function PUT(req: Request) {
         // Skip empty strings to avoid Invalid Date
       } else {
         updateData[key] = val;
+      }
+    }
+
+    if (updateData.start_date || updateData.end_date) {
+      const currentSemester = await prisma.semesters.findUnique({ where: { id } });
+      if (currentSemester) {
+        const dStart = new Date((updateData.start_date as string | Date) || currentSemester.start_date);
+        const dEnd = new Date((updateData.end_date as string | Date) || currentSemester.end_date);
+        if (dStart >= dEnd) {
+          return NextResponse.json({ message: 'Lỗi Dữ Liệu: Ngày bắt đầu phải diễn ra trước Ngày kết thúc.' }, { status: 400 });
+        }
       }
     }
 

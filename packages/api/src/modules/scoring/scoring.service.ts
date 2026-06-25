@@ -1046,10 +1046,17 @@ export class ScoringService {
       );
     }
 
-    const updated = await prisma.scoring_sheets.update({
-      where: { id: form.id },
+    const updated = await prisma.scoring_sheets.updateMany({
+      where: { 
+        id: form.id,
+        status: form.status // CHỐNG LỖI CONCURRENCY (Race Condition): Chỉ update nếu trạng thái chưa bị thay đổi bởi request khác
+      },
       data: updateData,
     });
+
+    if (updated.count === 0) {
+      throw new BadRequestException('Phiếu này đã được xử lý bởi một thao tác khác (hoặc bạn đã click đúp). Vui lòng tải lại trang.');
+    }
 
     // ✅ Ghi audit log cho việc chuyển trạng thái phiếu
     await this.logAudit(actorId, 'SUBMIT_FORM', 'scoring_sheets', form.id,
