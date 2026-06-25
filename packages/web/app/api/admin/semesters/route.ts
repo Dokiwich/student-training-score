@@ -3,6 +3,7 @@ import { prisma } from '@student-score/database';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
+import { logAdminAction } from '../../../../lib/audit';
 
 function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
@@ -90,6 +91,7 @@ export async function POST(req: Request) {
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const body = await req.json();
@@ -128,6 +130,8 @@ export async function POST(req: Request) {
       },
     });
 
+    await logAdminAction(actorId, 'CREATE_SEMESTER', 'semesters', semester.id, null, semester);
+
     return NextResponse.json({ message: 'Tạo học kỳ thành công', data: semester });
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002')
@@ -141,6 +145,7 @@ export async function PUT(req: Request) {
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const body = await req.json();
@@ -173,10 +178,12 @@ export async function PUT(req: Request) {
       }
     }
 
+    const oldData = await prisma.semesters.findUnique({ where: { id } });
     const semester = await prisma.semesters.update({
       where: { id },
       data: updateData,
     });
+    await logAdminAction(actorId, 'UPDATE_SEMESTER', 'semesters', id, oldData, semester);
     return NextResponse.json({ message: 'Cập nhật học kỳ thành công', data: semester });
   } catch {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
@@ -189,6 +196,7 @@ export async function PATCH(req: Request) {
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const body = await req.json();
@@ -202,10 +210,11 @@ export async function PATCH(req: Request) {
     }
 
     if (action === 'deactivate') {
-      await prisma.semesters.update({
+      const updated = await prisma.semesters.update({
         where: { id },
         data: { is_active: 0 },
       });
+      await logAdminAction(actorId, 'DEACTIVATE_SEMESTER', 'semesters', id, targetSemester, updated);
       return NextResponse.json({ message: 'Đã hủy kích hoạt học kỳ thành công' });
     } else {
       // Tắt tất cả HK khác → chỉ kích hoạt HK được chọn
@@ -219,6 +228,8 @@ export async function PATCH(req: Request) {
           data: { is_active: 1 },
         }),
       ]);
+      const newActive = await prisma.semesters.findUnique({ where: { id } });
+      await logAdminAction(actorId, 'ACTIVATE_SEMESTER', 'semesters', id, targetSemester, newActive);
       return NextResponse.json({ message: 'Đã kích hoạt học kỳ thành công' });
     }
   } catch {

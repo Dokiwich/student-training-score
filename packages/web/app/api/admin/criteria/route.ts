@@ -3,6 +3,7 @@ import { prisma } from '@student-score/database';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
+import { logAdminAction } from '../../../../lib/audit';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function checkAdmin(session: any) {
@@ -59,6 +60,7 @@ export async function PUT(req: Request) {
   if (!checkAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const body = await req.json();
@@ -90,10 +92,12 @@ export async function PUT(req: Request) {
       if (version !== undefined) updateData.version = parseInt(version);
       if (is_active !== undefined) updateData.is_active = is_active;
 
+      const oldData = await prisma.criteria_versions.findUnique({ where: { id } });
       const updated = await prisma.criteria_versions.update({
         where: { id },
         data: updateData,
       });
+      await logAdminAction(actorId, 'UPDATE_VERSION', 'criteria_versions', id, oldData, updated);
 
       return NextResponse.json({ message: 'Cập nhật phiên bản thành công', data: updated });
     }
@@ -119,10 +123,12 @@ export async function PUT(req: Request) {
       if (max_score !== undefined) updateData.max_score = parseFloat(max_score);
       if (code !== undefined) updateData.code = code;
 
+      const oldData = await prisma.criteria_categories.findUnique({ where: { id } });
       const updated = await prisma.criteria_categories.update({
         where: { id },
         data: updateData,
       });
+      await logAdminAction(actorId, 'UPDATE_CATEGORY', 'criteria_categories', id, oldData, updated);
 
       return NextResponse.json({ message: 'Cập nhật mục thành công', data: updated });
     }
@@ -154,10 +160,12 @@ export async function PUT(req: Request) {
       updateData.parent_id = parsedParentId;
     }
 
+    const oldData = await prisma.criteria.findUnique({ where: { id: critId } });
     const updated = await prisma.criteria.update({
       where: { id: critId },
       data: updateData,
     });
+    await logAdminAction(actorId, 'UPDATE_CRITERIA', 'criteria', critId.toString(), oldData, updated);
 
     return NextResponse.json({ message: 'Cập nhật tiêu chí thành công', data: updated });
   } catch (err) {
@@ -172,6 +180,7 @@ export async function POST(req: Request) {
   if (!checkAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const body = await req.json();
@@ -205,6 +214,7 @@ export async function POST(req: Request) {
           sort_order: (maxOrder._max.sort_order || 0) + 1,
         },
       });
+      await logAdminAction(actorId, 'CREATE_CATEGORY', 'criteria_categories', newCat.id, null, newCat);
 
       return NextResponse.json({ message: 'Thêm mục thành công', data: newCat });
     }
@@ -230,6 +240,7 @@ export async function POST(req: Request) {
         is_active: 1,
       },
     });
+    await logAdminAction(actorId, 'CREATE_CRITERIA', 'criteria', newCriteria.id.toString(), null, newCriteria);
 
     return NextResponse.json({ message: 'Thêm tiêu chí thành công', data: newCriteria });
   } catch (err) {
@@ -244,6 +255,7 @@ export async function DELETE(req: Request) {
   if (!checkAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const body = await req.json();
@@ -266,7 +278,9 @@ export async function DELETE(req: Request) {
         await prisma.criteria.deleteMany({ where: { category_id: body.id } });
       }
       
+      const oldData = await prisma.criteria_categories.findUnique({ where: { id: body.id } });
       await prisma.criteria_categories.delete({ where: { id: body.id } });
+      await logAdminAction(actorId, 'DELETE_CATEGORY', 'criteria_categories', body.id, oldData, null);
       return NextResponse.json({ message: 'Đã xóa mục và tất cả tiêu chí liên quan' });
     }
 
@@ -295,8 +309,9 @@ export async function DELETE(req: Request) {
       }
     }
 
-    // Delete criterion (database ON DELETE CASCADE will handle children automatically)
+    const oldData = await prisma.criteria.findUnique({ where: { id: critId } });
     await prisma.criteria.delete({ where: { id: critId } });
+    await logAdminAction(actorId, 'DELETE_CRITERIA', 'criteria', critId.toString(), oldData, null);
 
     return NextResponse.json({ message: 'Đã xóa tiêu chí thành công' });
   } catch (err) {

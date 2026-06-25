@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
+import { logAdminAction } from '../../../../lib/audit';
 
 function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
@@ -80,6 +81,7 @@ export async function POST(req: Request) {
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const body = await req.json();
@@ -155,6 +157,8 @@ export async function POST(req: Request) {
       }
     }
 
+    await logAdminAction(actorId, 'CREATE_USER', 'users', newUser.id, null, { ...newUser, password_hash: '***' });
+
     return NextResponse.json({ message: 'Thêm tài khoản thành công', data: { id: newUser.id } });
   } catch (err: any) {
     console.error('Add user error:', err);
@@ -167,6 +171,7 @@ export async function PUT(req: Request) {
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const { id, role, class_id, department_id, is_active, full_name, phone, student_id } = await req.json();
@@ -201,6 +206,7 @@ export async function PUT(req: Request) {
       }
     }
 
+    const oldData = await prisma.users.findUnique({ where: { id } });
     const user = await prisma.users.update({
       where: { id },
       data: updateData,
@@ -241,6 +247,8 @@ export async function PUT(req: Request) {
         }
       }
     }
+    
+    await logAdminAction(actorId, 'UPDATE_USER', 'users', id, oldData ? { ...oldData, password_hash: '***' } : null, { ...user, password_hash: '***' });
 
     return NextResponse.json({ message: 'Cập nhật người dùng thành công', data: user });
   } catch {
@@ -253,6 +261,7 @@ export async function DELETE(req: Request) {
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const { id } = await req.json();
@@ -304,7 +313,9 @@ export async function DELETE(req: Request) {
       await tx.score_adjustment_logs.deleteMany({ where: { adjusted_by_id: id } });
 
       // 9. Cuối cùng, xóa user
+      const oldData = await tx.users.findUnique({ where: { id } });
       await tx.users.delete({ where: { id } });
+      await logAdminAction(actorId, 'DELETE_USER', 'users', id, oldData ? { ...oldData, password_hash: '***' } : null, null);
     });
 
     return NextResponse.json({ message: 'Xóa người dùng thành công' });

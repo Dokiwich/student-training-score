@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
+import { logAdminAction } from '../../../../lib/audit';
 
 function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const { rows } = await req.json() as { rows: ImportRow[] };
@@ -189,6 +191,15 @@ export async function POST(req: Request) {
 
         batchEmails.add(emailLower);
         if (studentId) batchStudentIds.add(studentId.toLowerCase());
+
+        await logAdminAction(
+          actorId,
+          'CREATE_USER_BULK',
+          'users',
+          userId,
+          null,
+          { email: row.email, student_id: studentId, role: normalRole, department_id: departmentId, class_id: classId }
+        );
 
         results.push({ rowIndex: idx, success: true, message: 'Thành công', full_name: row.full_name, student_id: studentId || undefined });
         successCount++;
