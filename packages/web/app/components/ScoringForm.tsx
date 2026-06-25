@@ -441,7 +441,7 @@ export function ScoringForm({
             c.code.startsWith('TC_' + tab.id)),
       );
       const tabSum = tabRoots.reduce((sum, root) => sum + calculateAutoScore(root.id), 0);
-      const safeTabSum = Math.min(tabSum, tab.max);
+      const safeTabSum = Math.min(Math.max(0, tabSum), tab.max);
       return acc + safeTabSum;
     }, 0);
     return Math.min(100, Math.max(0, rawTotal));
@@ -519,7 +519,7 @@ export function ScoringForm({
         'Authorization': `Bearer ${customJwt}`,
       };
 
-      const results: { id: number; score: number }[] = [];
+      const results: { id: number; score: number | null }[] = [];
       let failCount = 0;
       let lastError = '';
 
@@ -529,7 +529,26 @@ export function ScoringForm({
           score = item.point;
         } else {
           const raw = inputValues[item.id] ?? '';
-          score = raw === '' ? 0 : parseFloat(raw);
+          if (raw === '') {
+            const oldSavedMap = getSavedMap(currentRole);
+            if (oldSavedMap[item.id] !== undefined) {
+               try {
+                 const r = await fetch(`${API_BASE}/scoring/${actualFormId}/delete-criteria`, {
+                   method: 'POST', credentials: 'include', headers: headersInit,
+                   body: JSON.stringify({ criteriaId: item.id, role: currentRole, studentId, semesterId }),
+                 });
+                 if (r.ok) return { id: item.id, score: null };
+                 const errData = await r.json().catch(() => null);
+                 lastError = errData?.message || `HTTP ${r.status}`;
+                 failCount++;
+               } catch (e) {
+                 console.error('Lỗi xóa điểm:', e);
+                 failCount++;
+               }
+            }
+            return null;
+          }
+          score = parseFloat(raw);
         }
         if (isNaN(score)) return null;
 
@@ -581,7 +600,13 @@ export function ScoringForm({
       }
 
       const newScores: Record<number, number> = { ...getSavedMap(currentRole) };
-      results.forEach((r) => { newScores[r.id] = r.score; });
+      results.forEach((r) => {
+        if (r.score === null) {
+          delete newScores[r.id];
+        } else {
+          newScores[r.id] = r.score;
+        }
+      });
       if (currentRole === 'STUDENT') setSavedStudentScores(newScores);
       else if (currentRole === 'CLASS_COMMITTEE') setSavedClassScores(newScores);
       else setSavedAdvisorScores(newScores);

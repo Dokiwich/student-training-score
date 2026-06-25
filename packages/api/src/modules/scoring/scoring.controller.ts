@@ -14,8 +14,8 @@ export class ScoringController {
   }
 
   @Get('criteria')
-  async getAllCriteria() {
-    return this.scoringService.getAllCriteria();
+  async getAllCriteria(@Query('semesterId') semesterId?: string) {
+    return this.scoringService.getAllCriteria(semesterId);
   }
 
   @Get(':formId/scores')
@@ -41,6 +41,19 @@ export class ScoringController {
   ) {
     const activeRole = role || 'STUDENT';
     return this.scoringService.submitCriteria(formId, criteriaId, score, activeRole, studentId, req.user.id, proofUrl, semesterId);
+  }
+
+  @Post(':formId/delete-criteria')
+  async deleteCriteria(
+    @Param('formId') formId: string,
+    @Body('criteriaId') criteriaId: number,
+    @Body('studentId') studentId: string,
+    @Req() req: any,
+    @Body('role') role?: string,
+    @Body('semesterId') semesterId?: string
+  ) {
+    const activeRole = role || 'STUDENT';
+    return this.scoringService.deleteCriteriaScore(formId, criteriaId, activeRole, studentId, req.user.id, semesterId);
   }
 
   @Post(':formId/submit')

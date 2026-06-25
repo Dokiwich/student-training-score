@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Tính trạng thái học kỳ theo thời gian thực dựa trên ngày hiện tại và các deadline.
  *

@@ -404,20 +404,24 @@ export class ScoringService {
   }
 
   // =============================================
-  // 1. LẤY TOÀN BỘ TIÊU CHÍ (THEO HỌC KỲ HIỆN TẠI)
+  // 1. LẤY TOÀN BỘ TIÊU CHÍ (THEO HỌC KỲ HIỆN TẠI HOẶC CHỈ ĐỊNH)
   // =============================================
-  async getAllCriteria() {
-    const activeSemester = await this.getActiveSemester();
-    if (!activeSemester) {
-      return {
-        message: 'Không có học kỳ nào đang hoạt động',
-        data: [],
-      };
+  async getAllCriteria(semesterId?: string) {
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      if (!activeSemester) {
+        return {
+          message: 'Không có học kỳ nào đang hoạt động',
+          data: [],
+        };
+      }
+      targetSemesterId = activeSemester.id;
     }
 
     const activeVersion = await prisma.criteria_versions.findFirst({
       where: {
-        semester_id: activeSemester.id,
+        semester_id: targetSemesterId,
         is_active: 1,
       },
       orderBy: { created_at: 'desc' },
@@ -981,6 +985,48 @@ export class ScoringService {
   }
 
   // =============================================
+  // XÓA ĐIỂM KHI USER RESET (CLICK BUTTON X)
+  // =============================================
+  async deleteCriteriaScore(
+    formId: string,
+    criteriaId: number,
+    role: string,
+    studentId: string,
+    actorId: string,
+    semesterId?: string,
+  ) {
+    await this.verifyActorRole(actorId, studentId, role, semesterId);
+    const scoreRecord = await this.getOrCreateDraftSheet(studentId, semesterId);
+    
+    const semester = await this.getSemesterWithDeadlines(semesterId);
+    if (semester) {
+      this.checkDeadline(role, semester);
+    }
+    
+    const existingScoreDetail = await prisma.score_details.findUnique({
+      where: { scoring_sheet_id_criteria_id: { scoring_sheet_id: scoreRecord.id, criteria_id: criteriaId } },
+      include: { score_entries: { where: { scorer_role: role as any } } },
+    });
+    
+    const entry = existingScoreDetail?.score_entries?.[0];
+    if (!entry) {
+      return { message: 'Không tìm thấy điểm để xóa', success: true };
+    }
+    
+    await prisma.score_entries.delete({
+      where: { id: entry.id }
+    });
+    
+    await this.logScoreAdjustment(existingScoreDetail.id, actorId, Number(entry.score), 0, `Xóa điểm bởi ${role}`);
+    await this.logAudit(actorId, 'DELETE_CRITERIA_SCORE', 'score_entries', entry.id,
+      { criteria_id: criteriaId, old_score: Number(entry.score) },
+      { criteria_id: criteriaId, new_score: 0, role, deleted: true },
+    );
+    
+    return { message: `Xóa điểm thành công (${role})`, success: true };
+  }
+
+  // =============================================
   // 6. ✅ CHUYỂN TRẠNG THÁI PHIẾU (State Machine)
   //    Gộp từ cả 2 phiên bản: NestJS exceptions + Role-based transitions
   //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
@@ -1368,11 +1414,11 @@ export class ScoringService {
       const rawClass = byCategoryClass.get(catId) || 0;
       const rawAdvisor = byCategoryAdvisor.get(catId) || 0;
 
-      // ✅ FIX: Chỉ áp trần (max_score), KHÔNG áp sàn 0 để điểm trừ có thể trừ vào tổng điểm các mục khác
-      // Math.min: không vượt quá max_score của danh mục
-      studentTotal += Math.min(rawStudent, maxScore);
-      classTotal += Math.min(rawClass, maxScore);
-      advisorTotal += Math.min(rawAdvisor, maxScore);
+      // ✅ FIX: Áp sàn 0 và trần (max_score). 
+      // Điểm nhóm danh mục không được phép dưới 0 theo quy chế rèn luyện.
+      studentTotal += Math.min(Math.max(0, rawStudent), maxScore);
+      classTotal += Math.min(Math.max(0, rawClass), maxScore);
+      advisorTotal += Math.min(Math.max(0, rawAdvisor), maxScore);
     }
 
     // Đảm bảo tổng điểm cuối cùng không bị âm và không vượt quá 100 (đến khi tổng điểm phiếu về không thì dừng)
