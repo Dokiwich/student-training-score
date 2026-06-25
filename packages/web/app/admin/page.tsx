@@ -212,7 +212,7 @@ function AdminPageInner() {
 
   // Delete
   const handleDeleteCriterion = async (id: number, code: string) => {
-    if (!confirm(`Xác nhận xóa tiêu chí "${code}"?`)) return;
+    if (!confirm(`Xác nhận xóa tiêu chí "${code}"?\n\nCẢNH BÁO: Hành động này sẽ XÓA VĨNH VIỄN cả tiêu chí này VÀ TOÀN BỘ các tiêu chí con thuộc về nó!`)) return;
     try {
       const res = await fetch('/api/admin/criteria', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
       const d = await res.json(); alert(d.message);

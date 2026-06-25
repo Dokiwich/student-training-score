@@ -1256,6 +1256,7 @@ export class ScoringService {
     const details = await prisma.score_details.findMany({
       where: { scoring_sheet_id: formId },
       select: {
+        criteria_id: true,
         criteria: {
           select: { category_id: true },
         },
@@ -1274,23 +1275,80 @@ export class ScoringService {
       categoryMaxMap.set(cat.id, cat.max_score);
     }
 
-    // Gom điểm theo từng danh mục (category_id)
-    const byCategoryStudent = new Map<string, number>();
-    const byCategoryClass = new Map<string, number>();
-    const byCategoryAdvisor = new Map<string, number>();
+    // Chuẩn bị Map chứa điểm của các leaf node
+    const studentScoreMap = new Map<number, number>();
+    const classScoreMap = new Map<number, number>();
+    const advisorScoreMap = new Map<number, number>();
+    const catIds = new Set<string>();
 
     for (const d of details) {
-      const catId = d.criteria?.category_id;
-      if (!catId) continue;
+      if (d.criteria?.category_id) catIds.add(d.criteria.category_id);
 
       const entries = d.score_entries || [];
       const sEntry = entries.find((e: any) => e.scorer_role === 'STUDENT');
       const cEntry = entries.find((e: any) => e.scorer_role === 'CLASS_COMMITTEE');
       const aEntry = entries.find((e: any) => e.scorer_role === 'ADVISOR');
 
-      byCategoryStudent.set(catId, (byCategoryStudent.get(catId) || 0) + Number(sEntry?.score ?? 0));
-      byCategoryClass.set(catId, (byCategoryClass.get(catId) || 0) + Number(cEntry?.score ?? 0));
-      byCategoryAdvisor.set(catId, (byCategoryAdvisor.get(catId) || 0) + Number(aEntry?.score ?? 0));
+      if (sEntry !== undefined) studentScoreMap.set(d.criteria_id, Number(sEntry.score));
+      if (cEntry !== undefined) classScoreMap.set(d.criteria_id, Number(cEntry.score));
+      if (aEntry !== undefined) advisorScoreMap.set(d.criteria_id, Number(aEntry.score));
+    }
+
+    // Lấy toàn bộ cây tiêu chí đang active thuộc các danh mục trên để áp dụng Khóa Điểm Theo Nhóm (Sub-limits)
+    const allCriteria = await prisma.criteria.findMany({
+      where: { category_id: { in: Array.from(catIds) }, is_active: 1 },
+    });
+
+    const criteriaIdsSet = new Set(allCriteria.map(c => c.id));
+    const isRootItem = (c: any) => !c.parent_id || !criteriaIdsSet.has(c.parent_id);
+
+    // Hàm đệ quy tính điểm từ dưới lá lên, áp dụng khóa điểm (point limit) của tiêu chí cha
+    const calculateTreeScore = (
+      itemId: number,
+      scoreMap: Map<number, number>,
+      visited: Set<number>
+    ): number => {
+      if (visited.has(itemId)) return 0;
+      visited.add(itemId);
+      
+      const item = allCriteria.find((c) => c.id === itemId);
+      if (!item) return 0;
+      
+      const children = allCriteria.filter((c) => c.parent_id === itemId);
+      
+      if (children.length > 0) {
+        let sum = 0;
+        for (const child of children) {
+          sum += calculateTreeScore(child.id, scoreMap, visited);
+        }
+        
+        // Khóa điểm theo nhóm (Sub-limit/Group limit): Giới hạn điểm tổng của các con không vượt quá điểm của cha
+        if (item.point > 0) return Math.min(sum, item.point);
+        if (item.point < 0) return Math.min(0, Math.max(sum, item.point));
+        return sum;
+      }
+      
+      return scoreMap.get(itemId) ?? 0;
+    };
+
+    const byCategoryStudent = new Map<string, number>();
+    const byCategoryClass = new Map<string, number>();
+    const byCategoryAdvisor = new Map<string, number>();
+
+    const rootCriteria = allCriteria.filter(isRootItem);
+
+    // Gom điểm theo từng danh mục (category_id) bằng cách duyệt qua các Root Items
+    for (const root of rootCriteria) {
+      const catId = root.category_id;
+      
+      const sScore = calculateTreeScore(root.id, studentScoreMap, new Set());
+      byCategoryStudent.set(catId, (byCategoryStudent.get(catId) || 0) + sScore);
+      
+      const cScore = calculateTreeScore(root.id, classScoreMap, new Set());
+      byCategoryClass.set(catId, (byCategoryClass.get(catId) || 0) + cScore);
+      
+      const aScore = calculateTreeScore(root.id, advisorScoreMap, new Set());
+      byCategoryAdvisor.set(catId, (byCategoryAdvisor.get(catId) || 0) + aScore);
     }
 
     // Tính tổng sau khi áp trần cho mỗi danh mục
@@ -1310,10 +1368,10 @@ export class ScoringService {
       advisorTotal += Math.min(rawAdvisor, maxScore);
     }
 
-    // Đảm bảo tổng điểm cuối cùng không bị âm (đến khi tổng điểm phiếu về không thì dừng)
-    studentTotal = Math.max(0, studentTotal);
-    classTotal = Math.max(0, classTotal);
-    advisorTotal = Math.max(0, advisorTotal);
+    // Đảm bảo tổng điểm cuối cùng không bị âm và không vượt quá 100 (đến khi tổng điểm phiếu về không thì dừng)
+    studentTotal = Math.min(100, Math.max(0, studentTotal));
+    classTotal = Math.min(100, Math.max(0, classTotal));
+    advisorTotal = Math.min(100, Math.max(0, advisorTotal));
 
     // ✅ FIX: Làm tròn về 1 chữ số thập phân — khớp kiểu Decimal(5,1) trong DB
     //    Tránh sai lệch xếp loại do JS float precision (79.999... vs 80.0)

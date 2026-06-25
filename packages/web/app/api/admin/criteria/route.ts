@@ -237,8 +237,7 @@ export async function DELETE(req: Request) {
       }
     }
 
-    // Delete child criteria first
-    await prisma.criteria.deleteMany({ where: { parent_id: critId } });
+    // Delete criterion (database ON DELETE CASCADE will handle children automatically)
     await prisma.criteria.delete({ where: { id: critId } });
 
     return NextResponse.json({ message: 'Đã xóa tiêu chí thành công' });

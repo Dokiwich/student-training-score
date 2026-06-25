@@ -128,6 +128,12 @@ export function ScoringForm({
   const [expandedTabs, setExpandedTabs] = useState<Set<string>>(new Set(['1']));
 
   const [currentRole] = useState<Role>(forcedRole || 'STUDENT');
+
+  const criteriaIds = useMemo(() => new Set(criteria.map((c) => c.id)), [criteria]);
+  const isRootItem = useCallback((c: Criterion) => {
+    return !c.parent_id || !criteriaIds.has(c.parent_id);
+  }, [criteriaIds]);
+
   const [formStatus, setFormStatus] = useState<string>('DRAFT');
   const [actualFormId, setActualFormId] = useState<string>(formId);
   const [isDirty, setIsDirty] = useState(false);
@@ -189,8 +195,10 @@ export function ScoringForm({
 
       if (criteriaRes.ok) {
         const data = await criteriaRes.json();
-        const rootItems = (data.data || [])
-          .filter((c: Criterion) => !c.parent_id)
+        const fetchedCriteria = data.data || [];
+        const fetchedIds = new Set(fetchedCriteria.map((c: Criterion) => c.id));
+        const rootItems = fetchedCriteria
+          .filter((c: Criterion) => !c.parent_id || !fetchedIds.has(c.parent_id))
           .map((c: Criterion) => c.id);
         setCriteria(data.data || []);
         setExpandedIds(new Set(rootItems));
@@ -284,9 +292,8 @@ export function ScoringForm({
   const sortedCriteria = useMemo(() => {
     if (!criteria.length) return [];
     const childrenMap = new Map<number | null, Criterion[]>();
-    const criteriaIds = new Set(criteria.map((c) => c.id));
     criteria.forEach((c) => {
-      const isRoot = !c.parent_id || !criteriaIds.has(c.parent_id);
+      const isRoot = isRootItem(c);
       const pid = isRoot ? null : c.parent_id;
       if (!childrenMap.has(pid)) childrenMap.set(pid, []);
       childrenMap.get(pid)!.push(c);
@@ -345,18 +352,18 @@ export function ScoringForm({
     (itemId: number): boolean => {
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return false;
-      if (!item.parent_id) return true;
-      if (!expandedIds.has(item.parent_id)) return false;
-      return isVisible(item.parent_id);
+      if (isRootItem(item)) return true;
+      if (!expandedIds.has(item.parent_id!)) return false;
+      return isVisible(item.parent_id!);
     },
-    [criteria, expandedIds],
+    [criteria, expandedIds, isRootItem],
   );
 
   const depthMap = useMemo(() => {
     const map = new Map<number, number>();
     const getDepth = (item: Criterion): number => {
       if (map.has(item.id)) return map.get(item.id)!;
-      if (!item.parent_id) {
+      if (isRootItem(item)) {
         map.set(item.id, 0);
         return 0;
       }
@@ -367,16 +374,16 @@ export function ScoringForm({
     };
     criteria.forEach((c) => getDepth(c));
     return map;
-  }, [criteria]);
+  }, [criteria, isRootItem]);
 
   const getRoot = useCallback(
     (itemId: number): Criterion | null => {
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return null;
-      if (!item.parent_id) return item;
-      return getRoot(item.parent_id);
+      if (isRootItem(item)) return item;
+      return getRoot(item.parent_id!);
     },
-    [criteria],
+    [criteria, isRootItem],
   );
 
   const calculateScoreFromMap = useCallback(
@@ -427,7 +434,7 @@ export function ScoringForm({
     const rawTotal = TAB_GROUPS.reduce((acc, tab) => {
       const tabRoots = criteria.filter(
         (c) =>
-          (!c.parent_id) &&
+          isRootItem(c) &&
           (c.code === tab.id ||
             c.code.startsWith(tab.id + '.') ||
             c.code.startsWith('TC_0' + tab.id) ||
@@ -437,8 +444,8 @@ export function ScoringForm({
       const safeTabSum = Math.min(tabSum, tab.max);
       return acc + safeTabSum;
     }, 0);
-    return Math.max(0, rawTotal);
-  }, [criteria, calculateAutoScore]);
+    return Math.min(100, Math.max(0, rawTotal));
+  }, [criteria, calculateAutoScore, isRootItem]);
 
   const handleInputChange = (criteriaId: number, value: string) => {
     let finalValue = value;
