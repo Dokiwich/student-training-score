@@ -186,10 +186,11 @@ export class ScoringService {
     oldScore: number,
     newScore: number,
     reason?: string,
+    tx: any = prisma,
   ) {
     if (oldScore === newScore) return;
     try {
-      await prisma.score_adjustment_logs.create({
+      await tx.score_adjustment_logs.create({
         data: {
           id: randomUUID(),
           score_detail_id: scoreDetailId,
@@ -214,9 +215,10 @@ export class ScoringService {
     entityId: string,
     oldValue?: any,
     newValue?: any,
+    tx: any = prisma,
   ) {
     try {
-      await prisma.audit_logs.create({
+      await tx.audit_logs.create({
         data: {
           id: randomUUID(),
           actor_id: actorId,
@@ -808,49 +810,54 @@ export class ScoringService {
       updateData.proof_url = proofUrl;
     }
 
-    const detail = await prisma.score_details.upsert({
-      where: {
-        scoring_sheet_id_criteria_id: {
-          scoring_sheet_id: formId,
-          criteria_id: criteriaId,
+    const detail = await prisma.$transaction(async (tx) => {
+      const savedDetail = await tx.score_details.upsert({
+        where: {
+          scoring_sheet_id_criteria_id: {
+            scoring_sheet_id: formId,
+            criteria_id: criteriaId,
+          },
         },
-      },
-      update: updateData,
-      create: {
-        id: randomUUID(),
-        scoring_sheets: { connect: { id: formId } },
-        criteria: { connect: { id: criteriaId } },
-        ...updateData,
-      },
-    });
+        update: updateData,
+        create: {
+          id: randomUUID(),
+          scoring_sheets: { connect: { id: formId } },
+          criteria: { connect: { id: criteriaId } },
+          ...updateData,
+        },
+      });
 
-    // ✅ Dual-write: cũng ghi vào score_entries (bảng chuẩn hóa)
-    await prisma.score_entries.upsert({
-      where: {
-        score_detail_id_scorer_role: {
-          score_detail_id: detail.id,
+      // ✅ Dual-write: cũng ghi vào score_entries (bảng chuẩn hóa)
+      await tx.score_entries.upsert({
+        where: {
+          score_detail_id_scorer_role: {
+            score_detail_id: savedDetail.id,
+            scorer_role: 'STUDENT',
+          },
+        },
+        update: { score, scored_at: new Date() },
+        create: {
+          id: randomUUID(),
+          score_detail_id: savedDetail.id,
           scorer_role: 'STUDENT',
+          score,
         },
-      },
-      update: { score, scored_at: new Date() },
-      create: {
-        id: randomUUID(),
-        score_detail_id: detail.id,
-        scorer_role: 'STUDENT',
-        score,
-      },
+      });
+
+      // ✅ Ghi log điều chỉnh điểm (nếu điểm cũ khác điểm mới)
+      if (oldStudentScore !== null && oldStudentScore !== score) {
+        await this.logScoreAdjustment(savedDetail.id, studentId, oldStudentScore, score, 'Sinh viên tự chấm điểm', tx);
+      }
+
+      // ✅ Ghi audit log
+      await this.logAudit(studentId, 'SCORE_CRITERIA', 'score_details', savedDetail.id,
+        { criteria_id: criteriaId, old_score: oldStudentScore },
+        { criteria_id: criteriaId, new_score: score, role: 'STUDENT' },
+        tx
+      );
+
+      return savedDetail;
     });
-
-    // ✅ Ghi log điều chỉnh điểm (nếu điểm cũ khác điểm mới)
-    if (oldStudentScore !== null && oldStudentScore !== score) {
-      await this.logScoreAdjustment(detail.id, studentId, oldStudentScore, score, 'Sinh viên tự chấm điểm');
-    }
-
-    // ✅ Ghi audit log
-    await this.logAudit(studentId, 'SCORE_CRITERIA', 'score_details', detail.id,
-      { criteria_id: criteriaId, old_score: oldStudentScore },
-      { criteria_id: criteriaId, new_score: score, role: 'STUDENT' },
-    );
 
     return {
       message: 'Lưu điểm sinh viên thành công',
@@ -930,53 +937,58 @@ export class ScoringService {
       : null;
 
     // 5e. Upsert
-    const savedScore = await prisma.score_details.upsert({
-      where: {
-        scoring_sheet_id_criteria_id: {
-          scoring_sheet_id: scoreRecord.id,
-          criteria_id: criteriaId,
+    const savedScore = await prisma.$transaction(async (tx) => {
+      const dbScore = await tx.score_details.upsert({
+        where: {
+          scoring_sheet_id_criteria_id: {
+            scoring_sheet_id: scoreRecord.id,
+            criteria_id: criteriaId,
+          },
         },
-      },
-      update: {
-        ...updateData,
-        updated_at: new Date(),
-      },
-      create: {
-        id: randomUUID(),
-        scoring_sheets: { connect: { id: scoreRecord.id } },
-        criteria: { connect: { id: criteriaId } },
-        ...updateData,
-      },
-    });
+        update: {
+          ...updateData,
+          updated_at: new Date(),
+        },
+        create: {
+          id: randomUUID(),
+          scoring_sheets: { connect: { id: scoreRecord.id } },
+          criteria: { connect: { id: criteriaId } },
+          ...updateData,
+        },
+      });
 
-    // ✅ Dual-write: cũng ghi vào score_entries (bảng chuẩn hóa)
-    const scorerRole = role as 'STUDENT' | 'CLASS_COMMITTEE' | 'ADVISOR';
-    await prisma.score_entries.upsert({
-      where: {
-        score_detail_id_scorer_role: {
-          score_detail_id: savedScore.id,
+      // ✅ Dual-write: cũng ghi vào score_entries (bảng chuẩn hóa)
+      const scorerRole = role as 'STUDENT' | 'CLASS_COMMITTEE' | 'ADVISOR';
+      await tx.score_entries.upsert({
+        where: {
+          score_detail_id_scorer_role: {
+            score_detail_id: dbScore.id,
+            scorer_role: scorerRole,
+          },
+        },
+        update: { score, scored_at: new Date() },
+        create: {
+          id: randomUUID(),
+          score_detail_id: dbScore.id,
           scorer_role: scorerRole,
+          score,
         },
-      },
-      update: { score, scored_at: new Date() },
-      create: {
-        id: randomUUID(),
-        score_detail_id: savedScore.id,
-        scorer_role: scorerRole,
-        score,
-      },
+      });
+
+      // ✅ Ghi log điều chỉnh điểm (nếu điểm cũ khác điểm mới)
+      if (oldScore !== null && oldScore !== score) {
+        await this.logScoreAdjustment(dbScore.id, actorId, oldScore, score, `Chấm điểm bởi ${role}`, tx);
+      }
+
+      // ✅ Ghi audit log
+      await this.logAudit(actorId, 'SCORE_CRITERIA', 'score_details', dbScore.id,
+        { criteria_id: criteriaId, old_score: oldScore },
+        { criteria_id: criteriaId, new_score: score, role },
+        tx
+      );
+
+      return dbScore;
     });
-
-    // ✅ Ghi log điều chỉnh điểm (nếu điểm cũ khác điểm mới)
-    if (oldScore !== null && oldScore !== score) {
-      await this.logScoreAdjustment(savedScore.id, actorId, oldScore, score, `Chấm điểm bởi ${role}`);
-    }
-
-    // ✅ Ghi audit log
-    await this.logAudit(actorId, 'SCORE_CRITERIA', 'score_details', savedScore.id,
-      { criteria_id: criteriaId, old_score: oldScore },
-      { criteria_id: criteriaId, new_score: score, role },
-    );
 
     return {
       message: `Lưu điểm thành công (${role})`,
@@ -1013,15 +1025,18 @@ export class ScoringService {
       return { message: 'Không tìm thấy điểm để xóa', success: true };
     }
     
-    await prisma.score_entries.delete({
-      where: { id: entry.id }
+    await prisma.$transaction(async (tx) => {
+      await tx.score_entries.delete({
+        where: { id: entry.id }
+      });
+      
+      await this.logScoreAdjustment(existingScoreDetail.id, actorId, Number(entry.score), 0, `Xóa điểm bởi ${role}`, tx);
+      await this.logAudit(actorId, 'DELETE_CRITERIA_SCORE', 'score_entries', entry.id,
+        { criteria_id: criteriaId, old_score: Number(entry.score) },
+        { criteria_id: criteriaId, new_score: 0, role, deleted: true },
+        tx
+      );
     });
-    
-    await this.logScoreAdjustment(existingScoreDetail.id, actorId, Number(entry.score), 0, `Xóa điểm bởi ${role}`);
-    await this.logAudit(actorId, 'DELETE_CRITERIA_SCORE', 'score_entries', entry.id,
-      { criteria_id: criteriaId, old_score: Number(entry.score) },
-      { criteria_id: criteriaId, new_score: 0, role, deleted: true },
-    );
     
     return { message: `Xóa điểm thành công (${role})`, success: true };
   }
@@ -1092,23 +1107,28 @@ export class ScoringService {
       );
     }
 
-    const updated = await prisma.scoring_sheets.updateMany({
-      where: { 
-        id: form.id,
-        status: form.status // CHỐNG LỖI CONCURRENCY (Race Condition): Chỉ update nếu trạng thái chưa bị thay đổi bởi request khác
-      },
-      data: updateData,
+    const updated = await prisma.$transaction(async (tx) => {
+      const up = await tx.scoring_sheets.updateMany({
+        where: { 
+          id: form.id,
+          status: form.status // CHỐNG LỖI CONCURRENCY (Race Condition): Chỉ update nếu trạng thái chưa bị thay đổi bởi request khác
+        },
+        data: updateData,
+      });
+
+      if (up.count === 0) {
+        throw new BadRequestException('Phiếu này đã được xử lý bởi một thao tác khác (hoặc bạn đã click đúp). Vui lòng tải lại trang.');
+      }
+
+      // ✅ Ghi audit log cho việc chuyển trạng thái phiếu
+      await this.logAudit(actorId, 'SUBMIT_FORM', 'scoring_sheets', form.id,
+        { status: form.status, current_step: form.current_step },
+        { status: transition.nextStatus, current_step: transition.currentStep, role },
+        tx
+      );
+
+      return up;
     });
-
-    if (updated.count === 0) {
-      throw new BadRequestException('Phiếu này đã được xử lý bởi một thao tác khác (hoặc bạn đã click đúp). Vui lòng tải lại trang.');
-    }
-
-    // ✅ Ghi audit log cho việc chuyển trạng thái phiếu
-    await this.logAudit(actorId, 'SUBMIT_FORM', 'scoring_sheets', form.id,
-      { status: form.status, current_step: form.current_step },
-      { status: transition.nextStatus, current_step: transition.currentStep, role },
-    );
 
     // BẮN THÔNG BÁO CHO NGƯỜI NHẬN TIẾP THEO (LỚP TRƯỞNG / CỐ VẤN)
     try {
@@ -1260,21 +1280,24 @@ export class ScoringService {
     const newStatus = role === 'CLASS_COMMITTEE' ? 'CLASS_REJECTED' : 'ADVISOR_REJECTED';
     const rejectStep = role === 'CLASS_COMMITTEE' ? 2 : 3;
 
-    await prisma.scoring_sheets.update({
-      where: { id: form.id },
-      data: {
-        status: newStatus as any,
-        rejection_reason: reason.trim(),
-        rejected_by_step: rejectStep,
-        updated_at: new Date(),
-      }
-    });
+    await prisma.$transaction(async (tx) => {
+      await tx.scoring_sheets.update({
+        where: { id: form.id },
+        data: {
+          status: newStatus as any,
+          rejection_reason: reason.trim(),
+          rejected_by_step: rejectStep,
+          updated_at: new Date(),
+        }
+      });
 
-    // ✅ Ghi audit log cho việc trả lại phiếu
-    await this.logAudit(actorId, 'REJECT_FORM', 'scoring_sheets', form.id,
-      { status: form.status },
-      { status: newStatus, role, reason },
-    );
+      // ✅ Ghi audit log cho việc trả lại phiếu
+      await this.logAudit(actorId, 'REJECT_FORM', 'scoring_sheets', form.id,
+        { status: form.status },
+        { status: newStatus, role, reason },
+        tx
+      );
+    });
 
     // Thông báo cho sinh viên: phiếu bị trả lại
     try {
