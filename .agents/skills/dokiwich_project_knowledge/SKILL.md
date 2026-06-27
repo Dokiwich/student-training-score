@@ -26,5 +26,19 @@ description: Core architectural rules, constraints, and past bugs for the Dokiwi
 - **Rule**: Dynamic API endpoints (like `GET /api/semester/active`) must explicitly opt-out of Next.js aggressive static caching.
 - **Implementation**: Add `export const dynamic = 'force-dynamic'` at the top of the route file.
 
+### 5. Transaction Atomicity
+- **Rule**: Any operation that modifies multiple tables (e.g. `score_details`, `score_entries`, `audit_logs`) MUST be wrapped in a database transaction to prevent torn state on failure.
+- **Implementation**: Use `await prisma.$transaction(async (tx) => { ... })`. Ensure helper functions like `logAudit` accept `tx` and execute within the transaction context.
+
+### 6. Security (IDOR & Auditing)
+- **Rule**: Never trust client-provided IDs. Always verify that the session user has ownership of the requested `formId`.
+- **Implementation**: Use `verifyActorRole` and check `scoring_sheets.user_id === session.userId`.
+- **Rule**: All sensitive administrative actions and scoring adjustments must be logged.
+- **Implementation**: Use `lib/audit.ts` functions (`logAudit`, `logAdminAction`) to persist changes to `audit_logs` and `review_actions` tables. Mask sensitive data like passwords (`***`) in the logs.
+
+### 7. Administrative Overrides (Demotion Lock)
+- **Rule**: If an admin manually alters a student's classification (e.g. due to disciplinary action), the system must not auto-revert it when scores change.
+- **Implementation**: Override the `classification` property AND force the sheet status to `FINALIZED`. Since `FINALIZED` sheets cannot be edited, the demotion remains locked.
+
 ## How to use this skill
 When debugging issues related to data integrity, F5 bugs, scoring totals, or cache issues in the Dokiwich project, consult the `examples/known_bugs.md` file in this directory to see how similar problems were resolved in the past.

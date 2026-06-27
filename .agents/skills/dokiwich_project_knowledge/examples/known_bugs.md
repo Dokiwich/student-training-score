@@ -31,3 +31,15 @@ This file documents historical bugs encountered and their corresponding solution
 ### 7. Bulk Import Fails for Class Transfers
 - **Symptom**: When Admin bulk-imports students to update their classes for a new semester, the system rejects rows with `MSSV đã tồn tại`.
 - **Context**: In this university's domain, **MSSV is permanently tied to a class**. If a student transfers to a new class, they are given a completely new MSSV and Email. Thus, rejecting duplicates is actually the CORRECT behavior to prevent data corruption. No "Upsert" fix was required.
+
+### 8. Transaction Atomicity (Data Torn/Partial Writes)
+- **Symptom**: If the server crashes, power is lost, or a network error occurs halfway through saving a student's score, the `score_entries` might be written but `audit_logs` is not, causing a torn state.
+- **Solution**: Wrap all state-changing API operations (Save Score, Delete Score, Submit Form, Reject Form) in `prisma.$transaction`. Ensure helper functions (like `logAudit`) accept a `tx` parameter so they run inside the same transaction block.
+
+### 9. IDOR (Insecure Direct Object Reference) Prevention
+- **Symptom**: A student tries to modify another student's score by intercepting the network request and changing `formId` or `detailId`.
+- **Solution**: Strictly enforce ownership in backend APIs. Use `verifyActorRole` to ensure that if the role is `STUDENT`, the `scoring_sheets.user_id` matches the session's User ID.
+
+### 10. Disciplinary Demotion Lock (Hạ Bậc Kỷ Luật)
+- **Symptom**: An Admin demotes a student (e.g., from EXCELLENT to AVERAGE due to discipline). Later, an advisor adjusts a score and the system recalculates the totals, reverting the student back to EXCELLENT.
+- **Solution**: When Admin demotes a student, the system overrides `classification` AND forces the `status` to `FINALIZED`. Because `FINALIZED` forms cannot be edited by students or advisors, the demotion is locked in place permanently.
