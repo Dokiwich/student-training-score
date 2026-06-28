@@ -49,20 +49,10 @@ export async function GET() {
     },
   });
 
-  // Auto-compute & sync status cho tất cả HK
-  const updated = await Promise.all(semesters.map(async (s) => {
+  // Tính toán status trên RAM, không ghi DB để tránh N+1 update trong GET
+  const updated = semesters.map((s) => {
     const computed = computeStatus(s);
     const shouldDeactivate = computed === 'LOCKED' && s.is_active === 1;
-    
-    if (computed !== s.status || shouldDeactivate) {
-      await prisma.semesters.update({
-        where: { id: s.id },
-        data: { 
-          status: computed as any,
-          ...(shouldDeactivate ? { is_active: 0 } : {})
-        },
-      });
-    }
 
     // Tính tổng criteria cho semester này
     const activeVersion = s.criteria_versions?.[0];
@@ -81,7 +71,7 @@ export async function GET() {
       categoryCount,
       hasVersion: !!activeVersion,
     };
-  }));
+  });
 
   return NextResponse.json({ data: updated });
 }
@@ -106,12 +96,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Thiếu thông tin bắt buộc' }, { status: 400 });
     }
 
-    const dStart = new Date(start_date);
-    const dEnd = new Date(end_date);
-    if (dStart >= dEnd) {
-      return NextResponse.json({ message: 'Lỗi Dữ Liệu: Ngày bắt đầu phải diễn ra trước Ngày kết thúc.' }, { status: 400 });
+    const dateSequence = [start_date, student_deadline, class_committee_deadline, advisor_deadline, school_deadline, end_date];
+    for (let i = 0; i < dateSequence.length - 1; i++) {
+      if (dateSequence[i] && dateSequence[i+1] && new Date(dateSequence[i]) > new Date(dateSequence[i+1])) {
+        return NextResponse.json({ message: 'Lỗi Dữ Liệu: Thứ tự các mốc thời gian không hợp lệ.' }, { status: 400 });
+      }
     }
-
     const semester = await prisma.semesters.create({
       data: {
         id: `sem_${code}`,
@@ -167,13 +157,13 @@ export async function PUT(req: Request) {
       }
     }
 
-    if (updateData.start_date || updateData.end_date) {
-      const currentSemester = await prisma.semesters.findUnique({ where: { id } });
-      if (currentSemester) {
-        const dStart = new Date((updateData.start_date as string | Date) || currentSemester.start_date);
-        const dEnd = new Date((updateData.end_date as string | Date) || currentSemester.end_date);
-        if (dStart >= dEnd) {
-          return NextResponse.json({ message: 'Lỗi Dữ Liệu: Ngày bắt đầu phải diễn ra trước Ngày kết thúc.' }, { status: 400 });
+    const currentSemester = await prisma.semesters.findUnique({ where: { id } });
+    if (currentSemester) {
+      const getD = (key: string) => updateData[key] !== undefined ? updateData[key] : currentSemester[key as keyof typeof currentSemester];
+      const dateSequence = [getD('start_date'), getD('student_deadline'), getD('class_committee_deadline'), getD('advisor_deadline'), getD('school_deadline'), getD('end_date')];
+      for (let i = 0; i < dateSequence.length - 1; i++) {
+        if (dateSequence[i] && dateSequence[i+1] && new Date(dateSequence[i] as any) > new Date(dateSequence[i+1] as any)) {
+          return NextResponse.json({ message: 'Lỗi Dữ Liệu: Thứ tự các mốc thời gian không hợp lệ.' }, { status: 400 });
         }
       }
     }

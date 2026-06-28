@@ -78,11 +78,6 @@ export async function GET() {
     // ── Auto-compute trạng thái theo thời gian thực ──
     const computed = computeStatus(semester);
     if (computed !== semester.status) {
-      // Cập nhật DB để giữ nhất quán
-      await prisma.semesters.update({
-        where: { id: semester.id },
-        data: { status: computed as any },
-      });
       semester = { ...semester, status: computed as any };
     }
 
