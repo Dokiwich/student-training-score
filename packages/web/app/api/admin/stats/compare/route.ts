@@ -7,6 +7,8 @@ function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isAdmin(session)) {

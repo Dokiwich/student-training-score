@@ -14,6 +14,8 @@ function checkAdmin(session: any) {
 }
 
 // GET: list all criteria + categories
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!checkAdmin(session)) {
@@ -272,10 +274,6 @@ export async function DELETE(req: Request) {
             message: `Không thể xóa: Có ${usageCount} phiếu chấm điểm đang sử dụng tiêu chí thuộc mục này.`
           }, { status: 400 });
         }
-        
-        // Delete children first to avoid FK constraint
-        await prisma.criteria.deleteMany({ where: { parent_id: { in: critIds } } });
-        await prisma.criteria.deleteMany({ where: { category_id: body.id } });
       }
       
       const oldData = await prisma.criteria_categories.findUnique({ where: { id: body.id } });

@@ -3,10 +3,11 @@ import { prisma } from '@student-score/database';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
+import { logAdminAction } from '../../../../lib/audit';
 
 async function getDepartmentUser(session: any) {
   if (!session?.user) return null;
-  const userId = (session.user as any).id;
+  const userId = (session?.user as any)?.id;
   const user = await prisma.users.findFirst({
     where: { id: userId },
     include: { user_roles: { include: { roles: true } } },
@@ -14,6 +15,8 @@ async function getDepartmentUser(session: any) {
   if (!user || !user.user_roles?.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1) || !user.department_id) return null;
   return user;
 }
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -80,6 +83,9 @@ export async function POST(req: Request) {
       },
     });
 
+    const actorId = deptUser.id;
+    await logAdminAction(actorId, 'CREATE_CLASS', 'classes', cls.id, null, cls);
+
     return NextResponse.json({ message: 'Thêm lớp thành công', data: cls });
   } catch (err: any) {
     console.error('Dept add class error:', err);
@@ -133,6 +139,9 @@ export async function PUT(req: Request) {
       },
     });
 
+    const actorId = deptUser.id;
+    await logAdminAction(actorId, 'UPDATE_CLASS', 'classes', id, cls, updatedCls);
+
     return NextResponse.json({ message: 'Cập nhật lớp thành công', data: updatedCls });
   } catch (err: any) {
     console.error('Dept edit class error:', err);
@@ -179,10 +188,13 @@ export async function DELETE(req: Request) {
     }
 
     // Soft-delete
-    await prisma.classes.update({
+    const updatedCls = await prisma.classes.update({
       where: { id: classId },
       data: { is_active: 0 },
     });
+
+    const actorId = deptUser.id;
+    await logAdminAction(actorId, 'DELETE_CLASS', 'classes', classId, cls, updatedCls);
 
     return NextResponse.json({ message: `Đã xóa lớp "${cls.code}"` });
   } catch (err: any) {

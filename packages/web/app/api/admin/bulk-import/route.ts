@@ -157,37 +157,39 @@ export async function POST(req: Request) {
         const passwordHash = await bcrypt.hash(row.password.trim(), 10);
         const userId = randomUUID();
 
-        await prisma.users.create({
-          data: {
-            id: userId,
-            full_name: row.full_name.trim(),
-            email: row.email.trim(),
-            password_hash: passwordHash,
-            student_id: studentId,
-            user_roles: {
-              create: {
-                id: randomUUID(),
-                roles: { connect: { code: normalRole } },
-                is_active: 1
-              }
-            },
-            department_id: departmentId,
-            is_active: 1,
-          },
-        });
-
-        // Create semester enrollment if class + active semester
-        if (classId && activeSemester) {
-          await prisma.semester_enrollments.create({
+        await prisma.$transaction(async (tx) => {
+          await tx.users.create({
             data: {
-              id: randomUUID(),
-              user_id: userId,
-              semester_id: activeSemester.id,
-              class_id: classId,
+              id: userId,
+              full_name: row.full_name.trim(),
+              email: row.email.trim(),
+              password_hash: passwordHash,
+              student_id: studentId,
+              user_roles: {
+                create: {
+                  id: randomUUID(),
+                  roles: { connect: { code: normalRole } },
+                  is_active: 1
+                }
+              },
+              department_id: departmentId,
               is_active: 1,
             },
           });
-        }
+
+          // Create semester enrollment if class + active semester
+          if (classId && activeSemester) {
+            await tx.semester_enrollments.create({
+              data: {
+                id: randomUUID(),
+                user_id: userId,
+                semester_id: activeSemester.id,
+                class_id: classId,
+                is_active: 1,
+              },
+            });
+          }
+        });
 
         batchEmails.add(emailLower);
         if (studentId) batchStudentIds.add(studentId.toLowerCase());

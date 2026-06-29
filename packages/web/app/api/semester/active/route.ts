@@ -87,7 +87,7 @@ export async function GET() {
         'Pragma': 'no-cache',
       },
     });
-  } catch {
+  } catch (e) {
     return NextResponse.json({ data: null }, { status: 500 });
   }
 }

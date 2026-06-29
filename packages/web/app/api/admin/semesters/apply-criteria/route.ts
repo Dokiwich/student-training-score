@@ -3,6 +3,7 @@ import { prisma } from '@student-score/database';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
+import { logAdminAction } from '../../../../../lib/audit';
 
 function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
@@ -46,9 +47,6 @@ export async function POST(req: Request) {
           message: `Học kỳ "${targetSemester.name}" đã có ${totalCriteria} tiêu chí. Vui lòng xóa trước khi áp dụng lại.`,
         }, { status: 400 });
       }
-      // Nếu version tồn tại nhưng rỗng → xóa đi tạo lại
-      await prisma.criteria_categories.deleteMany({ where: { criteria_version_id: existingVersion.id } });
-      await prisma.criteria_versions.delete({ where: { id: existingVersion.id } });
     }
 
     // 3. Tìm version nguồn
@@ -107,131 +105,150 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Bộ tiêu chí nguồn không có tiêu chí nào' }, { status: 400 });
     }
 
-    // 4. Đảm bảo auto-increment sequence đúng (PostgreSQL only)
-    try {
-      const maxCriteria = await prisma.criteria.aggregate({ _max: { id: true } });
-      const maxId = maxCriteria._max.id || 0;
-      await prisma.$executeRawUnsafe(
-        `SELECT setval(pg_get_serial_sequence('criteria', 'id'), ${maxId}, true)`
+    // Thực hiện trong transaction
+    const result = await prisma.$transaction(async (tx) => {
+      if (existingVersion) {
+        // Xóa criteria_versions (cascade sẽ tự xóa categories và criteria con)
+        await tx.criteria_versions.delete({ where: { id: existingVersion.id } });
+      }
+
+      // 4. Đảm bảo auto-increment sequence đúng (PostgreSQL only)
+      try {
+        const maxCriteria = await tx.criteria.aggregate({ _max: { id: true } });
+        const maxId = maxCriteria._max.id || 0;
+        await tx.$executeRawUnsafe(
+          `SELECT setval(pg_get_serial_sequence('criteria', 'id'), ${maxId}, true)`
+        );
+      } catch (e) {
+        // Bỏ qua nếu DB không phải PostgreSQL (SQLite, MySQL...)
+      }
+
+      // 5. Tính version number mới và tạo version cho học kỳ đích
+      const maxVersionInSemester = await tx.criteria_versions.findFirst({
+        where: { semester_id: targetSemesterId },
+        orderBy: { version: 'desc' }
+      });
+      const nextVersionNum = maxVersionInSemester ? maxVersionInSemester.version + 1 : 1;
+      const newVersionId = `ver_${targetSemester.code}_v${nextVersionNum}`;
+
+      await tx.criteria_versions.create({
+        data: {
+          id: newVersionId,
+          semester_id: targetSemesterId,
+          version: nextVersionNum,
+          is_active: 1,
+          applied_at: new Date(),
+        },
+      });
+
+      if (sourceVersionId === 'BLANK') {
+        return { newVersionId, clonedTotal: 0 };
+      }
+
+      // 6. Clone categories
+      const catIdMap = new Map<string, string>();
+      for (const cat of sourceVersion!.criteria_categories) {
+        const newCatId = `cat_${targetSemester.code}_${cat.code}`;
+        catIdMap.set(cat.id, newCatId);
+        await tx.criteria_categories.create({
+          data: {
+            id: newCatId,
+            criteria_version_id: newVersionId,
+            code: cat.code,
+            name: cat.name,
+            description: cat.description,
+            max_score: cat.max_score,
+            sort_order: cat.sort_order,
+          },
+        });
+      }
+
+      // 7. Clone criteria (roots first, then children in topological order)
+      const allCriteria = sourceVersion!.criteria_categories.flatMap(cat =>
+        cat.criteria.map(c => ({ ...c, newCategoryId: catIdMap.get(cat.id)! }))
       );
-    } catch {
-      // Bỏ qua nếu DB không phải PostgreSQL (SQLite, MySQL...)
-    }
 
-    // 5. Tính version number mới và tạo version cho học kỳ đích
-    const maxVersionInSemester = await prisma.criteria_versions.findFirst({
-      where: { semester_id: targetSemesterId },
-      orderBy: { version: 'desc' }
-    });
-    const nextVersionNum = maxVersionInSemester ? maxVersionInSemester.version + 1 : 1;
-    const newVersionId = `ver_${targetSemester.code}_v${nextVersionNum}`;
+      const roots = allCriteria.filter(c => !c.parent_id);
+      const children = allCriteria.filter(c => c.parent_id);
+      const criteriaIdMap = new Map<number, number>();
 
-    await prisma.criteria_versions.create({
-      data: {
-        id: newVersionId,
-        semester_id: targetSemesterId,
-        version: nextVersionNum,
-        is_active: 1,
-        applied_at: new Date(),
-      },
+      for (const c of roots) {
+        const newCrit = await tx.criteria.create({
+          data: {
+            category_id: c.newCategoryId,
+            parent_id: null,
+            code: c.code,
+            content: c.content,
+            point: c.point,
+            
+            score_type: c.score_type,
+            score_options: c.score_options || undefined,
+            require_evidence: c.require_evidence,
+            evidence_guide: c.evidence_guide,
+            sort_order: c.sort_order,
+            is_active: c.is_active,
+          },
+        });
+        criteriaIdMap.set(c.id, newCrit.id);
+      }
+
+      // Sort children topologically (handle multi-level nesting)
+      const sorted: typeof children = [];
+      const remaining = [...children];
+      let passes = 0;
+      while (remaining.length > 0 && passes < 10) {
+        passes++;
+        for (let i = remaining.length - 1; i >= 0; i--) {
+          if (criteriaIdMap.has(remaining[i].parent_id!)) {
+            sorted.push(remaining.splice(i, 1)[0]);
+          }
+        }
+      }
+
+      for (const c of sorted) {
+        const newParentId = criteriaIdMap.get(c.parent_id!);
+        const newCrit = await tx.criteria.create({
+          data: {
+            category_id: c.newCategoryId,
+            parent_id: newParentId || null,
+            code: c.code,
+            content: c.content,
+            point: c.point,
+            
+            score_type: c.score_type,
+            score_options: c.score_options || undefined,
+            require_evidence: c.require_evidence,
+            evidence_guide: c.evidence_guide,
+            sort_order: c.sort_order,
+            is_active: c.is_active,
+          },
+        });
+        criteriaIdMap.set(c.id, newCrit.id);
+      }
+
+      return { newVersionId, clonedTotal: sourceVersionId === 'BLANK' ? 0 : criteriaIdMap.size };
+    }); // End transaction
+
+    const actorId = (session?.user as any)?.id;
+    await logAdminAction(actorId, 'APPLY_CRITERIA', 'semesters', targetSemesterId, null, {
+      sourceVersionId: sourceVersion?.id || 'BLANK',
+      newVersionId: result.newVersionId,
+      clonedCriteriaCount: result.clonedTotal
     });
 
     if (sourceVersionId === 'BLANK') {
       return NextResponse.json({
         message: `Đã tạo phiên bản bộ tiêu chí (trống) thành công cho học kỳ "${targetSemester.name}"!`,
-        data: { versionId: newVersionId }
+        data: { versionId: result.newVersionId }
       });
     }
-
-    // 6. Clone categories
-    const catIdMap = new Map<string, string>();
-    for (const cat of sourceVersion!.criteria_categories) {
-      const newCatId = `cat_${targetSemester.code}_${cat.code}`;
-      catIdMap.set(cat.id, newCatId);
-      await prisma.criteria_categories.create({
-        data: {
-          id: newCatId,
-          criteria_version_id: newVersionId,
-          code: cat.code,
-          name: cat.name,
-          description: cat.description,
-          max_score: cat.max_score,
-          sort_order: cat.sort_order,
-        },
-      });
-    }
-
-    // 7. Clone criteria (roots first, then children in topological order)
-    const allCriteria = sourceVersion!.criteria_categories.flatMap(cat =>
-      cat.criteria.map(c => ({ ...c, newCategoryId: catIdMap.get(cat.id)! }))
-    );
-
-    const roots = allCriteria.filter(c => !c.parent_id);
-    const children = allCriteria.filter(c => c.parent_id);
-    const criteriaIdMap = new Map<number, number>();
-
-    for (const c of roots) {
-      const newCrit = await prisma.criteria.create({
-        data: {
-          category_id: c.newCategoryId,
-          parent_id: null,
-          code: c.code,
-          content: c.content,
-          point: c.point,
-          
-          score_type: c.score_type,
-          score_options: c.score_options || undefined,
-          require_evidence: c.require_evidence,
-          evidence_guide: c.evidence_guide,
-          sort_order: c.sort_order,
-          is_active: c.is_active,
-        },
-      });
-      criteriaIdMap.set(c.id, newCrit.id);
-    }
-
-    // Sort children topologically (handle multi-level nesting)
-    const sorted: typeof children = [];
-    const remaining = [...children];
-    let passes = 0;
-    while (remaining.length > 0 && passes < 10) {
-      passes++;
-      for (let i = remaining.length - 1; i >= 0; i--) {
-        if (criteriaIdMap.has(remaining[i].parent_id!)) {
-          sorted.push(remaining.splice(i, 1)[0]);
-        }
-      }
-    }
-
-    for (const c of sorted) {
-      const newParentId = criteriaIdMap.get(c.parent_id!);
-      const newCrit = await prisma.criteria.create({
-        data: {
-          category_id: c.newCategoryId,
-          parent_id: newParentId || null,
-          code: c.code,
-          content: c.content,
-          point: c.point,
-          
-          score_type: c.score_type,
-          score_options: c.score_options || undefined,
-          require_evidence: c.require_evidence,
-          evidence_guide: c.evidence_guide,
-          sort_order: c.sort_order,
-          is_active: c.is_active,
-        },
-      });
-      criteriaIdMap.set(c.id, newCrit.id);
-    }
-
-    const clonedTotal = sourceVersionId === 'BLANK' ? 0 : criteriaIdMap.size;
 
     return NextResponse.json({
-      message: `Đã áp dụng ${clonedTotal} tiêu chí (${sourceCatCount} mục) vào học kỳ "${targetSemester.name}" thành công!`,
+      message: `Đã áp dụng ${result.clonedTotal} tiêu chí (${sourceCatCount} mục) vào học kỳ "${targetSemester.name}" thành công!`,
       data: {
-        versionId: newVersionId,
+        versionId: result.newVersionId,
         categories: sourceCatCount,
-        criteria: clonedTotal,
+        criteria: result.clonedTotal,
         sourceSemester: (sourceVersion as any).semesters?.code || 'unknown',
       },
     });

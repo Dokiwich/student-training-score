@@ -9,13 +9,15 @@ import { authOptions } from '../auth/[...nextauth]/route';
  * Query: ?studentId=xxx (optional, dùng cho BCS/CVHT xem phiếu SV khác)
  * Nếu không truyền studentId → lấy phiếu của chính user đang đăng nhập.
  */
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
+  const userId = (session?.user as any)?.id;
   const url = new URL(req.url);
   const targetStudentId = url.searchParams.get('studentId') || userId;
 

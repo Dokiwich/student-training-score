@@ -8,13 +8,15 @@ import { authOptions } from '../../auth/[...nextauth]/route';
  * Lấy danh sách tiêu chí kèm điểm từng role cho 1 scoring_sheet.
  * Chỉ trả về cho chủ phiếu (sinh viên đang đăng nhập).
  */
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
+  const userId = (session?.user as any)?.id;
   const { searchParams } = new URL(req.url);
   const sheetId = searchParams.get('sheetId');
 

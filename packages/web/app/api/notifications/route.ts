@@ -9,13 +9,15 @@ import { authOptions } from '../auth/[...nextauth]/route';
  * Query: ?unread_only=true  — chỉ lấy chưa đọc
  *        ?limit=20          — số lượng tối đa (mặc định 20)
  */
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
+  const userId = (session?.user as any)?.id;
   const url = new URL(req.url);
   const unreadOnly = url.searchParams.get('unread_only') === 'true';
   const limit = Math.min(Number(url.searchParams.get('limit')) || 20, 50);
@@ -77,7 +79,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
+  const userId = (session?.user as any)?.id;
 
   try {
     const body = await req.json();

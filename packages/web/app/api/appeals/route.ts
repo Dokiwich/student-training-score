@@ -8,13 +8,15 @@ import { randomUUID } from 'crypto';
  * GET /api/appeals
  * Lấy danh sách khiếu nại của sinh viên đang đăng nhập.
  */
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
+  const userId = (session?.user as any)?.id;
 
   try {
     // Lấy tất cả scoring_sheet_id của sinh viên
@@ -150,7 +152,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
+  const userId = (session?.user as any)?.id;
 
   try {
     const body = await req.json();

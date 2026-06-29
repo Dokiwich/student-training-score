@@ -43,3 +43,12 @@ This file documents historical bugs encountered and their corresponding solution
 ### 10. Disciplinary Demotion Lock (Hạ Bậc Kỷ Luật)
 - **Symptom**: An Admin demotes a student (e.g., from EXCELLENT to AVERAGE due to discipline). Later, an advisor adjusts a score and the system recalculates the totals, reverting the student back to EXCELLENT.
 - **Solution**: When Admin demotes a student, the system overrides `classification` AND forces the `status` to `FINALIZED`. Because `FINALIZED` forms cannot be edited by students or advisors, the demotion is locked in place permanently.
+
+### 11. IDE Syntax Parsing Error (Optional Catch Binding)
+- **Symptom**: VS Code's Problems panel throws cascading errors like `'try' expected` and `'catch' or 'finally' expected` inside valid `try-catch` blocks, even though `npm run build` succeeds perfectly.
+- **Context**: The code used ES2019's Optional Catch Binding (`catch { ... }` without an error variable). Older IDE Language Server configurations might fail to parse this, treating the `{` as an error variable and breaking the entire file's AST.
+- **Solution**: Explicitly define the error variable as `catch (e) { ... }` across all API routes (`apply-criteria`, `active`, `users`, `classes`, etc.) to guarantee IDE compatibility and suppress false-positive errors.
+
+### 12. HTTP Semantics Mismatch (Logout All)
+- **Symptom**: The "Logout All Devices" feature failed to work because the API route was defined as `GET` while the frontend was correctly dispatching a `POST` request (since it mutates database state).
+- **Solution**: Always ensure state-modifying API endpoints (`app/api/auth/logout-all/route.ts`) are explicitly defined as `POST` to adhere strictly to HTTP conventions and sync with frontend implementations.

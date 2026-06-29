@@ -8,6 +8,8 @@ function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isAdmin(session)) {
@@ -111,51 +113,55 @@ export async function POST(req: Request) {
     }
 
     const password_hash = await bcrypt.hash(password, 10);
-    const newUser = await prisma.users.create({
-      data: {
-        id: randomUUID(),
-        full_name,
-        email,
-        password_hash,
-        student_id: student_id || null,
-        user_roles: {
-          create: {
-            id: randomUUID(),
-            roles: { connect: { code: role } },
-            is_active: 1
-          }
-        },
-        department_id: resolvedDeptId,
-        is_active: 1
-      }
-    });
-
-    // ✅ Auto-create semester_enrollment cho kỳ active
-    if (class_id) {
-      const activeSemester = await prisma.semesters.findFirst({
-        where: { is_active: 1 },
-        orderBy: { created_at: 'desc' },
-        select: { id: true },
+    // Bọc toàn bộ vào transaction
+    const newUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.users.create({
+        data: {
+          id: randomUUID(),
+          full_name,
+          email,
+          password_hash,
+          student_id: student_id || null,
+          user_roles: {
+            create: {
+              id: randomUUID(),
+              roles: { connect: { code: role } },
+              is_active: 1
+            }
+          },
+          department_id: resolvedDeptId,
+          is_active: 1
+        }
       });
-      if (activeSemester) {
-        await prisma.semester_enrollments.upsert({
-          where: {
-            user_id_semester_id: {
-              user_id: newUser.id,
-              semester_id: activeSemester.id,
-            },
-          },
-          update: { class_id, is_active: 1 },
-          create: {
-            id: randomUUID(),
-            user_id: newUser.id,
-            semester_id: activeSemester.id,
-            class_id,
-            is_active: 1,
-          },
+
+      // ✅ Auto-create semester_enrollment cho kỳ active
+      if (class_id) {
+        const activeSemester = await tx.semesters.findFirst({
+          where: { is_active: 1 },
+          orderBy: { created_at: 'desc' },
+          select: { id: true },
         });
+        if (activeSemester) {
+          await tx.semester_enrollments.upsert({
+            where: {
+              user_id_semester_id: {
+                user_id: user.id,
+                semester_id: activeSemester.id,
+              },
+            },
+            update: { class_id, is_active: 1 },
+            create: {
+              id: randomUUID(),
+              user_id: user.id,
+              semester_id: activeSemester.id,
+              class_id,
+              is_active: 1,
+            },
+          });
+        }
       }
-    }
+      return user;
+    });
 
     await logAdminAction(actorId, 'CREATE_USER', 'users', newUser.id, null, { ...newUser, password_hash: '***' });
 
@@ -178,15 +184,6 @@ export async function PUT(req: Request) {
     if (!id) return NextResponse.json({ message: 'ID người dùng là bắt buộc' }, { status: 400 });
 
     const updateData: Record<string, unknown> = {};
-    if (role !== undefined) {
-      await prisma.user_roles.deleteMany({ where: { user_id: id } });
-      const targetRole = await prisma.roles.findUnique({ where: { code: role } });
-      if (targetRole) {
-        await prisma.user_roles.create({
-          data: { id: randomUUID(), user_id: id, role_id: targetRole.id, is_active: 1 }
-        });
-      }
-    }
     if (department_id !== undefined) updateData.department_id = department_id || null;
     if (is_active !== undefined) updateData.is_active = is_active;
     if (full_name !== undefined) updateData.full_name = full_name;
@@ -207,51 +204,66 @@ export async function PUT(req: Request) {
     }
 
     const oldData = await prisma.users.findUnique({ where: { id } });
-    const user = await prisma.users.update({
-      where: { id },
-      data: updateData,
-    });
-
-    // ✅ Auto-upsert enrollment khi thay đổi class_id
-    if (class_id !== undefined) {
-      const activeSemester = await prisma.semesters.findFirst({
-        where: { is_active: 1 },
-        orderBy: { created_at: 'desc' },
-        select: { id: true },
-      });
-      if (activeSemester) {
-        if (class_id) {
-          // Gán lớp mới
-          await prisma.semester_enrollments.upsert({
-            where: {
-              user_id_semester_id: {
-                user_id: id,
-                semester_id: activeSemester.id,
-              },
-            },
-            update: { class_id, is_active: 1 },
-            create: {
-              id: randomUUID(),
-              user_id: id,
-              semester_id: activeSemester.id,
-              class_id,
-              is_active: 1,
-            },
-          });
-        } else {
-          // Gỡ lớp: deactivate enrollment hiện tại
-          await prisma.semester_enrollments.updateMany({
-            where: { user_id: id, semester_id: activeSemester.id },
-            data: { is_active: 0 },
+    
+    const user = await prisma.$transaction(async (tx) => {
+      if (role !== undefined) {
+        await tx.user_roles.deleteMany({ where: { user_id: id } });
+        const targetRole = await tx.roles.findUnique({ where: { code: role } });
+        if (targetRole) {
+          await tx.user_roles.create({
+            data: { id: randomUUID(), user_id: id, role_id: targetRole.id, is_active: 1 }
           });
         }
       }
-    }
+
+      const updatedUser = await tx.users.update({
+        where: { id },
+        data: updateData,
+      });
+
+      // ✅ Auto-upsert enrollment khi thay đổi class_id
+      if (class_id !== undefined) {
+        const activeSemester = await tx.semesters.findFirst({
+          where: { is_active: 1 },
+          orderBy: { created_at: 'desc' },
+          select: { id: true },
+        });
+        if (activeSemester) {
+          if (class_id) {
+            // Gán lớp mới
+            await tx.semester_enrollments.upsert({
+              where: {
+                user_id_semester_id: {
+                  user_id: id,
+                  semester_id: activeSemester.id,
+                },
+              },
+              update: { class_id, is_active: 1 },
+              create: {
+                id: randomUUID(),
+                user_id: id,
+                semester_id: activeSemester.id,
+                class_id,
+                is_active: 1,
+              },
+            });
+          } else {
+            // Gỡ lớp: deactivate enrollment hiện tại
+            await tx.semester_enrollments.updateMany({
+              where: { user_id: id, semester_id: activeSemester.id },
+              data: { is_active: 0 },
+            });
+          }
+        }
+      }
+
+      return updatedUser;
+    });
     
     await logAdminAction(actorId, 'UPDATE_USER', 'users', id, oldData ? { ...oldData, password_hash: '***' } : null, { ...user, password_hash: '***' });
 
     return NextResponse.json({ message: 'Cập nhật người dùng thành công', data: user });
-  } catch {
+  } catch (e) {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }
 }

@@ -29,6 +29,8 @@ function computeStatus(s: {
   return 'LOCKED';
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!isAdmin(session)) {
@@ -175,7 +177,7 @@ export async function PUT(req: Request) {
     });
     await logAdminAction(actorId, 'UPDATE_SEMESTER', 'semesters', id, oldData, semester);
     return NextResponse.json({ message: 'Cập nhật học kỳ thành công', data: semester });
-  } catch {
+  } catch (e) {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }
 }
@@ -222,7 +224,7 @@ export async function PATCH(req: Request) {
       await logAdminAction(actorId, 'ACTIVATE_SEMESTER', 'semesters', id, targetSemester, newActive);
       return NextResponse.json({ message: 'Đã kích hoạt học kỳ thành công' });
     }
-  } catch {
+  } catch (e) {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }
 }

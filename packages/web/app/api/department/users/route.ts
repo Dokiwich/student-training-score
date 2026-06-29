@@ -4,10 +4,11 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
+import { logAdminAction } from '../../../../lib/audit';
 
 async function getDepartmentUser(session: any) {
   if (!session?.user) return null;
-  const userId = (session.user as any).id;
+  const userId = (session?.user as any)?.id;
   const user = await prisma.users.findFirst({
     where: { id: userId },
     include: { user_roles: { include: { roles: true } } },
@@ -20,6 +21,8 @@ async function getDepartmentUser(session: any) {
  * GET /api/department/users?classId=xxx
  * List students in a class belonging to user's department
  */
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   const deptUser = await getDepartmentUser(session);
@@ -129,26 +132,6 @@ export async function POST(req: Request) {
     const passwordHash = await bcrypt.hash(password, 10);
     const userId = randomUUID();
 
-    // Create user
-    await prisma.users.create({
-      data: {
-        id: userId,
-        full_name,
-        email,
-        password_hash: passwordHash,
-        student_id: student_id || null,
-        user_roles: {
-          create: {
-            id: randomUUID(),
-            roles: { connect: { code: 'STUDENT' } },
-            is_active: 1
-          }
-        },
-        department_id: deptUser.department_id,
-        is_active: 1,
-      },
-    });
-
     // Create enrollment for active semester
     const activeSemester = await prisma.semesters.findFirst({
       where: { is_active: 1 },
@@ -156,17 +139,42 @@ export async function POST(req: Request) {
       select: { id: true },
     });
 
-    if (activeSemester) {
-      await prisma.semester_enrollments.create({
+    const newUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.users.create({
         data: {
-          id: randomUUID(),
-          user_id: userId,
-          semester_id: activeSemester.id,
-          class_id,
+          id: userId,
+          full_name,
+          email,
+          password_hash: passwordHash,
+          student_id: student_id || null,
+          user_roles: {
+            create: {
+              id: randomUUID(),
+              roles: { connect: { code: 'STUDENT' } },
+              is_active: 1
+            }
+          },
+          department_id: deptUser.department_id,
           is_active: 1,
         },
       });
-    }
+
+      if (activeSemester) {
+        await tx.semester_enrollments.create({
+          data: {
+            id: randomUUID(),
+            user_id: userId,
+            semester_id: activeSemester.id,
+            class_id,
+            is_active: 1,
+          },
+        });
+      }
+      return user;
+    });
+
+    const actorId = deptUser.id;
+    await logAdminAction(actorId, 'CREATE_USER_ENROLLMENT', 'users', userId, null, { ...newUser, password_hash: '***' });
 
     return NextResponse.json({ message: 'Thêm sinh viên thành công' });
   } catch (err: any) {
@@ -213,7 +221,11 @@ export async function DELETE(req: Request) {
       }, { status: 400 });
     }
 
+    const oldEnrollment = await prisma.semester_enrollments.findUnique({ where: { id: enrollmentId } });
     await prisma.semester_enrollments.delete({ where: { id: enrollmentId } });
+
+    const actorId = deptUser.id;
+    await logAdminAction(actorId, 'DELETE_USER_ENROLLMENT', 'semester_enrollments', enrollmentId, oldEnrollment, null);
 
     return NextResponse.json({ message: 'Đã xóa sinh viên khỏi lớp' });
   } catch (err: any) {
