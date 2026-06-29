@@ -243,7 +243,7 @@ export function SemestersTab() {
                 <option value="">-- Chọn phiên bản --</option>
                 {versions.map(v => (
                   <option key={v.id} value={v.id}>
-                    {v.name || 'Bộ tiêu chí chưa đặt tên'}
+                    {v.name || `Phiên bản ${v.version} - HK ${v.semesters?.code || 'N/A'}`}
                   </option>
                 ))}
               </select>

@@ -26,12 +26,12 @@ export async function GET(req: Request) {
   const versionId = searchParams.get('versionId');
 
   const versions = await prisma.criteria_versions.findMany({
-    where: { semester_id: null },
+    include: { semesters: { select: { name: true, code: true } } },
     orderBy: { created_at: 'desc' },
   });
 
   const activeVersion = await prisma.criteria_versions.findFirst({
-    where: { is_active: 1, semester_id: null },
+    where: { is_active: 1 },
     orderBy: { created_at: 'desc' },
   });
 

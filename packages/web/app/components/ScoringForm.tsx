@@ -751,7 +751,7 @@ export function ScoringForm({
   };
 
   const effectiveCanEdit = canEdit && (() => {
-    if (currentRole === 'STUDENT') return ['DRAFT', 'CLASS_REJECTED', 'ADVISOR_REJECTED'].includes(formStatus);
+    if (currentRole === 'STUDENT') return ['NOT_CREATED', 'DRAFT', 'CLASS_REJECTED', 'ADVISOR_REJECTED'].includes(formStatus);
     if (currentRole === 'CLASS_COMMITTEE') return ['STUDENT_SUBMITTED', 'CLASS_REVIEWING'].includes(formStatus);
     if (currentRole === 'ADVISOR') return ['CLASS_REVIEWED', 'ADVISOR_REVIEWING'].includes(formStatus);
     return false;
@@ -796,7 +796,7 @@ export function ScoringForm({
     if (formStatus === 'DRAFT' || formStatus === 'NOT_CREATED' || formStatus === 'CLASS_REJECTED' || formStatus === 'ADVISOR_REJECTED' || formStatus === 'REJECTED') return s.id === 'DRAFT';
     if (formStatus === 'STUDENT_SUBMITTED' || formStatus === 'CLASS_REVIEWING') return s.id === 'STUDENT_SUBMITTED';
     if (formStatus === 'CLASS_REVIEWED' || formStatus === 'ADVISOR_REVIEWING') return s.id === 'CLASS_REVIEWED';
-    if (formStatus === 'APPROVED' || formStatus === 'ADVISOR_APPROVED' || formStatus === 'SCHOOL_APPROVED' || formStatus === 'FINALIZED') return s.id === 'APPROVED';
+    if (formStatus === 'APPROVED' || formStatus === 'ADVISOR_APPROVED' || formStatus === 'SCHOOL_REVIEWING' || formStatus === 'SCHOOL_APPROVED' || formStatus === 'FINALIZED') return s.id === 'APPROVED';
     return false;
   });
 

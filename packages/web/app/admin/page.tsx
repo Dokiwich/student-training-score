@@ -388,7 +388,7 @@ function AdminPageInner() {
                                 {v.name || v.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
                               </div>
                               <div style={{ fontSize: 13, fontWeight: 600, color: '#15803d', marginBottom: 4 }}>
-                                Phiên bản mẫu
+                                {v.semester_id ? `Phiên bản ${v.version} — ${v.semesters?.code || ''}` : 'Bản mẫu'}
                               </div>
                               {v.semesters?.name && (
                                 <div style={{ fontSize: 12, color: '#16a34a', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -444,7 +444,7 @@ function AdminPageInner() {
                                 {v.name || v.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
                               </div>
                               <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>
-                                Phiên bản mẫu
+                                {v.semester_id ? `Phiên bản ${v.version} — ${v.semesters?.code || ''}` : 'Bản mẫu'}
                               </div>
                               {v.semesters?.name && (
                                 <div style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
