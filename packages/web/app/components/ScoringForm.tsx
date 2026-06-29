@@ -42,9 +42,11 @@ interface Criterion {
   content: string;
   point: number;
   score_type: string;
+  score_options?: number[] | null;
   parent_id: number | null;
   sort_order: number;
   description?: string;
+  require_evidence?: number;
 }
 
 interface ScoreDetail {
@@ -1036,8 +1038,12 @@ export function ScoringForm({
                                   <td className="px-2 py-1.5 text-sm text-stone-500">{item.code}</td>
                                   <td className="px-2 py-1.5">
                                     <div style={{ paddingLeft: `${depth * 1.2}rem` }}>
-                                      <span className="text-sm text-red-900 leading-snug">{item.content}</span>
+                                      <span className="text-sm text-red-900 leading-snug">
+                                        {item.content}
+                                        {item.require_evidence === 1 && <span className="text-red-500 font-bold ml-1" title="Bắt buộc có minh chứng">*</span>}
+                                      </span>
                                       {item.description && <span className="text-xs text-stone-400 mt-0.5 block leading-relaxed">{item.description}</span>}
+                                      {item.require_evidence === 1 && <span className="text-[10px] text-red-500 font-medium block mt-1 uppercase tracking-wide">⚠️ Bắt buộc đính kèm minh chứng</span>}
                                     </div>
                                   </td>
                                   <td className="px-2 py-1.5 text-center text-sm text-stone-500">
@@ -1063,6 +1069,26 @@ export function ScoringForm({
                                     ) : currentRole === 'STUDENT' ? (
                                       isQuantityBased ? (
                                         <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
+                                      ) : item.score_type === 'OPTIONS' ? (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <div className="relative inline-block">
+                                            <select
+                                              value={val}
+                                              disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
+                                              onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                              className="w-16 h-9 px-1 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300 appearance-none bg-white cursor-pointer"
+                                              style={{ textAlignLast: 'center' }}
+                                            >
+                                              <option value="" disabled>-</option>
+                                              {Array.isArray(item.score_options) 
+                                                ? item.score_options.map((opt, idx) => (
+                                                    <option key={idx} value={String(opt)}>{opt}</option>
+                                                  ))
+                                                : <option value={item.point}>{item.point}</option>}
+                                            </select>
+                                            {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                          </div>
+                                        </div>
                                       ) : (
                                         <div className="flex flex-col items-center gap-1">
                                           <div className="relative inline-block">
@@ -1084,6 +1110,26 @@ export function ScoringForm({
                                       ) : currentRole === 'CLASS_COMMITTEE' ? (
                                         isQuantityBased ? (
                                           <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
+                                        ) : item.score_type === 'OPTIONS' ? (
+                                          <div className="flex flex-col items-center gap-1">
+                                            <div className="relative inline-block">
+                                              <select
+                                                value={val}
+                                                disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
+                                                onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                                className="w-16 h-9 px-1 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300 appearance-none bg-white cursor-pointer"
+                                                style={{ textAlignLast: 'center' }}
+                                              >
+                                                <option value="" disabled>-</option>
+                                                {Array.isArray(item.score_options) 
+                                                  ? item.score_options.map((opt, idx) => (
+                                                      <option key={idx} value={String(opt)}>{opt}</option>
+                                                    ))
+                                                  : <option value={item.point}>{item.point}</option>}
+                                              </select>
+                                              {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                            </div>
+                                          </div>
                                         ) : (
                                           <div className="flex flex-col items-center gap-1">
                                             <div className="relative inline-block">
@@ -1106,6 +1152,26 @@ export function ScoringForm({
                                       ) : (
                                         isQuantityBased ? (
                                           <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
+                                        ) : item.score_type === 'OPTIONS' ? (
+                                          <div className="flex flex-col items-center gap-1">
+                                            <div className="relative inline-block">
+                                              <select
+                                                value={val}
+                                                disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
+                                                onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                                className="w-16 h-9 px-1 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300 appearance-none bg-white cursor-pointer"
+                                                style={{ textAlignLast: 'center' }}
+                                              >
+                                                <option value="" disabled>-</option>
+                                                {Array.isArray(item.score_options) 
+                                                  ? item.score_options.map((opt, idx) => (
+                                                      <option key={idx} value={String(opt)}>{opt}</option>
+                                                    ))
+                                                  : <option value={item.point}>{item.point}</option>}
+                                              </select>
+                                              {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                            </div>
+                                          </div>
                                         ) : (
                                           <div className="flex flex-col items-center gap-1">
                                             <div className="relative inline-block">

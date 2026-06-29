@@ -667,6 +667,7 @@ export class ScoringService {
     role: string,
     studentId: string,
     semesterId?: string,
+    proofUrl?: string,
   ) {
     // 3a. ✅ FIX: Dùng helper chung thay vì copy-paste logic tạo phiếu
     const form = await this.getOrCreateDraftSheet(studentId, semesterId);
@@ -719,6 +720,7 @@ export class ScoringService {
     // 3c. Kiểm tra tiêu chí
     const criteria = await prisma.criteria.findUnique({
       where: { id: criteriaId },
+      include: { criteria_categories: true },
     });
 
     if (!criteria) {
@@ -727,6 +729,33 @@ export class ScoringService {
 
     if (!criteria.is_active) {
       throw new BadRequestException('Tiêu chí này đã bị vô hiệu hóa!');
+    }
+
+    // ✅ MỚI: Cross-Semester Injection (Chống ném điểm tiêu chí khác học kỳ)
+    const enrollment = await prisma.semester_enrollments.findUnique({
+      where: { id: form.enrollment_id },
+    });
+    if (!enrollment) {
+      throw new BadRequestException('Không tìm thấy thông tin học kỳ của phiếu điểm!');
+    }
+    const activeVersion = await prisma.criteria_versions.findFirst({
+      where: { semester_id: enrollment.semester_id, is_active: 1 },
+    });
+    if (activeVersion && criteria.criteria_categories?.criteria_version_id !== activeVersion.id) {
+      throw new BadRequestException('Tiêu chí này không thuộc về học kỳ hiện tại của phiếu điểm!');
+    }
+
+    // ✅ MỚI: Chống ném điểm trực tiếp vào danh mục cha
+    const childrenCount = await prisma.criteria.count({
+      where: { parent_id: criteriaId, is_active: 1 },
+    });
+    if (childrenCount > 0) {
+      throw new BadRequestException('Không thể chấm điểm trực tiếp vào danh mục cha (cần chấm ở các mục con)!');
+    }
+
+    // ✅ MỚI: Cưỡng chế nhập minh chứng nếu yêu cầu
+    if (criteria.require_evidence === 1 && role === 'STUDENT' && (!proofUrl || proofUrl.trim() === '')) {
+      throw new BadRequestException(`Tiêu chí "${criteria.code}" bắt buộc phải có link minh chứng!`);
     }
 
     const QUANTITY_MULTIPLIERS: Record<string, number> = {
@@ -786,6 +815,33 @@ export class ScoringService {
   }
 
   // =============================================
+  // HELPER: enforceMutualExclusivity (Check 2 lần tránh gian lận)
+  // =============================================
+  private async enforceMutualExclusivity(tx: any, formId: string, criteriaId: number, role: string) {
+    const targetCriteria = await tx.criteria.findUnique({ where: { id: criteriaId } });
+    if (!targetCriteria || !targetCriteria.parent_id) return;
+    
+    const parent = await tx.criteria.findUnique({ where: { id: targetCriteria.parent_id } });
+    if (!parent || (parent.score_type !== 'RADIO' && parent.score_type !== 'OPTIONS')) return;
+
+    const siblings = await tx.criteria.findMany({ where: { parent_id: parent.id } });
+    const siblingIds = siblings.map((s: any) => s.id).filter((id: number) => id !== criteriaId);
+
+    if (siblingIds.length > 0) {
+      const details = await tx.score_details.findMany({
+        where: { scoring_sheet_id: formId, criteria_id: { in: siblingIds } }
+      });
+      const detailIds = details.map((d: any) => d.id);
+      
+      if (detailIds.length > 0) {
+        await tx.score_entries.deleteMany({
+          where: { score_detail_id: { in: detailIds }, scorer_role: role }
+        });
+      }
+    }
+  }
+
+  // =============================================
   // 4. SINH VIÊN TỰ CHẤM (Method chuyên dụng)
   // =============================================
   async saveStudentScore(
@@ -795,7 +851,7 @@ export class ScoringService {
     studentId: string,
     proofUrl?: string,
   ) {
-    await this.validateBeforeScore(formId, criteriaId, score, 'STUDENT', studentId);
+    await this.validateBeforeScore(formId, criteriaId, score, 'STUDENT', studentId, undefined, proofUrl);
 
     // ✅ Lấy điểm cũ trước khi cập nhật (để ghi log)
     const existingStudentDetail = await prisma.score_details.findUnique({
@@ -845,6 +901,9 @@ export class ScoringService {
         },
       });
 
+      // ✅ enforce mutual exclusivity (Check 2 lần tránh gian lận)
+      await this.enforceMutualExclusivity(tx, formId, criteriaId, 'STUDENT');
+
       // ✅ Ghi log điều chỉnh điểm (nếu điểm cũ khác điểm mới)
       if (oldStudentScore !== null && oldStudentScore !== score) {
         await this.logScoreAdjustment(savedDetail.id, studentId, oldStudentScore, score, 'Sinh viên tự chấm điểm', tx);
@@ -883,8 +942,8 @@ export class ScoringService {
     // 5a-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
     await this.verifyActorRole(actorId, studentId, role, semesterId);
 
-    // 5a. Validate (bao gồm kiểm tra quyền role)
-    await this.validateBeforeScore(formId, criteriaId, score, role, studentId, semesterId);
+    // 5a. Validate (bao gồm kiểm tra quyền role và security checks)
+    await this.validateBeforeScore(formId, criteriaId, score, role, studentId, semesterId, proofUrl);
 
     // 5b. Phân luồng theo Role
     const updateData: Record<string, any> = {};
@@ -975,6 +1034,9 @@ export class ScoringService {
           score,
         },
       });
+
+      // ✅ enforce mutual exclusivity (Check 2 lần tránh gian lận)
+      await this.enforceMutualExclusivity(tx, scoreRecord.id, criteriaId, scorerRole);
 
       // ✅ Ghi log điều chỉnh điểm (nếu điểm cũ khác điểm mới)
       if (oldScore !== null && oldScore !== score) {
