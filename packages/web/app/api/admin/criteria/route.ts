@@ -26,12 +26,12 @@ export async function GET(req: Request) {
   const versionId = searchParams.get('versionId');
 
   const versions = await prisma.criteria_versions.findMany({
-    include: { semesters: { select: { name: true, code: true } } },
+    where: { semester_id: null },
     orderBy: { created_at: 'desc' },
   });
 
   const activeVersion = await prisma.criteria_versions.findFirst({
-    where: { is_active: 1 },
+    where: { is_active: 1, semester_id: null },
     orderBy: { created_at: 'desc' },
   });
 
@@ -68,7 +68,7 @@ export async function PUT(req: Request) {
     const body = await req.json();
 
     if (body._type === 'version') {
-      const { id, version, is_active } = body;
+      const { id, version, is_active, name, description } = body;
       if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
 
       // Check for conflicts when activating
@@ -84,7 +84,7 @@ export async function PUT(req: Request) {
           });
           if (activeInSameSemester) {
             return NextResponse.json({ 
-              message: 'Học kỳ này đã có một phiên bản đang được áp dụng. Vui lòng hủy kích hoạt phiên bản hiện tại trước khi kích hoạt bản mới.' 
+              message: targetVersion.semester_id ? 'Học kỳ này đã có một phiên bản đang được áp dụng.' : 'Đã có một Bộ tiêu chí mẫu đang được kích hoạt.' 
             }, { status: 400 });
           }
         }
@@ -93,6 +93,8 @@ export async function PUT(req: Request) {
       const updateData: Record<string, any> = {};
       if (version !== undefined) updateData.version = parseInt(version);
       if (is_active !== undefined) updateData.is_active = is_active;
+      if (name !== undefined) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
 
       const oldData = await prisma.criteria_versions.findUnique({ where: { id } });
       const updated = await prisma.criteria_versions.update({

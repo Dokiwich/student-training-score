@@ -385,10 +385,10 @@ function AdminPageInner() {
                                 </button>
                               </div>
                               <div style={{ fontSize: 20, fontWeight: 800, color: '#166534', lineHeight: 1.2, marginBottom: 8, paddingRight: 80 }}>
-                                {v.semesters?.code || 'Mặc định'}
+                                {v.name || v.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
                               </div>
                               <div style={{ fontSize: 13, fontWeight: 600, color: '#15803d', marginBottom: 4 }}>
-                                Phiên bản {v.version}
+                                Phiên bản mẫu
                               </div>
                               {v.semesters?.name && (
                                 <div style={{ fontSize: 12, color: '#16a34a', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -441,10 +441,10 @@ function AdminPageInner() {
                                 </button>
                               </div>
                               <div style={{ fontSize: 18, fontWeight: 700, color: '#334155', lineHeight: 1.2, marginBottom: 8, paddingRight: 80 }}>
-                                {v.semesters?.code || 'Mặc định'}
+                                {v.name || v.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
                               </div>
                               <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>
-                                Phiên bản {v.version}
+                                Phiên bản mẫu
                               </div>
                               {v.semesters?.name && (
                                 <div style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -469,7 +469,7 @@ function AdminPageInner() {
       {showPreEditPopup && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-100 flex items-center justify-center p-4" onClick={() => setShowPreEditPopup(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Chỉnh sửa Tiêu chí</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Quản lý Bộ tiêu chí</h3>
 
             <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
               <button
@@ -479,51 +479,43 @@ function AdminPageInner() {
               <button
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${preEditTab === 'create' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
                 onClick={() => setPreEditTab('create')}
-              >Tạo bản mới</button>
+              >Tạo bản mẫu mới</button>
             </div>
 
             {preEditTab === 'edit' ? (
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Chọn phiên bản để chỉnh sửa</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Chọn bộ tiêu chí để chỉnh sửa</label>
                 <select
                   value={selectedVersionToEdit}
                   onChange={e => setSelectedVersionToEdit(e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm"
                 >
-                  <option value="">-- Chọn phiên bản --</option>
+                  <option value="">-- Chọn bộ tiêu chí --</option>
                   {versions.map(v => (
-                    <option key={v.id} value={v.id}>{v.semesters?.code || 'Mặc định'} (Phiên bản {v.version})</option>
+                    <option key={v.id} value={v.id}>{v.name || v.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}</option>
                   ))}
                 </select>
               </div>
             ) : (
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Chọn học kỳ đích (Chưa có tiêu chí)</label>
-                  <select
-                    value={newVersionSemester}
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Tên bộ tiêu chí (Bắt buộc)</label>
+                  <input
+                    type="text"
+                    value={newVersionSemester} // Using this state variable for 'name' to minimize diff
                     onChange={e => setNewVersionSemester(e.target.value)}
+                    placeholder="VD: Bộ tiêu chí đánh giá rèn luyện năm 2024"
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-sm"
-                  >
-                    <option value="">-- Chọn học kỳ --</option>
-                    {semestersList.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.academic_year})</option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Dựa trên bộ tiêu chí</label>
-                  <select
-                    value={newVersionSource}
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Mô tả (Không bắt buộc)</label>
+                  <textarea
+                    value={newVersionSource} // Using this state variable for 'description'
                     onChange={e => setNewVersionSource(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-sm"
-                  >
-                    <option value="">-- Chọn bản mẫu --</option>
-                    <option value="BLANK" className="font-bold text-red-600">Trống (Làm từ đầu)</option>
-                    {versions.map(v => (
-                      <option key={v.id} value={v.id}>Bản sao của: {v.semesters?.code || 'Mặc định'} (V{v.version})</option>
-                    ))}
-                  </select>
+                    placeholder="Mô tả thêm về bộ tiêu chí này..."
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-sm resize-none h-20"
+                  />
                 </div>
               </div>
             )}
@@ -538,23 +530,23 @@ function AdminPageInner() {
                     if (v) openPreview(v);
                     setShowPreEditPopup(false);
                   } else {
-                    if (!newVersionSemester || !newVersionSource) return alert('Vui lòng điền đủ thông tin!');
+                    if (!newVersionSemester) return alert('Vui lòng nhập tên bộ tiêu chí!');
                     setIsApplying(true);
                     try {
-                      const res = await fetch('/api/admin/semesters/apply-criteria', {
+                      const res = await fetch('/api/admin/criteria-versions', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ targetSemesterId: newVersionSemester, sourceVersionId: newVersionSource })
+                        body: JSON.stringify({ name: newVersionSemester, description: newVersionSource })
                       });
                       const d = await res.json();
                       if (res.ok) {
                         alert(d.message);
                         setShowPreEditPopup(false);
+                        setNewVersionSemester('');
+                        setNewVersionSource('');
                         await fetchVersions();
-                        // open the newly created version
-                        const newVid = d.data?.versionId;
+                        const newVid = d.data?.id;
                         if (newVid) {
-                          const newV = await fetch(`/api/admin/criteria?versionId=${newVid}`).then(r => r.json());
-                          openPreview({ id: newVid, version: 'Mới', semesters: { name: 'Vừa tạo' } });
+                          openPreview({ id: newVid, name: newVersionSemester });
                         }
                       } else {
                         alert(d.message);
@@ -581,8 +573,7 @@ function AdminPageInner() {
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', background: 'linear-gradient(135deg, #fef2f2, #fff)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
                 <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', margin: 0 }}>
-                  Chỉnh sửa: {previewVersion.semesters?.code || 'Mặc định'}
-                  {previewVersion.semesters?.name && <span style={{ fontSize: 13, fontWeight: 500, color: '#64748b', marginLeft: 8 }}>— Phiên bản {previewVersion.version}</span>}
+                  Chỉnh sửa: {previewVersion.name || previewVersion.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
                 </h3>
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

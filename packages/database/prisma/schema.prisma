@@ -121,13 +121,15 @@ model criteria_categories {
 
 model criteria_versions {
   id                  String                @id @db.VarChar(36)
-  semester_id         String                @db.VarChar(36)
+  semester_id         String?               @db.VarChar(36)
+  name                String?               @db.VarChar(200)
+  description         String?               @db.Text
   version             Int                   @default(1)
   is_active           Int                   @default(1) @db.SmallInt
-  applied_at          DateTime              @db.Timestamp(0)
+  applied_at          DateTime?             @db.Timestamp(0)
   created_at          DateTime              @default(now()) @db.Timestamp(0)
   criteria_categories criteria_categories[]
-  semesters           semesters             @relation(fields: [semester_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_cv_semester")
+  semesters           semesters?            @relation(fields: [semester_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_cv_semester")
 
   @@unique([semester_id, version], map: "uk_cv_semester_version")
 }
