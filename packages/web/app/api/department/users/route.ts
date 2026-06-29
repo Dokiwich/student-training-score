@@ -75,14 +75,7 @@ export async function GET(req: Request) {
       is_active: 1,
       users: {
         is_active: 1,
-        user_roles: {
-          some: {
-            roles: {
-              code: { in: ['STUDENT', 'MONITOR', 'VICE_MONITOR', 'SECRETARY'] },
-            },
-            is_active: 1,
-          },
-        },
+        student_id: { not: null },
       },
     },
     orderBy: { users: { full_name: 'asc' } },

@@ -343,14 +343,7 @@ export class ScoringService {
         is_active: 1,
         users: {
           is_active: 1,
-          user_roles: {
-            some: {
-              roles: {
-                code: { in: ['STUDENT', 'MONITOR', 'VICE_MONITOR', 'SECRETARY'] },
-              },
-              is_active: 1,
-            },
-          },
+          student_id: { not: null }, // Dynamic check: only students have student_id (MSSV)
         },
       },
       select: {
