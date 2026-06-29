@@ -40,5 +40,23 @@ description: Core architectural rules, constraints, and past bugs for the Dokiwi
 - **Rule**: If an admin manually alters a student's classification (e.g. due to disciplinary action), the system must not auto-revert it when scores change.
 - **Implementation**: Override the `classification` property AND force the sheet status to `FINALIZED`. Since `FINALIZED` sheets cannot be edited, the demotion remains locked.
 
+### 8. Criteria Versions & Template Strategy
+- **Rule**: Criteria versions are no longer strictly bound to a single semester. A `criteria_version` can act as a standalone template (where `semester_id` is null). 
+- **Implementation**: The schema supports `semester_id String?`. When a new semester needs criteria, it can clone an existing template instead of referencing a shared template directly.
+
+### 9. API Best Practices
+- **Rule**: All state-mutating endpoints (e.g., submit, edit, update status) must strictly use the `POST` method (or `PUT`/`PATCH`), not `GET`.
+- **Rule**: Standardize `try-catch` blocks globally. Catch errors safely and log them contextually.
+
+### 10. Database Stack
+- **Stack**: The project utilizes **PostgreSQL** configured via **Prisma ORM**.
+
+### 11. Known UI Progress Bar Bug (Stepper)
+- **Bug**: Previously, if a scoring sheet advanced to the `SCHOOL_REVIEWING` status, the frontend stepper (in `ScoringForm.tsx`) fell back to `-1` and incorrectly highlighted the "DRAFT" step because the `SCHOOL_REVIEWING` status was missing from the stepper mapping logic.
+- **Fix**: Always ensure ALL valid backend workflow statuses (e.g. `SCHOOL_REVIEWING`, `SCHOOL_APPROVED`) are mapped to the final `APPROVED` visual step so the UI accurately locks and displays completion.
+
+### 12. Semester ID Formatting
+- **Standard**: Instead of using random UUIDs for semesters, use deterministic identifiers to improve debugging, formatted as `sem_HKx_yyyy_yyyy` (e.g. `sem_HK2_2025_2026`).
+
 ## How to use this skill
 When debugging issues related to data integrity, F5 bugs, scoring totals, or cache issues in the Dokiwich project, consult the `examples/known_bugs.md` file in this directory to see how similar problems were resolved in the past.
