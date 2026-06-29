@@ -105,6 +105,9 @@ export async function POST(req: Request) {
         errorCount++;
         continue;
       }
+      
+      // CLASS_COMMITTEE in UI maps to MONITOR in DB
+      const dbRoleCode = normalRole === 'CLASS_COMMITTEE' ? 'MONITOR' : normalRole;
 
       const emailLower = row.email.trim().toLowerCase();
       if (existingEmails.has(emailLower) || batchEmails.has(emailLower)) {
@@ -168,7 +171,7 @@ export async function POST(req: Request) {
               user_roles: {
                 create: {
                   id: randomUUID(),
-                  roles: { connect: { code: normalRole } },
+                  roles: { connect: { code: dbRoleCode } },
                   is_active: 1
                 }
               },

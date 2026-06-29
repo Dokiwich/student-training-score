@@ -33,7 +33,18 @@ export async function GET(req: Request) {
   const enrollments = await prisma.semester_enrollments.findMany({
     where: { 
       semester_id: semester.id,
-      ...(classId ? { class_id: classId } : {})
+      ...(classId ? { class_id: classId } : {}),
+      users: {
+        is_active: 1,
+        user_roles: {
+          some: {
+            roles: {
+              code: { in: ['STUDENT', 'MONITOR', 'VICE_MONITOR', 'SECRETARY'] },
+            },
+            is_active: 1,
+          },
+        },
+      },
     },
     include: {
       users: true,

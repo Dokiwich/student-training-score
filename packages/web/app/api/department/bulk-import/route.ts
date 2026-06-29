@@ -151,7 +151,7 @@ export async function POST(req: Request) {
               user_roles: {
                 create: {
                   id: randomUUID(),
-                  roles: { connect: { code: row.role || 'STUDENT' } },
+                  roles: { connect: { code: row.role === 'CLASS_COMMITTEE' ? 'MONITOR' : (row.role || 'STUDENT') } },
                   is_active: 1
                 }
               },

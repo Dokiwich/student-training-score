@@ -57,11 +57,6 @@ export async function GET(req: Request) {
   }
 
   const enrollments = await prisma.semester_enrollments.findMany({
-    where: {
-      class_id: classId,
-      semester_id: activeSemester.id,
-      is_active: 1,
-    },
     select: {
       id: true,
       users: {
@@ -71,6 +66,22 @@ export async function GET(req: Request) {
           full_name: true,
           email: true,
           user_roles: { include: { roles: true } },
+        },
+      },
+    },
+    where: {
+      class_id: classId,
+      semester_id: activeSemester.id,
+      is_active: 1,
+      users: {
+        is_active: 1,
+        user_roles: {
+          some: {
+            roles: {
+              code: { in: ['STUDENT', 'MONITOR', 'VICE_MONITOR', 'SECRETARY'] },
+            },
+            is_active: 1,
+          },
         },
       },
     },
