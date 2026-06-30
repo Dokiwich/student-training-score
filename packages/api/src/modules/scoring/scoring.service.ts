@@ -522,12 +522,22 @@ export class ScoringService {
       advisor_approved_at: sheet.advisor_approved_at,
     };
 
-    // Lấy chi tiết điểm (include score_entries mới)
-    const scores = await prisma.score_details.findMany({
-      where: { scoring_sheet_id: form.id },
-      include: { criteria: true, score_entries: true },
-      orderBy: { criteria_id: 'asc' },
-    });
+    // ✅ PONYTAIL: Gộp 4 truy vấn tuần tự thành 1 Promise.all với 2 truy vấn song song có include
+    const [scores, enrollmentData] = await Promise.all([
+      prisma.score_details.findMany({
+        where: { scoring_sheet_id: form.id },
+        include: { criteria: true, score_entries: true },
+        orderBy: { criteria_id: 'asc' },
+      }),
+      prisma.semester_enrollments.findUnique({
+        where: { id: sheet.enrollment_id },
+        include: {
+          users: true,
+          classes: { include: { departments: true } },
+          semesters: true
+        }
+      })
+    ]);
 
     // ✅ Map status chi tiết → status đơn giản cho Frontend
     const workflowStepMap: Record<string, string> = {
@@ -546,34 +556,11 @@ export class ScoringService {
 
     const formStatus = workflowStepMap[form.status] || 'DRAFT';
 
-    const enrollment = await prisma.semester_enrollments.findUnique({
-      where: { id: sheet.enrollment_id }
-    });
-    const actualSemesterId = enrollment?.semester_id || semesterId;
-
-    const studentUser = await prisma.users.findUnique({
-      where: { id: studentId },
-      include: {
-        semester_enrollments: {
-          where: { semester_id: actualSemesterId },
-          include: {
-            classes: {
-              include: { departments: true }
-            }
-          }
-        }
-      }
-    });
-
-    const semesterData = actualSemesterId ? await prisma.semesters.findUnique({
-      where: { id: actualSemesterId }
-    }) : null;
-
     const studentInfo = {
-      name: studentUser?.full_name || '',
-      studentId: studentUser?.student_id || '',
-      className: studentUser?.semester_enrollments?.[0]?.classes?.name || '',
-      departmentName: studentUser?.semester_enrollments?.[0]?.classes?.departments?.name || '',
+      name: enrollmentData?.users?.full_name || '',
+      studentId: enrollmentData?.users?.student_id || '',
+      className: enrollmentData?.classes?.name || '',
+      departmentName: enrollmentData?.classes?.departments?.name || '',
     };
 
     return {
@@ -585,7 +572,7 @@ export class ScoringService {
       currentStep: form.current_step,
       rejectionReason: form.rejection_reason || null,
       studentInfo,
-      semesterName: semesterData ? `Học kỳ ${semesterData.name} - Năm học ${semesterData.academic_year}` : '',
+      semesterName: enrollmentData?.semesters ? `Học kỳ ${enrollmentData.semesters.name} - Năm học ${enrollmentData.semesters.academic_year}` : '',
       totals: {
         student: form.student_total,
         class: form.class_total,

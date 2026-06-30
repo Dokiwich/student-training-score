@@ -58,5 +58,7 @@ description: Core architectural rules, constraints, and past bugs for the Dokiwi
 ### 12. Semester ID Formatting
 - **Standard**: Instead of using random UUIDs for semesters, use deterministic identifiers to improve debugging, formatted as `sem_HKx_yyyy_yyyy` (e.g. `sem_HK2_2025_2026`).
 
+
+
 ## How to use this skill
 When debugging issues related to data integrity, F5 bugs, scoring totals, or cache issues in the Dokiwich project, consult the `examples/known_bugs.md` file in this directory to see how similar problems were resolved in the past.

@@ -71,4 +71,14 @@ For all code written in this project (Frontend components, Backend APIs, Databas
 3. **Simplicity:** Can it be done in one line? Make it one line. The best code is the code never written.
 4. **Deletion over addition:** Boring over clever. Fewest files possible.
 5. **No unnecessary abstractions:** Do not create abstractions unless explicitly requested.
-6. **Bug fixes:** Fix the root cause, not the symptom. Grep all callers to fix shared functions instead of patching individual paths.
+7. **Performance Optimization (Database queries):** Always combine sequential queries into a single `Promise.all` or use Prisma `include` to fetch relations concurrently. Avoid `await query1; await query2;` as it multiplies round-trip latency, particularly on serverless databases like Neon.
+
+# Dynamic UI & Database Integrity
+
+## Dynamic Frontend Rendering
+- The frontend `ScoringForm.tsx` is completely data-driven. It renders a criterion as a parent (collapsible with sub-criteria) *if and only if* it detects child nodes in the database.
+- Do not hardcode specific criteria IDs (like `1.1.2`) in the frontend logic. Always manage UI behavior by modifying the Database structure (e.g., adding sub-criteria and setting `score_type` to `OPTIONS` or `RADIO` for parents).
+
+## Mutual Exclusivity at Database Level
+- The `enforceMutualExclusivity` check in `scoring.service.ts` works in tandem with the dynamic frontend. If a parent node is marked as `OPTIONS`, the backend will forcefully clear any existing score on sibling nodes when a new score is saved.
+- This creates an un-bypassable double-check mechanism where the database serves as the ultimate source of truth, immune to frontend manipulation.

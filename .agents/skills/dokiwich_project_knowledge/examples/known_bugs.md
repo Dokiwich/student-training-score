@@ -52,3 +52,11 @@ This file documents historical bugs encountered and their corresponding solution
 ### 12. HTTP Semantics Mismatch (Logout All)
 - **Symptom**: The "Logout All Devices" feature failed to work because the API route was defined as `GET` while the frontend was correctly dispatching a `POST` request (since it mutates database state).
 - **Solution**: Always ensure state-modifying API endpoints (`app/api/auth/logout-all/route.ts`) are explicitly defined as `POST` to adhere strictly to HTTP conventions and sync with frontend implementations.
+
+### 13. Database N+1 Queries (Latency / Cold Start)
+- **Symptom**: Fetching data sequentially using multiple `await prisma...` caused significant delays (up to several seconds) due to multiplied network round-trips and Neon DB cold starts.
+- **Solution**: Apply the "Ponytail Performance" rule: Always combine sequential queries into a single `Promise.all` or use Prisma `include` to fetch relations (like users, enrollments, classes, departments) concurrently in a single query.
+
+### 14. Dynamic Frontend Rendering / Parent missing sub-criteria
+- **Symptom**: The frontend failed to render sub-criteria for a parent (e.g. `1.1.2 Kết quả học tập`) and instead showed a single input field. This occurred because the database lacked the child criteria records and instead had a single row with `score_options = [0,1,2,3,4,5]`.
+- **Solution**: The frontend is strictly data-driven based on `parentIds`. To fix UI rendering, do NOT hardcode the frontend. Instead, insert child criteria in the DB (e.g. 1.1.2.a, 1.1.2.b) and set the parent's `score_type` to `OPTIONS` or `RADIO`. The frontend will dynamically adapt, and the backend's `enforceMutualExclusivity` will automatically prevent users from selecting multiple siblings.
