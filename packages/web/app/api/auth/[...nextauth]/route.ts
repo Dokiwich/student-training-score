@@ -102,9 +102,10 @@ export const authOptions: AuthOptions = {
       }
 
       if (!token.customJwt && token.id && token.role) {
+         if (!process.env.NEXTAUTH_SECRET) throw new Error("Missing NEXTAUTH_SECRET");
          token.customJwt = jwt.sign(
            { id: token.id, role: token.role, studentId: token.studentId, session_version: token.session_version },
-           process.env.NEXTAUTH_SECRET || "super-secret-key",
+           process.env.NEXTAUTH_SECRET,
            { expiresIn: '1d' }
          );
       }
@@ -123,7 +124,7 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: '/login',
   },
-  secret: process.env.NEXTAUTH_SECRET || "super-secret-key"
+  secret: process.env.NEXTAUTH_SECRET
 };
 
 const handler = NextAuth(authOptions);

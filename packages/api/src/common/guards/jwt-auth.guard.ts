@@ -9,9 +9,11 @@ export class JwtAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     
     try {
-      const secret = process.env.NEXTAUTH_SECRET || "super-secret-key";
+      const secret = process.env.NEXTAUTH_SECRET;
+      if (!secret) {
+        throw new Error("Missing NEXTAUTH_SECRET environment variable");
+      }
       
-      console.log('--- JWT AUTH GUARD ---');
       const authHeader = request.headers.authorization;
       
       let userFromBearer = null;
