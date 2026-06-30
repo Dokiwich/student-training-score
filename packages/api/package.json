@@ -24,6 +24,7 @@
     "@student-score/database": "*",
     "@student-score/shared": "*",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/nodemailer": "^8.0.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "express-rate-limit": "^8.5.2",
@@ -32,6 +33,7 @@
     "hpp": "^0.2.3",
     "jsonwebtoken": "^9.0.3",
     "next-auth": "^4.24.13",
+    "nodemailer": "^7.0.13",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "xss-clean": "^0.1.4"

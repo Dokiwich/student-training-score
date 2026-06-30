@@ -330,6 +330,8 @@ model users {
   failed_login_attempts              Int                     @default(0) @db.SmallInt
   locked_until                       DateTime?               @db.Timestamp(0)
   session_version                    Int                     @default(1)
+  reset_token                        String?                 @db.VarChar(6)
+  reset_token_expires                DateTime?               @db.Timestamp(0)
   appeals_appeals_resolved_byTousers appeals[]               @relation("appeals_resolved_byTousers")
   audit_logs                         audit_logs[]
   notifications                      notifications[]
