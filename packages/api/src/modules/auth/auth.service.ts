@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import { prisma } from '@student-score/database';
 import * as bcrypt from 'bcrypt';
 import * as nodemailer from 'nodemailer';
