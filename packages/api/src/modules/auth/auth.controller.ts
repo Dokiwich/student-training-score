@@ -26,11 +26,16 @@ export class AuthController {
     if (!body.email || !body.code) {
       throw new HttpException('Vui lòng cung cấp email và mã xác nhận', HttpStatus.BAD_REQUEST);
     }
-    const isValid = await this.authService.verifyResetCode(body.email, body.code);
-    if (!isValid) {
-      throw new HttpException('Mã xác nhận không đúng hoặc đã hết hạn', HttpStatus.BAD_REQUEST);
+    try {
+      const isValid = await this.authService.verifyResetCode(body.email, body.code);
+      if (!isValid) {
+        throw new HttpException('Mã xác nhận không đúng hoặc đã hết hạn', HttpStatus.BAD_REQUEST);
+      }
+      return { message: 'Mã xác nhận hợp lệ' };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(error.message || 'Lỗi xác thực mã', HttpStatus.BAD_REQUEST);
     }
-    return { message: 'Mã xác nhận hợp lệ' };
   }
 
   @Post('reset-password')
@@ -38,10 +43,15 @@ export class AuthController {
     if (!body.email || !body.code || !body.newPassword) {
       throw new HttpException('Vui lòng điền đủ thông tin', HttpStatus.BAD_REQUEST);
     }
-    const success = await this.authService.resetPassword(body.email, body.code, body.newPassword);
-    if (!success) {
-      throw new HttpException('Mã xác nhận không đúng hoặc đã hết hạn', HttpStatus.BAD_REQUEST);
+    try {
+      const success = await this.authService.resetPassword(body.email, body.code, body.newPassword);
+      if (!success) {
+        throw new HttpException('Mã xác nhận không đúng hoặc đã hết hạn', HttpStatus.BAD_REQUEST);
+      }
+      return { message: 'Đổi mật khẩu thành công' };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(error.message || 'Lỗi xác thực mã', HttpStatus.BAD_REQUEST);
     }
-    return { message: 'Đổi mật khẩu thành công' };
   }
 }

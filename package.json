@@ -5,10 +5,14 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:web": "npm run dev --workspace=@student-score/web",
-    "dev:api": "npm run start:dev --workspace=@student-score/api"
+    "dev:web": "dotenv -e .env -- npm run dev --workspace=@student-score/web",
+    "dev:api": "dotenv -e .env -- npm run start:dev --workspace=@student-score/api",
+    "db:push": "dotenv -e .env -- npm run db:push --workspace=@student-score/database",
+    "db:generate": "dotenv -e .env -- npm run db:generate --workspace=@student-score/database",
+    "db:studio": "dotenv -e .env -- npm run db:studio --workspace=@student-score/database"
   },
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "knip": "^6.0.6"
   }
 }

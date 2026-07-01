@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "scripts": {
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio"
+  },
   "dependencies": {
     "@prisma/client": "^6.0.0",
     "prisma": "^6.0.0"
