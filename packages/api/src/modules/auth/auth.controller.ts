@@ -1,4 +1,4 @@
-﻿import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
 
 @Controller('auth')
@@ -10,9 +10,15 @@ export class AuthController {
     if (!email) {
       throw new HttpException('Email is required', HttpStatus.BAD_REQUEST);
     }
-    await this.authService.processForgotPassword(email);
-    // Always return a success response to prevent email enumeration
-    return { message: 'Nếu email tồn tại trong hệ thống, mã xác nhận đã được gửi đến bạn.' };
+    try {
+      console.log("forgotPassword called with email:", email);
+      await this.authService.processForgotPassword(email);
+      console.log("forgotPassword completed successfully");
+      return { message: 'Nếu email tồn tại trong hệ thống, mã xác nhận đã được gửi đến bạn.' };
+    } catch (error: any) {
+      console.error("forgotPassword ERROR:", error);
+      throw new HttpException(error.message || 'Lỗi server', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   @Post('verify-code')

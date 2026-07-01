@@ -1,17 +1,20 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { getToken } from 'next-auth/jwt';
 
 import * as jwt from 'jsonwebtoken';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
+  private readonly logger = new Logger(JwtAuthGuard.name);
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     
     try {
       const secret = process.env.NEXTAUTH_SECRET;
       if (!secret) {
-        throw new Error("Missing NEXTAUTH_SECRET environment variable");
+        this.logger.error("Missing NEXTAUTH_SECRET environment variable");
+        throw new InternalServerErrorException("Server configuration error: Missing NEXTAUTH_SECRET");
       }
       
       const authHeader = request.headers.authorization;
@@ -24,7 +27,7 @@ export class JwtAuthGuard implements CanActivate {
         try {
           userFromBearer = jwt.verify(tokenValue, secret);
         } catch (err) {
-          console.error('Bearer token verify failed, falling back to cookie:', err);
+          this.logger.warn(`Bearer token verify failed, falling back to cookie: ${(err as Error).message}`);
         }
       }
 
@@ -43,7 +46,10 @@ export class JwtAuthGuard implements CanActivate {
       request.user = token; 
       return true;
     } catch (error) {
-      console.error('JwtAuthGuard catch error:', error);
+      if (error instanceof InternalServerErrorException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+      this.logger.error('JwtAuthGuard catch error', error instanceof Error ? error.stack : String(error));
       throw new UnauthorizedException('Lỗi xác thực Token NextAuth');
     }
   }

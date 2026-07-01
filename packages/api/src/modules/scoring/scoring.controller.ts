@@ -15,7 +15,7 @@ export class ScoringController {
 
   @Get('criteria')
   async getAllCriteria(@Query('semesterId') semesterId?: string) {
-    return this.scoringService.getAllCriteria(semesterId);
+    return await this.scoringService.getAllCriteria(semesterId);
   }
 
   @Get(':formId/scores')

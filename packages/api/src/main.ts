@@ -1,23 +1,14 @@
-import * as fs from 'fs';
+import * as dotenv from 'dotenv';
 import * as path from 'path';
+
 const envPath = path.resolve(__dirname, '../../../.env');
-if (fs.existsSync(envPath)) {
-  const envConfig = fs.readFileSync(envPath, 'utf8');
-  envConfig.split('\n').forEach(line => {
-    const match = line.match(/^([^=]+)=(.*)$/);
-    if (match) {
-      const key = match[1].trim();
-      let val = match[2].trim();
-      if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-      if (key !== 'PORT' && !process.env[key]) process.env[key] = val;
-    }
-  });
-}
+dotenv.config({ path: envPath });
 
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -31,6 +22,9 @@ async function bootstrap() {
     }),
   );
 
+  // Global Exception Filter
+  app.useGlobalFilters(new AllExceptionsFilter());
+
   // PHỤC HỒI TIỀN TỐ API Ở ĐÂY:
   // Lệnh này tự động nhét chữ '/api' lên trước tất cả các Controller
   app.setGlobalPrefix('api');
@@ -38,11 +32,10 @@ async function bootstrap() {
   // --- Security Middleware ---
   const helmet = require('helmet');
   const rateLimit = require('express-rate-limit').default || require('express-rate-limit');
-  const xss = require('xss-clean');
   const hpp = require('hpp');
 
   app.use(helmet());
-  app.use(xss());
+  // Removed xss-clean due to TypeError: Cannot set property query of #<IncomingMessage> which has only a getter
   app.use(hpp());
   
   // Rate limiting (100 requests per 15 mins)
