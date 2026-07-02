@@ -58,7 +58,17 @@ description: Core architectural rules, constraints, and past bugs for the Dokiwi
 ### 12. Semester ID Formatting
 - **Standard**: Instead of using random UUIDs for semesters, use deterministic identifiers to improve debugging, formatted as `sem_HKx_yyyy_yyyy` (e.g. `sem_HK2_2025_2026`).
 
+### 13. Environment Variable Architecture
+- **Rule**: Avoid scattered `.env` files across monorepo packages. Use a Single Source of Truth at the root.
+- **Implementation**: The root `.env` (`D:\duan\.env`) is injected into child workspaces using `dotenv-cli` via root `package.json` scripts (e.g., `"dev:api": "dotenv -e .env -- npm run start:dev --workspace=@student-score/api"`). This ensures NextJS, NestJS, and Prisma always read the exact same credentials, avoiding tricky 400 Bad Request out-of-sync bugs.
 
+### 14. The Ponytail Rule (Native over Boilerplate)
+- **Rule**: Deletion over addition. If the standard library can do it, do not install a new dependency.
+- **Implementation**: For example, when sending emails via the Maileroo API, we removed the 15-dependency `maileroo` SDK (which pulled in `axios` and `form-data`) and replaced it with a 15-line native `fetch` + `FormData` implementation in `auth.service.ts`. Always prefer standard Web APIs over heavy wrapper SDKs.
+
+### 15. Accidental Dependency Tampering (node_modules Find-and-Replace)
+- **Bug**: Global Find-and-Replace in the IDE can inadvertently alter code inside `node_modules` if the search scope is not correctly restricted. For example, replacing `can` with `npmcan` caused `@nestjs/core/guards/guards-consumer.js` to change `guard.canActivate` to `guard.npmcanActivate`, resulting in an unhandled `TypeError` that threw a generic `500 Internal server error` across all API endpoints guarded by `JwtAuthGuard`.
+- **Fix**: Reinstall `node_modules` or correct the specific typo in the dependency file. Always ensure your IDE excludes `node_modules` and `.next` when performing mass replacements.
 
 ## How to use this skill
 When debugging issues related to data integrity, F5 bugs, scoring totals, or cache issues in the Dokiwich project, consult the `examples/known_bugs.md` file in this directory to see how similar problems were resolved in the past.

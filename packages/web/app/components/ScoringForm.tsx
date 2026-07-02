@@ -70,7 +70,7 @@ function Toast({
   onDismiss: (id: number) => void;
 }) {
   useEffect(() => {
-    const timer = setTimeout(() => onDismiss(message.id), 3500);
+    const timer = setTimeout(() => onDismiss(message.id), 60000);
     return () => clearTimeout(timer);
   }, [message.id, onDismiss]);
 
