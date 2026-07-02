@@ -48,8 +48,8 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy node_modules from deps
-COPY --from=deps /app/node_modules ./node_modules
+# Copy node_modules from builder (which contains the generated Prisma Client)
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy the entire packages folder from builder to preserve symlinks and structure
 COPY --from=builder /app/packages ./packages
