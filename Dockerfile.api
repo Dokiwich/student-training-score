@@ -26,9 +26,6 @@ WORKDIR /app
 
 # Copy installed dependencies
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
-COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
 
 # Copy source code
 COPY . .
@@ -46,9 +43,6 @@ ENV NODE_ENV=production
 
 # Copy node_modules from deps to ensure we have production dependencies
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
-COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 
 # Copy Prisma schema and generated client
 COPY --from=builder /app/packages/database/prisma ./packages/database/prisma
