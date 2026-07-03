@@ -411,7 +411,7 @@ export function UsersTab() {
               </div>
               <div style={{ marginBottom: 16 }}>
                 <label className="form-label">MSSV</label>
-                <input type="text" className="form-input" value={editStudentId} onChange={e => setEditStudentId(e.target.value)} placeholder="Nhập tài khoản sinh viên" />
+                <input type="text" className="form-input" value={editStudentId} onChange={e => setEditStudentId(e.target.value)} placeholder="Nhập tài khoản gmail sinh viên" />
               </div>
               <div style={{ marginBottom: 16 }}>
                 <label className="form-label">Khoa</label>
@@ -465,7 +465,7 @@ export function UsersTab() {
               </div>
               <div style={{ marginBottom: 16 }}>
                 <label className="form-label">MSSV (Tùy chọn)</label>
-                <input type="text" className="form-input" value={newStudentId} onChange={e => setNewStudentId(e.target.value)} placeholder="Nhập tài khoản  sinh viên" />
+                <input type="text" className="form-input" value={newStudentId} onChange={e => setNewStudentId(e.target.value)} placeholder="Nhập tài khoản gmail sinh viên" />
               </div>
               <div style={{ marginBottom: 16 }}>
                 <label className="form-label">Khoa (Tùy chọn)</label>
