@@ -1,0 +1,59 @@
+# --- Base Stage ---
+FROM node:20-bookworm-slim AS base
+WORKDIR /app
+
+# Install openssl for Prisma
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+# --- Dependencies Stage ---
+FROM base AS deps
+WORKDIR /app
+
+# Copy root configurations
+COPY package.json package-lock.json ./
+# Copy workspace package.json files
+COPY packages/api/package.json ./packages/api/
+COPY packages/web/package.json ./packages/web/
+COPY packages/database/package.json ./packages/database/
+COPY packages/shared/package.json ./packages/shared/
+
+# Install ALL dependencies (including devDependencies) to build the workspace
+RUN npm ci
+
+# --- Builder Stage ---
+FROM base AS builder
+WORKDIR /app
+
+# Copy installed dependencies
+COPY --from=deps /app/node_modules ./node_modules
+# Copy source code
+COPY . .
+
+# Generate Prisma Client
+RUN npm run db:generate --workspace=@student-score/database
+
+# Build shared packages
+RUN npm run build --workspace=@student-score/database
+RUN npm run build --workspace=@student-score/shared
+
+# Build the API package
+RUN npm run build --workspace=@student-score/api
+
+# --- Runner Stage ---
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Copy node_modules from builder (which contains the generated Prisma Client)
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy the entire packages folder from builder to preserve symlinks and structure
+# This guarantees that require('@student-score/database') works perfectly
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/package.json ./package.json
+
+# Expose port (default 3001 or process.env.PORT)
+EXPOSE 3001
+
+# Start the API
+CMD ["node", "packages/api/dist/main.js"]

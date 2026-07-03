@@ -16,7 +16,7 @@ interface Category {
 }
 
 interface Criterion {
-  id: number; code: string; content: string; point: number; parent_id: number | null; category_id: string; is_active: number;
+  id: number; code: string; content: string; point: number; parent_id: number | null; category_id: string; is_active: number; sort_order: number;
 }
 
 type AdminTab = 'criteria' | 'departments' | 'classes' | 'users' | 'semesters' | 'dashboard';
@@ -99,7 +99,7 @@ function AdminPageInner() {
     } catch (e) { console.error(e); }
   }, []);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (isAdmin && activeTab === 'criteria') {
       fetchVersions();
       fetchSemesters();
@@ -196,7 +196,7 @@ function AdminPageInner() {
     if (!critForm.category_id) return alert('Vui lòng chọn mục lớn');
     try {
       if (editingCriterion) {
-        const res = await fetch('/api/admin/criteria', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingCriterion.id, code: critForm.code, content: critForm.content, point: critForm.point, category_id: critForm.category_id }) });
+        const res = await fetch('/api/admin/criteria', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingCriterion.id, code: critForm.code, content: critForm.content, point: critForm.point, category_id: critForm.category_id, parent_id: critForm.parent_id || null }) });
         const d = await res.json();
         if (res.ok) { alert(d.message); } else { alert(d.message); return; }
       } else {
@@ -212,7 +212,7 @@ function AdminPageInner() {
 
   // Delete
   const handleDeleteCriterion = async (id: number, code: string) => {
-    if (!confirm(`Xác nhận xóa tiêu chí "${code}"?`)) return;
+    if (!confirm(`Xác nhận xóa tiêu chí "${code}"?\n\nCẢNH BÁO: Hành động này sẽ XÓA VĨNH VIỄN cả tiêu chí này VÀ TOÀN BỘ các tiêu chí con thuộc về nó!`)) return;
     try {
       const res = await fetch('/api/admin/criteria', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
       const d = await res.json(); alert(d.message);
@@ -229,6 +229,33 @@ function AdminPageInner() {
     } catch { alert('Lỗi khi xóa'); }
   };
 
+  const toggleVersionStatus = async (e: React.MouseEvent, id: string, currentStatus: number) => {
+    e.stopPropagation();
+    const targetStatus = currentStatus === 1 ? 0 : 1;
+    const actionName = targetStatus === 1 ? 'kích hoạt' : 'hủy kích hoạt';
+    
+    if (!confirm(`Bạn có chắc chắn muốn ${actionName} phiên bản này?`)) return;
+
+    try {
+      const res = await fetch('/api/admin/criteria', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _type: 'version', id, is_active: targetStatus })
+      });
+      const data = await res.json();
+      
+      if (!res.ok) {
+        alert(data.message || `Lỗi khi ${actionName} phiên bản`);
+        return;
+      }
+      
+      fetchVersions();
+    } catch (err) {
+      console.error(err);
+      alert('Lỗi kết nối khi cập nhật trạng thái phiên bản');
+    }
+  };
+
   if (!session) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
       <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid #e5e7eb', borderTopColor: '#5e6ad2', animation: 'spin 0.7s linear infinite' }} />
@@ -242,9 +269,39 @@ function AdminPageInner() {
     </div>
   );
 
-  // Group criteria by category for preview
+  // Group criteria by category and sort them in a tree structure for preview
   const previewByCategory: Record<string, Criterion[]> = {};
-  previewCriteria.forEach((c) => { if (!previewByCategory[c.category_id]) previewByCategory[c.category_id] = []; previewByCategory[c.category_id].push(c); });
+  const groupedCat: Record<string, Criterion[]> = {};
+  previewCriteria.forEach((c) => {
+    if (!groupedCat[c.category_id]) groupedCat[c.category_id] = [];
+    groupedCat[c.category_id].push(c);
+  });
+
+  Object.keys(groupedCat).forEach(catId => {
+    const list = groupedCat[catId];
+    const childrenMap = new Map<number | null, Criterion[]>();
+    const ids = new Set(list.map(c => c.id));
+    
+    list.forEach(c => {
+      const pid = (!c.parent_id || !ids.has(c.parent_id)) ? null : c.parent_id;
+      if (!childrenMap.has(pid)) childrenMap.set(pid, []);
+      childrenMap.get(pid)!.push(c);
+    });
+    
+    childrenMap.forEach(childList => {
+      childList.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.code.localeCompare(b.code, undefined, { numeric: true }));
+    });
+    
+    const sortedFlat: Criterion[] = [];
+    const traverse = (pid: number | null) => {
+      (childrenMap.get(pid) || []).forEach(c => {
+        sortedFlat.push(c);
+        traverse(c.id);
+      });
+    };
+    traverse(null);
+    previewByCategory[catId] = sortedFlat;
+  });
 
   return (
     <DashboardLayout pageTitle="Quản trị Hệ thống" pageSubtitle="Quản lý cấu hình hệ thống đánh giá rèn luyện">
@@ -278,59 +335,128 @@ function AdminPageInner() {
                       setShowPreEditPopup(true);
                     }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                      Chỉnh sửa Tiêu chí
+                      Chỉnh sửa và Tạo
                     </button>
                   </div>
                 </div>
 
-                {/* Versions Grid */}
+                {/* Versions Grids - Split into Active and Inactive */}
                 {versions.length === 0 ? (
                   <div className="dashboard-card" style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: '0 auto 12px', opacity: 0.4 }}><path d="M9 12h6M12 9v6M3 12a9 9 0 1118 0 9 9 0 01-18 0z" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: '0 auto 12px', opacity: 0.4 }}><path d="M9 12h6M12 9v6M3 12a9 9 0 1118 0 9 9 0 01-18 0z" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     <p style={{ fontWeight: 600, fontSize: 15 }}>Chưa có phiên bản tiêu chí nào</p>
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
-                    {versions.map((v) => {
-                      const isActive = activeVersion?.id === v.id;
-                      return (
-                        <div
-                          key={v.id}
-                          onClick={() => openPreview(v)}
-                          style={{
-                            background: isActive ? 'linear-gradient(135deg, #fef2f2 0%, #fff1f2 100%)' : '#fff',
-                            border: isActive ? '2px solid #f87171' : '1px solid #e2e8f0',
-                            borderRadius: 16,
-                            padding: 20,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            position: 'relative',
-                            overflow: 'hidden',
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.08)'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
-                        >
-                          {isActive && (
-                            <div style={{ position: 'absolute', top: 10, right: 10, background: '#10b981', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>Active</div>
-                          )}
-                          <div style={{ fontSize: 22, fontWeight: 800, color: isActive ? '#dc2626' : '#334155', lineHeight: 1.2, marginBottom: 8 }}>
-                            {v.semesters?.code || 'Mặc định'}
-                          </div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>
-                            Phiên bản {v.version}
-                          </div>
-                          {v.semesters?.name && (
-                            <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                              {v.semesters.name}
-                            </div>
-                          )}
-                          <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8' }}>
-                            Click để chỉnh sửa →
-                          </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                    {/* Active Versions Section */}
+                    <div>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#16a34a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        Đang áp dụng (Active)
+                      </h3>
+                      {versions.filter(v => v.is_active === 1).length === 0 ? (
+                        <div style={{ padding: '20px', background: '#f8fafc', borderRadius: 12, color: '#64748b', fontSize: 14, textAlign: 'center', border: '1px dashed #cbd5e1' }}>
+                          Chưa có phiên bản nào đang áp dụng. Vui lòng kích hoạt một phiên bản bên dưới!
                         </div>
-                      );
-                    })}
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                          {versions.filter(v => v.is_active === 1).map((v) => (
+                            <div
+                              key={v.id}
+                              onClick={() => openPreview(v)}
+                              style={{
+                                background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                                border: '2px solid #22c55e',
+                                borderRadius: 16,
+                                padding: 20,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                position: 'relative',
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 25px rgba(34,197,94,0.15)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+                            >
+                              <div style={{ position: 'absolute', top: 12, right: 12 }}>
+                                <button
+                                  onClick={(e) => toggleVersionStatus(e, v.id, v.is_active)}
+                                  style={{ background: '#fff', color: '#ef4444', border: '1px solid #fca5a5', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                                >
+                                  Hủy kích hoạt
+                                </button>
+                              </div>
+                              <div style={{ fontSize: 20, fontWeight: 800, color: '#166534', lineHeight: 1.2, marginBottom: 8, paddingRight: 80 }}>
+                                {v.name || v.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
+                              </div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#15803d', marginBottom: 4 }}>
+                                {v.semester_id ? `Phiên bản ${v.version} — ${v.semesters?.code || ''}` : 'Bản mẫu'}
+                              </div>
+                              {v.semesters?.name && (
+                                <div style={{ fontSize: 12, color: '#16a34a', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                                  {v.semesters.name}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ height: 1, background: '#e2e8f0' }}></div>
+
+                    {/* Inactive Versions Section */}
+                    <div>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#64748b', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                        Chưa áp dụng / Bản nháp
+                      </h3>
+                      {versions.filter(v => v.is_active !== 1).length === 0 ? (
+                        <div style={{ padding: '20px', background: '#f8fafc', borderRadius: 12, color: '#94a3b8', fontSize: 14, textAlign: 'center', border: '1px dashed #e2e8f0' }}>
+                          Không có phiên bản nháp nào.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                          {versions.filter(v => v.is_active !== 1).map((v) => (
+                            <div
+                              key={v.id}
+                              onClick={() => openPreview(v)}
+                              style={{
+                                background: '#fff',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: 16,
+                                padding: 20,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                position: 'relative',
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.06)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+                            >
+                              <div style={{ position: 'absolute', top: 12, right: 12 }}>
+                                <button
+                                  onClick={(e) => toggleVersionStatus(e, v.id, v.is_active)}
+                                  style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                                >
+                                  Kích hoạt
+                                </button>
+                              </div>
+                              <div style={{ fontSize: 18, fontWeight: 700, color: '#334155', lineHeight: 1.2, marginBottom: 8, paddingRight: 80 }}>
+                                {v.name || v.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
+                              </div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>
+                                {v.semester_id ? `Phiên bản ${v.version} — ${v.semesters?.code || ''}` : 'Bản mẫu'}
+                              </div>
+                              {v.semesters?.name && (
+                                <div style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                                  {v.semesters.name}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -343,68 +469,60 @@ function AdminPageInner() {
       {showPreEditPopup && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-100 flex items-center justify-center p-4" onClick={() => setShowPreEditPopup(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Chỉnh sửa Tiêu chí</h3>
-            
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Quản lý Bộ tiêu chí</h3>
+
             <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
-              <button 
+              <button
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${preEditTab === 'edit' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
                 onClick={() => setPreEditTab('edit')}
               >Sửa bản có sẵn</button>
-              <button 
+              <button
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${preEditTab === 'create' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
                 onClick={() => setPreEditTab('create')}
-              >Tạo bản mới</button>
+              >Tạo bản mẫu mới</button>
             </div>
 
             {preEditTab === 'edit' ? (
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Chọn phiên bản để chỉnh sửa</label>
-                <select 
-                  value={selectedVersionToEdit} 
+                <label className="block text-sm font-medium text-gray-700 mb-2">Chọn bộ tiêu chí để chỉnh sửa</label>
+                <select
+                  value={selectedVersionToEdit}
                   onChange={e => setSelectedVersionToEdit(e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm"
                 >
-                  <option value="">-- Chọn phiên bản --</option>
+                  <option value="">-- Chọn bộ tiêu chí --</option>
                   {versions.map(v => (
-                    <option key={v.id} value={v.id}>{v.semesters?.code || 'Mặc định'} (Phiên bản {v.version})</option>
+                    <option key={v.id} value={v.id}>{v.name || v.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}</option>
                   ))}
                 </select>
               </div>
             ) : (
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Chọn học kỳ đích (Chưa có tiêu chí)</label>
-                  <select 
-                    value={newVersionSemester} 
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Tên bộ tiêu chí (Bắt buộc)</label>
+                  <input
+                    type="text"
+                    value={newVersionSemester} // Using this state variable for 'name' to minimize diff
                     onChange={e => setNewVersionSemester(e.target.value)}
+                    placeholder="VD: Bộ tiêu chí đánh giá rèn luyện năm 2024"
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-sm"
-                  >
-                    <option value="">-- Chọn học kỳ --</option>
-                    {semestersList.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.academic_year})</option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Dựa trên bộ tiêu chí</label>
-                  <select 
-                    value={newVersionSource} 
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Mô tả (Không bắt buộc)</label>
+                  <textarea
+                    value={newVersionSource} // Using this state variable for 'description'
                     onChange={e => setNewVersionSource(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-sm"
-                  >
-                    <option value="">-- Chọn bản mẫu --</option>
-                    <option value="BLANK" className="font-bold text-red-600">Trống (Làm từ đầu)</option>
-                    {versions.map(v => (
-                      <option key={v.id} value={v.id}>Bản sao của: {v.semesters?.code || 'Mặc định'} (V{v.version})</option>
-                    ))}
-                  </select>
+                    placeholder="Mô tả thêm về bộ tiêu chí này..."
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-sm resize-none h-20"
+                  />
                 </div>
               </div>
             )}
 
             <div className="flex justify-end gap-3 mt-4">
               <button onClick={() => setShowPreEditPopup(false)} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-sm">Hủy</button>
-              <button 
+              <button
                 onClick={async () => {
                   if (preEditTab === 'edit') {
                     if (!selectedVersionToEdit) return alert('Vui lòng chọn phiên bản!');
@@ -412,23 +530,23 @@ function AdminPageInner() {
                     if (v) openPreview(v);
                     setShowPreEditPopup(false);
                   } else {
-                    if (!newVersionSemester || !newVersionSource) return alert('Vui lòng điền đủ thông tin!');
+                    if (!newVersionSemester) return alert('Vui lòng nhập tên bộ tiêu chí!');
                     setIsApplying(true);
                     try {
-                      const res = await fetch('/api/admin/semesters/apply-criteria', {
+                      const res = await fetch('/api/admin/criteria-versions', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ targetSemesterId: newVersionSemester, sourceVersionId: newVersionSource })
+                        body: JSON.stringify({ name: newVersionSemester, description: newVersionSource })
                       });
                       const d = await res.json();
                       if (res.ok) {
                         alert(d.message);
                         setShowPreEditPopup(false);
+                        setNewVersionSemester('');
+                        setNewVersionSource('');
                         await fetchVersions();
-                        // open the newly created version
-                        const newVid = d.data?.versionId;
+                        const newVid = d.data?.id;
                         if (newVid) {
-                          const newV = await fetch(`/api/admin/criteria?versionId=${newVid}`).then(r => r.json());
-                          openPreview({ id: newVid, version: 'Mới', semesters: { name: 'Vừa tạo' } });
+                          openPreview({ id: newVid, name: newVersionSemester });
                         }
                       } else {
                         alert(d.message);
@@ -436,7 +554,7 @@ function AdminPageInner() {
                     } catch { alert('Lỗi kết nối'); }
                     finally { setIsApplying(false); }
                   }
-                }} 
+                }}
                 disabled={isApplying}
                 className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm flex items-center gap-2"
               >
@@ -455,8 +573,7 @@ function AdminPageInner() {
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', background: 'linear-gradient(135deg, #fef2f2, #fff)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
                 <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', margin: 0 }}>
-                  Chỉnh sửa: {previewVersion.semesters?.code || 'Mặc định'}
-                  {previewVersion.semesters?.name && <span style={{ fontSize: 13, fontWeight: 500, color: '#64748b', marginLeft: 8 }}>— Phiên bản {previewVersion.version}</span>}
+                  Chỉnh sửa: {previewVersion.name || previewVersion.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
                 </h3>
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -582,7 +699,7 @@ function AdminPageInner() {
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Phiên bản *</label>
                 <select
                   value={critForm.criteria_version_id}
-                  onChange={() => {}}
+                  onChange={() => { }}
                   style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, outline: 'none' }}
                 >
                   <option value="">-- Chọn phiên bản --</option>

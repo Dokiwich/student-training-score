@@ -28,7 +28,7 @@ export default function AdvisorPage() {
   return (
     <DashboardLayout
       pageTitle="Cố vấn học tập"
-      pageSubtitle="Quản lý và xét duyệt điểm rèn luyện HK1 — 2026"
+      pageSubtitle="Quản lý và xét duyệt điểm rèn luyện"
     >
       <Suspense fallback={<p style={{ padding: 20 }}>Đang tải...</p>}>
         <AdvisorContent />

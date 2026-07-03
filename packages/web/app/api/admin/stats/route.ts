@@ -7,6 +7,8 @@ function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!isAdmin(session)) {
@@ -30,7 +32,13 @@ export async function GET(req: Request) {
   }
 
   const enrollments = await prisma.semester_enrollments.findMany({
-    where: { semester_id: semester.id },
+    where: { 
+      semester_id: semester.id,
+      users: {
+        is_active: 1,
+        student_id: { not: null },
+      },
+    },
     include: {
       scoring_sheets: true,
       classes: {

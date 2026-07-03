@@ -42,8 +42,11 @@ interface Criterion {
   content: string;
   point: number;
   score_type: string;
+  score_options?: number[] | null;
   parent_id: number | null;
+  sort_order: number;
   description?: string;
+  require_evidence?: number;
 }
 
 interface ScoreDetail {
@@ -67,7 +70,7 @@ function Toast({
   onDismiss: (id: number) => void;
 }) {
   useEffect(() => {
-    const timer = setTimeout(() => onDismiss(message.id), 3500);
+    const timer = setTimeout(() => onDismiss(message.id), 60000);
     return () => clearTimeout(timer);
   }, [message.id, onDismiss]);
 
@@ -127,6 +130,12 @@ export function ScoringForm({
   const [expandedTabs, setExpandedTabs] = useState<Set<string>>(new Set(['1']));
 
   const [currentRole] = useState<Role>(forcedRole || 'STUDENT');
+
+  const criteriaIds = useMemo(() => new Set(criteria.map((c) => c.id)), [criteria]);
+  const isRootItem = useCallback((c: Criterion) => {
+    return !c.parent_id || !criteriaIds.has(c.parent_id);
+  }, [criteriaIds]);
+
   const [formStatus, setFormStatus] = useState<string>('DRAFT');
   const [actualFormId, setActualFormId] = useState<string>(formId);
   const [isDirty, setIsDirty] = useState(false);
@@ -134,6 +143,7 @@ export function ScoringForm({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [rejectionInfo, setRejectionInfo] = useState<string | null>(null);
+  const [rejectReasonInput, setRejectReasonInput] = useState('');
 
   const visibleRoles: Role[] =
     currentRole === 'STUDENT' && viewMode === 'edit' ? ['STUDENT'] : ALL_ROLES;
@@ -187,8 +197,10 @@ export function ScoringForm({
 
       if (criteriaRes.ok) {
         const data = await criteriaRes.json();
-        const rootItems = (data.data || [])
-          .filter((c: Criterion) => !c.parent_id)
+        const fetchedCriteria = data.data || [];
+        const fetchedIds = new Set(fetchedCriteria.map((c: Criterion) => c.id));
+        const rootItems = fetchedCriteria
+          .filter((c: Criterion) => !c.parent_id || !fetchedIds.has(c.parent_id))
           .map((c: Criterion) => c.id);
         setCriteria(data.data || []);
         setExpandedIds(new Set(rootItems));
@@ -209,6 +221,15 @@ export function ScoringForm({
         const aMap: Record<number, number> = {};
         const evidenceMap: Record<number, string> = {};
 
+        let hasClassEntry = false;
+        let hasAdvisorEntry = false;
+        
+        scoresData.data.forEach((s: ScoreDetail) => {
+          const entries = s.score_entries || [];
+          if (entries.some(e => e.scorer_role === 'CLASS_COMMITTEE')) hasClassEntry = true;
+          if (entries.some(e => e.scorer_role === 'ADVISOR')) hasAdvisorEntry = true;
+        });
+
         scoresData.data.forEach((s: ScoreDetail) => {
           // Chỉ đọc từ score_entries
           const entries = s.score_entries || [];
@@ -223,11 +244,11 @@ export function ScoringForm({
           if (studentVal !== null && studentVal !== undefined) sMap[s.criteria_id] = Number(studentVal);
 
           if (classVal !== null && classVal !== undefined) cMap[s.criteria_id] = Number(classVal);
-          else if (studentVal !== null && studentVal !== undefined) cMap[s.criteria_id] = Number(studentVal);
+          else if (!hasClassEntry && studentVal !== null && studentVal !== undefined) cMap[s.criteria_id] = Number(studentVal);
 
           if (advisorVal !== null && advisorVal !== undefined) aMap[s.criteria_id] = Number(advisorVal);
-          else if (classVal !== null && classVal !== undefined) aMap[s.criteria_id] = Number(classVal);
-          else if (studentVal !== null && studentVal !== undefined) aMap[s.criteria_id] = Number(studentVal);
+          else if (!hasAdvisorEntry && classVal !== null && classVal !== undefined) aMap[s.criteria_id] = Number(classVal);
+          else if (!hasAdvisorEntry && studentVal !== null && studentVal !== undefined) aMap[s.criteria_id] = Number(studentVal);
 
           // ✅ Extract proof_url (minh chứng) từ API response
           if (s.proof_url) {
@@ -248,6 +269,11 @@ export function ScoringForm({
         // ✅ Cập nhật actualFormId
         if (scoresData.formId) {
           setActualFormId(scoresData.formId);
+        }
+        if (scoresData.rejectionReason) {
+          setRejectionInfo(scoresData.rejectionReason);
+        } else {
+          setRejectionInfo(null);
         }
       }
     } finally {
@@ -277,15 +303,14 @@ export function ScoringForm({
   const sortedCriteria = useMemo(() => {
     if (!criteria.length) return [];
     const childrenMap = new Map<number | null, Criterion[]>();
-    const criteriaIds = new Set(criteria.map((c) => c.id));
     criteria.forEach((c) => {
-      const isRoot = !c.parent_id || !criteriaIds.has(c.parent_id);
+      const isRoot = isRootItem(c);
       const pid = isRoot ? null : c.parent_id;
       if (!childrenMap.has(pid)) childrenMap.set(pid, []);
       childrenMap.get(pid)!.push(c);
     });
     childrenMap.forEach((list) =>
-      list.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })),
+      list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.code.localeCompare(b.code, undefined, { numeric: true })),
     );
     const result: Criterion[] = [];
     const traverse = (parentId: number | null) => {
@@ -338,18 +363,18 @@ export function ScoringForm({
     (itemId: number): boolean => {
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return false;
-      if (!item.parent_id) return true;
-      if (!expandedIds.has(item.parent_id)) return false;
-      return isVisible(item.parent_id);
+      if (isRootItem(item)) return true;
+      if (!expandedIds.has(item.parent_id!)) return false;
+      return isVisible(item.parent_id!);
     },
-    [criteria, expandedIds],
+    [criteria, expandedIds, isRootItem],
   );
 
   const depthMap = useMemo(() => {
     const map = new Map<number, number>();
     const getDepth = (item: Criterion): number => {
       if (map.has(item.id)) return map.get(item.id)!;
-      if (!item.parent_id) {
+      if (isRootItem(item)) {
         map.set(item.id, 0);
         return 0;
       }
@@ -360,16 +385,16 @@ export function ScoringForm({
     };
     criteria.forEach((c) => getDepth(c));
     return map;
-  }, [criteria]);
+  }, [criteria, isRootItem]);
 
   const getRoot = useCallback(
     (itemId: number): Criterion | null => {
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return null;
-      if (!item.parent_id) return item;
-      return getRoot(item.parent_id);
+      if (isRootItem(item)) return item;
+      return getRoot(item.parent_id!);
     },
-    [criteria],
+    [criteria, isRootItem],
   );
 
   const calculateScoreFromMap = useCallback(
@@ -386,7 +411,7 @@ export function ScoringForm({
           0,
         );
         if (item.point > 0) return Math.min(sum, item.point);
-        if (item.point < 0) return Math.min(0, sum);
+        if (item.point < 0) return Math.min(0, Math.max(sum, item.point));
         return sum;
       }
       return scoreMap[itemId] ?? 0;
@@ -408,7 +433,7 @@ export function ScoringForm({
           0,
         );
         if (item.point > 0) return Math.min(sum, item.point);
-        if (item.point < 0) return Math.min(0, sum);
+        if (item.point < 0) return Math.min(0, Math.max(sum, item.point));
         return sum;
       }
       return parseFloat(inputValues[itemId]) || 0;
@@ -420,18 +445,18 @@ export function ScoringForm({
     const rawTotal = TAB_GROUPS.reduce((acc, tab) => {
       const tabRoots = criteria.filter(
         (c) =>
-          (!c.parent_id) &&
+          isRootItem(c) &&
           (c.code === tab.id ||
             c.code.startsWith(tab.id + '.') ||
             c.code.startsWith('TC_0' + tab.id) ||
             c.code.startsWith('TC_' + tab.id)),
       );
       const tabSum = tabRoots.reduce((sum, root) => sum + calculateAutoScore(root.id), 0);
-      const safeTabSum = Math.min(tabSum, tab.max);
+      const safeTabSum = Math.min(Math.max(0, tabSum), tab.max);
       return acc + safeTabSum;
     }, 0);
-    return Math.max(0, rawTotal);
-  }, [criteria, calculateAutoScore]);
+    return Math.min(100, Math.max(0, rawTotal));
+  }, [criteria, calculateAutoScore, isRootItem]);
 
   const handleInputChange = (criteriaId: number, value: string) => {
     let finalValue = value;
@@ -443,13 +468,13 @@ export function ScoringForm({
         const isDeduction = item.score_type === 'DEDUCTION' || item.point < 0;
         if (isQuantityBased) {
           const multiplier = QUANTITY_MULTIPLIERS[item.code];
-          const inputQuantity = num / multiplier;
+          const absMultiplier = Math.abs(multiplier);
+          const inputQuantity = Math.abs(num) / absMultiplier;
           const maxQuantity = isDeduction ? 40 : 30;
           
           if (inputQuantity > maxQuantity) {
-            finalValue = (maxQuantity * multiplier).toString();
-          } else if (inputQuantity < 0) {
-            finalValue = '0';
+            const clampedScore = maxQuantity * absMultiplier;
+            finalValue = (multiplier < 0 ? -clampedScore : clampedScore).toString();
           }
         } else {
           // Non-quantity: clamp theo point bình thường
@@ -461,10 +486,36 @@ export function ScoringForm({
             else if (item.point > 0 && num > item.point) finalValue = item.point.toString();
           }
         }
+      } else {
+        // NaN guard: reset to empty
+        finalValue = '';
       }
+    } else {
+      finalValue = value;
     }
-    setInputValues((prev) => ({ ...prev, [criteriaId]: finalValue }));
-    setIsDirty(true);
+
+    setInputValues((prev) => {
+      const next = { ...prev };
+      
+      // Mutual Exclusivity Logic for OPTIONS/RADIO criteria
+      if (item && item.parent_id) {
+        const parent = criteria.find(c => c.id === item.parent_id);
+        if (parent && (parent.score_type === 'OPTIONS' || parent.score_type === 'RADIO')) {
+          if (finalValue && parseFloat(finalValue) > 0) {
+            const siblings = criteria.filter(c => c.parent_id === parent.id && c.id !== item.id);
+            siblings.forEach(sib => {
+              if (next[sib.id] !== undefined || prev[sib.id]) {
+                next[sib.id] = '';
+              }
+            });
+          }
+        }
+      }
+
+      next[criteriaId] = finalValue;
+      setIsDirty(true);
+      return next;
+    });
   };
 
   const handleSaveDraft = async () => {
@@ -479,7 +530,7 @@ export function ScoringForm({
         'Authorization': `Bearer ${customJwt}`,
       };
 
-      const results: { id: number; score: number }[] = [];
+      const results: { id: number; score: number | null }[] = [];
       let failCount = 0;
       let lastError = '';
 
@@ -489,7 +540,26 @@ export function ScoringForm({
           score = item.point;
         } else {
           const raw = inputValues[item.id] ?? '';
-          score = raw === '' ? 0 : parseFloat(raw);
+          if (raw === '') {
+            const oldSavedMap = getSavedMap(currentRole);
+            if (oldSavedMap[item.id] !== undefined) {
+               try {
+                 const r = await fetch(`${API_BASE}/scoring/${actualFormId}/delete-criteria`, {
+                   method: 'POST', credentials: 'include', headers: headersInit,
+                   body: JSON.stringify({ criteriaId: item.id, role: currentRole, studentId, semesterId }),
+                 });
+                 if (r.ok) return { id: item.id, score: null };
+                 const errData = await r.json().catch(() => null);
+                 lastError = errData?.message || `HTTP ${r.status}`;
+                 failCount++;
+               } catch (e) {
+                 console.error('Lỗi xóa điểm:', e);
+                 failCount++;
+               }
+            }
+            return null;
+          }
+          score = parseFloat(raw);
         }
         if (isNaN(score)) return null;
 
@@ -498,9 +568,10 @@ export function ScoringForm({
         const isQuantityBased = !!QUANTITY_MULTIPLIERS[item.code];
         if (isQuantityBased) {
           const multiplier = QUANTITY_MULTIPLIERS[item.code];
-          const inputQuantity = score / multiplier;
+          const absMultiplier = Math.abs(multiplier);
+          const inputQuantity = Math.abs(score) / absMultiplier;
           const maxQuantity = isDeduction ? 40 : 30;
-          if (inputQuantity > maxQuantity || inputQuantity < 0) return null;
+          if (inputQuantity > maxQuantity) return null;
         } else {
           if (isDeduction) {
             if (score < item.point || score > 0) return null;
@@ -540,7 +611,13 @@ export function ScoringForm({
       }
 
       const newScores: Record<number, number> = { ...getSavedMap(currentRole) };
-      results.forEach((r) => { newScores[r.id] = r.score; });
+      results.forEach((r) => {
+        if (r.score === null) {
+          delete newScores[r.id];
+        } else {
+          newScores[r.id] = r.score;
+        }
+      });
       if (currentRole === 'STUDENT') setSavedStudentScores(newScores);
       else if (currentRole === 'CLASS_COMMITTEE') setSavedClassScores(newScores);
       else setSavedAdvisorScores(newScores);
@@ -647,6 +724,10 @@ export function ScoringForm({
   const handleSubmitForm = () => setShowConfirm(true);
 
   const doDeleteForm = async () => {
+    if (!rejectReasonInput.trim()) {
+      addToast('error', 'Vui lòng nhập lý do trả lại phiếu!');
+      return;
+    }
     setShowDeleteConfirm(false);
     setIsDeleting(true);
     try {
@@ -661,17 +742,17 @@ export function ScoringForm({
         method: 'POST',
         credentials: 'include',
         headers: headers,
-        body: JSON.stringify({ studentId, role: currentRole, semesterId }),
+        body: JSON.stringify({ studentId, role: currentRole, semesterId, reason: rejectReasonInput }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        addToast('success', data.message || 'Đã xóa phiếu điểm thành công!');
-        // ✅ Tải lại trang/dữ liệu để tạo phiếu DRAFT mới
+        addToast('success', data.message || 'Đã trả lại phiếu điểm thành công!');
+        setRejectReasonInput('');
         await fetchData();
       } else {
         const errorData = await response.json().catch(() => null);
-        addToast('error', errorData?.message || 'Lỗi khi xóa phiếu');
+        addToast('error', errorData?.message || 'Lỗi khi trả lại phiếu');
       }
     } catch {
       addToast('error', 'Không thể kết nối máy chủ');
@@ -681,15 +762,15 @@ export function ScoringForm({
   };
 
   const effectiveCanEdit = canEdit && (() => {
-    if (currentRole === 'STUDENT') return formStatus === 'DRAFT';
+    if (currentRole === 'STUDENT') return ['NOT_CREATED', 'DRAFT', 'CLASS_REJECTED', 'ADVISOR_REJECTED'].includes(formStatus);
     if (currentRole === 'CLASS_COMMITTEE') return ['STUDENT_SUBMITTED', 'CLASS_REVIEWING'].includes(formStatus);
     if (currentRole === 'ADVISOR') return ['CLASS_REVIEWED', 'ADVISOR_REVIEWING'].includes(formStatus);
     return false;
   })();
 
   const canDeleteForm =
-    (currentRole === 'CLASS_COMMITTEE' && !['NOT_CREATED', 'DRAFT'].includes(formStatus)) ||
-    (currentRole === 'ADVISOR' && !['NOT_CREATED', 'DRAFT'].includes(formStatus)) ||
+    (currentRole === 'CLASS_COMMITTEE' && ['STUDENT_SUBMITTED', 'CLASS_REVIEWING'].includes(formStatus)) ||
+    (currentRole === 'ADVISOR' && ['STUDENT_SUBMITTED', 'CLASS_REVIEWING', 'CLASS_REVIEWED', 'ADVISOR_REVIEWING', 'ADVISOR_APPROVED'].includes(formStatus)) ||
     (allowResetAnytime && !['NOT_CREATED'].includes(formStatus));
 
   if (isLoading) {
@@ -723,10 +804,10 @@ export function ScoringForm({
   ];
 
   const currentStepIndex = steps.findIndex(s => {
-    if (formStatus === 'DRAFT' || formStatus === 'NOT_CREATED') return s.id === 'DRAFT';
+    if (formStatus === 'DRAFT' || formStatus === 'NOT_CREATED' || formStatus === 'CLASS_REJECTED' || formStatus === 'ADVISOR_REJECTED' || formStatus === 'REJECTED') return s.id === 'DRAFT';
     if (formStatus === 'STUDENT_SUBMITTED' || formStatus === 'CLASS_REVIEWING') return s.id === 'STUDENT_SUBMITTED';
     if (formStatus === 'CLASS_REVIEWED' || formStatus === 'ADVISOR_REVIEWING') return s.id === 'CLASS_REVIEWED';
-    if (formStatus === 'APPROVED' || formStatus === 'ADVISOR_APPROVED' || formStatus === 'SCHOOL_APPROVED' || formStatus === 'FINALIZED') return s.id === 'APPROVED';
+    if (formStatus === 'APPROVED' || formStatus === 'ADVISOR_APPROVED' || formStatus === 'SCHOOL_REVIEWING' || formStatus === 'SCHOOL_APPROVED' || formStatus === 'FINALIZED') return s.id === 'APPROVED';
     return false;
   });
 
@@ -781,9 +862,22 @@ export function ScoringForm({
                 )}
                 {canDeleteForm && (
                   <button onClick={() => setShowDeleteConfirm(true)} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ml-2">
-                    {isDeleting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> Đang xóa...</> : <>Xóa Phiếu <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></>}
+                    {isDeleting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-white animate-spin"></span> Đang xử lý...</> : <>Trả Lại <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg></>}
                   </button>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Rejection Banner */}
+          {rejectionInfo && ['CLASS_REJECTED', 'ADVISOR_REJECTED', 'REJECTED'].includes(formStatus) && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-2xl mb-4 shadow-sm flex gap-3">
+              <svg className="w-5 h-5 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <div>
+                <h4 className="text-sm font-semibold text-red-900 mb-1">Phiếu đã bị trả lại!</h4>
+                <p className="text-sm text-red-700 leading-relaxed">
+                  Lý do: <span className="font-semibold">{rejectionInfo}</span>. Vui lòng chỉnh sửa lại các mục bị yêu cầu và nộp lại phiếu.
+                </p>
               </div>
             </div>
           )}
@@ -899,16 +993,20 @@ export function ScoringForm({
 
                               const multiplier = QUANTITY_MULTIPLIERS[item.code];
                               const isQuantityBased = !!multiplier;
-                              const displayVal = isQuantityBased && val ? String(Number(val) / multiplier) : val;
+                              const absMultiplier = isQuantityBased ? Math.abs(multiplier) : 1;
+                              const displayVal = isQuantityBased && val ? String(Math.abs(Number(val)) / absMultiplier) : val;
                               const displayMinVal = isQuantityBased ? 0 : minVal;
-                              const displayMaxVal = isQuantityBased ? (multiplier < 0 ? minVal / multiplier : maxVal / multiplier) : maxVal;
+                              const displayMaxVal = isQuantityBased ? (isDeduction ? 40 : 30) : maxVal;
                               const onChangeFn = isQuantityBased
                                 ? (e: React.ChangeEvent<HTMLInputElement>) => {
-                                  if (e.target.value === '') {
+                                  if (e.target.value === '' || e.target.value === '-') {
                                     handleInputChange(item.id, '');
                                   } else {
                                     const num = Number(e.target.value);
-                                    handleInputChange(item.id, String(num * multiplier));
+                                    if (isNaN(num)) return;
+                                    const qty = Math.abs(Math.round(num));
+                                    const scoreVal = multiplier < 0 ? -(qty * absMultiplier) : qty * absMultiplier;
+                                    handleInputChange(item.id, String(scoreVal));
                                   }
                                 }
                                 : (e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(item.id, e.target.value);
@@ -949,19 +1047,23 @@ export function ScoringForm({
                                   <td className="px-2 py-1.5 text-sm text-stone-500">{item.code}</td>
                                   <td className="px-2 py-1.5">
                                     <div style={{ paddingLeft: `${depth * 1.2}rem` }}>
-                                      <span className="text-sm text-red-900 leading-snug">{item.content}</span>
+                                      <span className="text-sm text-red-900 leading-snug">
+                                        {item.content}
+                                        {item.require_evidence === 1 && <span className="text-red-500 font-bold ml-1" title="Bắt buộc có minh chứng">*</span>}
+                                      </span>
                                       {item.description && <span className="text-xs text-stone-400 mt-0.5 block leading-relaxed">{item.description}</span>}
+                                      {item.require_evidence === 1 && <span className="text-[10px] text-red-500 font-medium block mt-1 uppercase tracking-wide">⚠️ Bắt buộc đính kèm minh chứng</span>}
                                     </div>
                                   </td>
                                   <td className="px-2 py-1.5 text-center text-sm text-stone-500">
-                                    {isQuantityBased ? (multiplier > 0 ? `+${multiplier}` : multiplier) : item.point}
+                                    {isQuantityBased ? (multiplier > 0 ? `+${multiplier}` : `${multiplier}`) : item.point}
                                   </td>
 
                                   {/* Số lượng Column */}
                                   <td className="px-2 py-1.5 text-center">
                                     {!isFixed && isQuantityBased ? (
                                       <div className="relative inline-block">
-                                        <input type="number" min={0} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-16 h-9 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
+                                        <input type="number" min={0} max={displayMaxVal} step={1} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-16 h-9 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300" />
                                         {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
                                       </div>
                                     ) : (
@@ -976,6 +1078,26 @@ export function ScoringForm({
                                     ) : currentRole === 'STUDENT' ? (
                                       isQuantityBased ? (
                                         <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
+                                      ) : item.score_type === 'OPTIONS' ? (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <div className="relative inline-block">
+                                            <select
+                                              value={val}
+                                              disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
+                                              onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                              className="w-16 h-9 px-1 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300 appearance-none bg-white cursor-pointer"
+                                              style={{ textAlignLast: 'center' }}
+                                            >
+                                              <option value="" disabled>-</option>
+                                              {Array.isArray(item.score_options) 
+                                                ? item.score_options.map((opt, idx) => (
+                                                    <option key={idx} value={String(opt)}>{opt}</option>
+                                                  ))
+                                                : <option value={item.point}>{item.point}</option>}
+                                            </select>
+                                            {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                          </div>
+                                        </div>
                                       ) : (
                                         <div className="flex flex-col items-center gap-1">
                                           <div className="relative inline-block">
@@ -997,6 +1119,26 @@ export function ScoringForm({
                                       ) : currentRole === 'CLASS_COMMITTEE' ? (
                                         isQuantityBased ? (
                                           <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
+                                        ) : item.score_type === 'OPTIONS' ? (
+                                          <div className="flex flex-col items-center gap-1">
+                                            <div className="relative inline-block">
+                                              <select
+                                                value={val}
+                                                disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
+                                                onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                                className="w-16 h-9 px-1 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300 appearance-none bg-white cursor-pointer"
+                                                style={{ textAlignLast: 'center' }}
+                                              >
+                                                <option value="" disabled>-</option>
+                                                {Array.isArray(item.score_options) 
+                                                  ? item.score_options.map((opt, idx) => (
+                                                      <option key={idx} value={String(opt)}>{opt}</option>
+                                                    ))
+                                                  : <option value={item.point}>{item.point}</option>}
+                                              </select>
+                                              {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                            </div>
+                                          </div>
                                         ) : (
                                           <div className="flex flex-col items-center gap-1">
                                             <div className="relative inline-block">
@@ -1019,6 +1161,26 @@ export function ScoringForm({
                                       ) : (
                                         isQuantityBased ? (
                                           <span className="text-sm font-semibold text-red-700">{val ? `${val}` : '0'}</span>
+                                        ) : item.score_type === 'OPTIONS' ? (
+                                          <div className="flex flex-col items-center gap-1">
+                                            <div className="relative inline-block">
+                                              <select
+                                                value={val}
+                                                disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
+                                                onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                                className="w-16 h-9 px-1 text-center text-sm font-medium text-red-900 border border-stone-300 rounded-lg focus:border-red-900 focus:ring-0 outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-100 hover:border-red-300 appearance-none bg-white cursor-pointer"
+                                                style={{ textAlignLast: 'center' }}
+                                              >
+                                                <option value="" disabled>-</option>
+                                                {Array.isArray(item.score_options) 
+                                                  ? item.score_options.map((opt, idx) => (
+                                                      <option key={idx} value={String(opt)}>{opt}</option>
+                                                    ))
+                                                  : <option value={item.point}>{item.point}</option>}
+                                              </select>
+                                              {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
+                                            </div>
+                                          </div>
                                         ) : (
                                           <div className="flex flex-col items-center gap-1">
                                             <div className="relative inline-block">
@@ -1088,20 +1250,30 @@ export function ScoringForm({
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal (Now Reject Form) */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl p-7 max-w-sm w-full shadow-2xl">
             <div className="w-14 h-14 bg-red-100 text-red-900 rounded-xl flex items-center justify-center mb-5 mx-auto">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
             </div>
-            <h3 className="text-lg font-semibold text-center text-slate-800 mb-2">Xóa Phiếu Rèn Luyện?</h3>
-            <p className="text-center text-slate-500 text-sm mb-6 leading-relaxed">
-              Bạn có chắc chắn muốn xóa toàn bộ phiếu này? Hệ thống sẽ tạo lại một phiếu mới (DRAFT) cho sinh viên tự chấm lại. Hành động này không thể hoàn tác.
+            <h3 className="text-lg font-semibold text-center text-slate-800 mb-2">Trả lại Phiếu Rèn Luyện?</h3>
+            <p className="text-center text-slate-500 text-sm mb-4 leading-relaxed">
+              Vui lòng nhập lý do trả lại để sinh viên biết và chỉnh sửa lại phiếu.
             </p>
+            <div className="mb-6">
+              <textarea
+                autoFocus
+                rows={3}
+                className="w-full text-sm border border-stone-300 rounded-xl p-3 focus:border-red-900 focus:ring-0 outline-none transition-all resize-none"
+                placeholder="Nhập lý do trả lại..."
+                value={rejectReasonInput}
+                onChange={(e) => setRejectReasonInput(e.target.value)}
+              />
+            </div>
             <div className="flex gap-3">
               <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 px-4 bg-slate-50 hover:bg-slate-100 text-slate-600 font-semibold text-sm rounded-xl transition-colors">Hủy bỏ</button>
-              <button onClick={doDeleteForm} className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm shadow-red-200">Xóa Phiếu</button>
+              <button onClick={doDeleteForm} className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm shadow-red-200">Trả lại Phiếu</button>
             </div>
           </div>
         </div>

@@ -1,35 +1,58 @@
-import * as fs from 'fs';
-import * as path from 'path';
-const envPath = path.resolve(__dirname, '../../../.env');
-if (fs.existsSync(envPath)) {
-  const envConfig = fs.readFileSync(envPath, 'utf8');
-  envConfig.split('\n').forEach(line => {
-    const match = line.match(/^([^=]+)=(.*)$/);
-    if (match) {
-      const key = match[1].trim();
-      let val = match[2].trim();
-      if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-      if (key !== 'PORT' && !process.env[key]) process.env[key] = val;
-    }
-  });
-}
-
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Input Validation
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  // Global Exception Filter
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // PHỤC HỒI TIỀN TỐ API Ở ĐÂY:
   // Lệnh này tự động nhét chữ '/api' lên trước tất cả các Controller
   app.setGlobalPrefix('api');
 
+  // Fix rate limit warnings on reverse proxies (Railway)
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
+  // --- Security Middleware ---
+  const helmet = require('helmet');
+  const rateLimit = require('express-rate-limit').default || require('express-rate-limit');
+  const hpp = require('hpp');
+
+  app.use(helmet());
+  // Removed xss-clean due to TypeError: Cannot set property query of #<IncomingMessage> which has only a getter
+  app.use(hpp());
+  
+  // Rate limiting (100 requests per 15 mins)
+  app.use('/api/', rateLimit({
+    windowMs: 15 * 60 * 1000, 
+    max: 100, 
+    message: 'Quá nhiều yêu cầu từ IP này, vui lòng thử lại sau 15 phút.'
+  }));
+  // ---------------------------
+
   const allowedPrefixes = ['http://localhost', 'http://127.0.0.1', 'http://192.168.'];
+  if (process.env.NEXTAUTH_URL) {
+    // Cho phép Origin từ NEXTAUTH_URL
+    allowedPrefixes.push(process.env.NEXTAUTH_URL);
+  }
 
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin || allowedPrefixes.some(prefix => origin.startsWith(prefix))) {
+      // Cho phép các request nội bộ hoặc từ domain cấu hình và domain của Railway
+      if (!origin || allowedPrefixes.some(prefix => origin.startsWith(prefix)) || origin.includes('railway.app')) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -40,7 +63,7 @@ async function bootstrap() {
   });
 
   const port = process.env.PORT || 3001;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   console.log(`🚀 Máy chủ Backend đang chạy tại: http://localhost:${port}`);
 }
 bootstrap();

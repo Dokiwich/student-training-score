@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import './login.css';
 
 export default function LoginPage() {
@@ -206,7 +207,11 @@ export default function LoginPage() {
           </button>
           
           <div className="login-forgot-password">
-            <p>Quên Mật Khẩu? &rarr; Liên Hệ Phòng CNTT</p>
+            <Link href="/forgot-password" style={{ textDecoration: 'none' }}>
+              <p style={{ cursor: 'pointer', transition: 'color 0.2s' }} onMouseOver={(e) => (e.currentTarget.style.color = '#b91c1c')} onMouseOut={(e) => (e.currentTarget.style.color = '#6b7280')}>
+                Quên Mật Khẩu? &rarr; Khôi phục ngay
+              </p>
+            </Link>
           </div>
         </form>
 

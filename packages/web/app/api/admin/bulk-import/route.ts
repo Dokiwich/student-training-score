@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
+import { logAdminAction } from '../../../../lib/audit';
 
 function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
+  const actorId = (session as any)?.user?.id || 'SYSTEM';
 
   try {
     const { rows } = await req.json() as { rows: ImportRow[] };
@@ -103,6 +105,9 @@ export async function POST(req: Request) {
         errorCount++;
         continue;
       }
+      
+      // CLASS_COMMITTEE in UI maps to MONITOR in DB
+      const dbRoleCode = normalRole === 'CLASS_COMMITTEE' ? 'MONITOR' : normalRole;
 
       const emailLower = row.email.trim().toLowerCase();
       if (existingEmails.has(emailLower) || batchEmails.has(emailLower)) {
@@ -155,34 +160,51 @@ export async function POST(req: Request) {
         const passwordHash = await bcrypt.hash(row.password.trim(), 10);
         const userId = randomUUID();
 
-        await prisma.users.create({
-          data: {
-            id: userId,
-            full_name: row.full_name.trim(),
-            email: row.email.trim(),
-            password_hash: passwordHash,
-            student_id: studentId,
-            role: normalRole as any,
-            department_id: departmentId,
-            is_active: 1,
-          },
-        });
-
-        // Create semester enrollment if class + active semester
-        if (classId && activeSemester) {
-          await prisma.semester_enrollments.create({
+        await prisma.$transaction(async (tx) => {
+          await tx.users.create({
             data: {
-              id: randomUUID(),
-              user_id: userId,
-              semester_id: activeSemester.id,
-              class_id: classId,
+              id: userId,
+              full_name: row.full_name.trim(),
+              email: row.email.trim(),
+              password_hash: passwordHash,
+              student_id: studentId,
+              user_roles: {
+                create: {
+                  id: randomUUID(),
+                  roles: { connect: { code: dbRoleCode } },
+                  is_active: 1
+                }
+              },
+              department_id: departmentId,
               is_active: 1,
             },
           });
-        }
+
+          // Create semester enrollment if class + active semester
+          if (classId && activeSemester) {
+            await tx.semester_enrollments.create({
+              data: {
+                id: randomUUID(),
+                user_id: userId,
+                semester_id: activeSemester.id,
+                class_id: classId,
+                is_active: 1,
+              },
+            });
+          }
+        });
 
         batchEmails.add(emailLower);
         if (studentId) batchStudentIds.add(studentId.toLowerCase());
+
+        await logAdminAction(
+          actorId,
+          'CREATE_USER_BULK',
+          'users',
+          userId,
+          null,
+          { email: row.email, student_id: studentId, role: normalRole, department_id: departmentId, class_id: classId }
+        );
 
         results.push({ rowIndex: idx, success: true, message: 'Thành công', full_name: row.full_name, student_id: studentId || undefined });
         successCount++;

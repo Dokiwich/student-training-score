@@ -57,11 +57,18 @@ function DonutChart({ data, total }: { data: Record<string, number>; total: numb
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <svg width="200" height="200" viewBox="0 0 200 200">
         <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#f1f5f9" strokeWidth={strokeWidth} />
-        {arcs.map((arc, i) => (
-          <path key={i} d={arc.path} fill="none" stroke={arc.color} strokeWidth={strokeWidth} strokeLinecap="round" style={{ transition: 'all 0.5s ease' }}>
-            <title>{arc.label}: {arc.value} ({(arc.pct * 100).toFixed(1)}%)</title>
-          </path>
-        ))}
+        {arcs.length === 1 ? (
+          /* Single segment = full circle (SVG arc can't draw 360°) */
+          <circle cx={cx} cy={cy} r={radius} fill="none" stroke={arcs[0].color} strokeWidth={strokeWidth} style={{ transition: 'all 0.5s ease' }}>
+            <title>{arcs[0].label}: {arcs[0].value} ({(arcs[0].pct * 100).toFixed(1)}%)</title>
+          </circle>
+        ) : (
+          arcs.map((arc, i) => (
+            <path key={i} d={arc.path} fill="none" stroke={arc.color} strokeWidth={strokeWidth} strokeLinecap="round" style={{ transition: 'all 0.5s ease' }}>
+              <title>{arc.label}: {arc.value} ({(arc.pct * 100).toFixed(1)}%)</title>
+            </path>
+          ))
+        )}
         <text x={cx} y={cy - 6} textAnchor="middle" fontSize="28" fontWeight="800" fill="#0f172a">{total}</text>
         <text x={cx} y={cy + 14} textAnchor="middle" fontSize="11" fill="#94a3b8" fontWeight="500">Sinh viên</text>
       </svg>

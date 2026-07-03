@@ -6,8 +6,9 @@ import { useEffect } from "react";
 
 const ROLE_REDIRECTS: Record<string, string> = {
   STUDENT: '/student',
-  CLASS_COMMITTEE: '/student',
+  CLASS_COMMITTEE: '/class-president',
   ADVISOR: '/advisor',
+  DEPARTMENT: '/department',
   SCHOOL_ADMIN: '/admin',
 };
 

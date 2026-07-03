@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 const ROLE_REDIRECTS: Record<string, string> = {
   STUDENT: '/student',
   CLASS_COMMITTEE: '/class-president',
-  CLASS_PRESIDENT: '/class-president',
   ADVISOR: '/advisor',
   DEPARTMENT: '/department',
   SCHOOL_ADMIN: '/admin',
@@ -30,7 +29,7 @@ export default withAuth(
       return NextResponse.redirect(new URL('/', req.url));
     }
     // Class president routes
-    if (path.startsWith('/class-president') && role !== 'CLASS_COMMITTEE' && role !== 'CLASS_PRESIDENT') {
+    if (path.startsWith('/class-president') && role !== 'CLASS_COMMITTEE') {
       return NextResponse.redirect(new URL('/', req.url));
     }
     // Advisor routes
@@ -40,7 +39,7 @@ export default withAuth(
     }
     // Student routes — allow CLASS_COMMITTEE and ADVISOR to access /student
     // for self-scoring ("Phiếu của bản thân")
-    if (path.startsWith('/student') && role !== 'STUDENT' && role !== 'CLASS_COMMITTEE') {
+    if (path.startsWith('/student') && role !== 'STUDENT' && role !== 'CLASS_COMMITTEE' && role !== 'ADVISOR') {
       const destination = ROLE_REDIRECTS[role] || '/student';
       return NextResponse.redirect(new URL(destination, req.url));
     }
@@ -50,7 +49,7 @@ export default withAuth(
       signIn: '/login',
     },
     callbacks: {
-      authorized: ({ token }) => !!token,
+      authorized: ({ token }) => !!token?.role,
     },
   }
 );

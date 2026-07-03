@@ -3,10 +3,13 @@ import { prisma } from '@student-score/database';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
+import { logAdminAction } from '../../../../lib/audit';
 
 function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
 }
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -74,6 +77,10 @@ export async function POST(req: Request) {
         is_active: 1,
       },
     });
+
+    const actorId = (session?.user as any)?.id;
+    await logAdminAction(actorId, 'CREATE_CLASS', 'classes', newClass.id, null, newClass);
+
     return NextResponse.json({ message: 'Tạo lớp thành công', data: newClass });
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002')
@@ -92,6 +99,9 @@ export async function PUT(req: Request) {
     const { id, code, name, department_id, academic_year, is_active } = await req.json();
     if (!id) return NextResponse.json({ message: 'ID lớp là bắt buộc' }, { status: 400 });
 
+    const oldCls = await prisma.classes.findUnique({ where: { id } });
+    if (!oldCls) return NextResponse.json({ message: 'Không tìm thấy lớp' }, { status: 404 });
+
     const updateData: Record<string, unknown> = {};
     if (code !== undefined) updateData.code = code;
     if (name !== undefined) updateData.name = name;
@@ -103,6 +113,10 @@ export async function PUT(req: Request) {
       where: { id },
       data: updateData,
     });
+
+    const actorId = (session?.user as any)?.id;
+    await logAdminAction(actorId, 'UPDATE_CLASS', 'classes', id, oldCls, cls);
+
     return NextResponse.json({ message: 'Cập nhật lớp thành công', data: cls });
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002')
@@ -139,12 +153,20 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // Delete class roles first
-    await prisma.class_roles.deleteMany({ where: { class_id: id } });
+    const oldCls = await prisma.classes.findUnique({ where: { id } });
+    if (!oldCls) return NextResponse.json({ message: 'Không tìm thấy lớp' }, { status: 404 });
 
-    await prisma.classes.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      // Delete class roles first
+      await tx.user_roles.deleteMany({ where: { entity_id: id } });
+      await tx.classes.delete({ where: { id } });
+    });
+
+    const actorId = (session?.user as any)?.id;
+    await logAdminAction(actorId, 'DELETE_CLASS', 'classes', id, oldCls, null);
+
     return NextResponse.json({ message: 'Xóa lớp thành công' });
-  } catch {
+  } catch (e) {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }
 }

@@ -6,6 +6,14 @@ import { Check, CheckCircle2, Circle, Copy, Loader2 } from 'lucide-react';
 interface Semester { id: string; code: string; name: string; academic_year: string; semester_number: number; start_date: string; end_date: string; student_deadline: string; class_committee_deadline: string; advisor_deadline: string; school_deadline: string; status: string; is_active: number; criteriaCount?: number; categoryCount?: number; hasVersion?: boolean; }
 
 const STATUS_LABELS: Record<string, string> = { UPCOMING: 'Sắp tới', STUDENT_SCORING: 'SV chấm', CLASS_REVIEWING: 'Lớp xét', ADVISOR_REVIEWING: 'CVHT xét', SCHOOL_REVIEWING: 'Trường xét', FINALIZED: 'Đã chốt', LOCKED: 'Khóa' };
+const DATE_FIELDS = [
+  { key: 'start_date', label: 'Ngày bắt đầu' },
+  { key: 'student_deadline', label: 'Hạn SV nộp' },
+  { key: 'class_committee_deadline', label: 'Hạn BCS xét' },
+  { key: 'advisor_deadline', label: 'Hạn CVHT duyệt' },
+  { key: 'school_deadline', label: 'Hạn trường chốt' },
+  { key: 'end_date', label: 'Ngày kết thúc' }
+] as const;
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   UPCOMING: { bg: '#fef2f2', color: '#ef4444' }, // red-50, red-500
   STUDENT_SCORING: { bg: '#fffbeb', color: '#f59e0b' }, // amber-50, amber-500
@@ -76,8 +84,19 @@ export function SemestersTab() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.code || !form.name) return alert('Nhập đầy đủ thông tin');
+    
+    for (let i = 0; i < DATE_FIELDS.length - 1; i++) {
+      const d1 = form[DATE_FIELDS[i].key as keyof typeof form];
+      const d2 = form[DATE_FIELDS[i+1].key as keyof typeof form];
+      if (d1 && d2 && d1 > d2) {
+        return alert(`Lỗi: ${DATE_FIELDS[i].label} không được sau ${DATE_FIELDS[i+1].label}!`);
+      }
+    }
+    
     const method = editing ? 'PUT' : 'POST';
-    const body = editing ? { id: editing.id, ...form, semester_number: parseInt(form.semester_number) } : { ...form, semester_number: parseInt(form.semester_number) };
+    // status bị loại bỏ vì được auto-compute theo thời gian thực
+    const { status: _status, ...formWithoutStatus } = form;
+    const body = editing ? { id: editing.id, ...formWithoutStatus, semester_number: parseInt(form.semester_number) } : { ...formWithoutStatus, semester_number: parseInt(form.semester_number) };
     try {
       const r = await fetch('/api/admin/semesters', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
@@ -174,19 +193,14 @@ export function SemestersTab() {
             <div><label className="form-label">Tên</label><input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="form-input" placeholder="Học kỳ 1" /></div>
             <div><label className="form-label">Năm học</label><input type="text" value={form.academic_year} onChange={e => setForm({ ...form, academic_year: e.target.value })} className="form-input" /></div>
             <div><label className="form-label">Học kỳ số</label><input type="number" min="1" max="3" value={form.semester_number} onChange={e => setForm({ ...form, semester_number: e.target.value })} className="form-input" /></div>
-            {editing && <div><label className="form-label">Trạng thái</label>
-              <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className="form-select">
-                {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
-            <div><label className="form-label">Ngày bắt đầu</label><input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="form-input" /></div>
-            <div><label className="form-label">Ngày kết thúc</label><input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className="form-input" /></div>
-            <div><label className="form-label">Hạn SV nộp</label><input type="date" value={form.student_deadline} onChange={e => setForm({ ...form, student_deadline: e.target.value })} className="form-input" /></div>
-            <div><label className="form-label">Hạn BCS xét</label><input type="date" value={form.class_committee_deadline} onChange={e => setForm({ ...form, class_committee_deadline: e.target.value })} className="form-input" /></div>
-            <div><label className="form-label">Hạn CVHT duyệt</label><input type="date" value={form.advisor_deadline} onChange={e => setForm({ ...form, advisor_deadline: e.target.value })} className="form-input" /></div>
-            <div><label className="form-label">Hạn trường chốt</label><input type="date" value={form.school_deadline} onChange={e => setForm({ ...form, school_deadline: e.target.value })} className="form-input" /></div>
+            {DATE_FIELDS.map(f => (
+              <div key={f.key}>
+                <label className="form-label">{f.label}</label>
+                <input type="date" value={form[f.key as keyof typeof form] as string} onChange={e => setForm({ ...form, [f.key]: e.target.value })} className="form-input" />
+              </div>
+            ))}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="submit" className="btn-primary">{editing ? 'Lưu' : 'Thêm'}</button>
@@ -229,7 +243,7 @@ export function SemestersTab() {
                 <option value="">-- Chọn phiên bản --</option>
                 {versions.map(v => (
                   <option key={v.id} value={v.id}>
-                    Phiên bản {v.version} - Học kỳ {v.semesters?.name || 'Mặc định'} ({v.semesters?.academic_year || ''})
+                    {v.name || `Phiên bản ${v.version} - HK ${v.semesters?.code || 'N/A'}`}
                   </option>
                 ))}
               </select>

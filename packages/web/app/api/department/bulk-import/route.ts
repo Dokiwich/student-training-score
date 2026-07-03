@@ -4,15 +4,16 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
+import { logAdminAction } from '../../../../lib/audit';
 
 async function getDepartmentUser(session: any) {
   if (!session?.user) return null;
-  const userId = (session.user as any).id;
+  const userId = (session?.user as any)?.id;
   const user = await prisma.users.findFirst({
     where: { id: userId },
-    select: { id: true, role: true, department_id: true },
+    include: { user_roles: { include: { roles: true } } },
   });
-  if (!user || user.role !== 'DEPARTMENT' || !user.department_id) return null;
+  if (!user || !user.user_roles?.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1) || !user.department_id) return null;
   return user;
 }
 
@@ -139,31 +140,44 @@ export async function POST(req: Request) {
         const passwordHash = await bcrypt.hash(row.password.trim(), 10);
         const userId = randomUUID();
 
-        await prisma.users.create({
-          data: {
-            id: userId,
-            full_name: row.full_name.trim(),
-            email: row.email.trim(),
-            password_hash: passwordHash,
-            student_id: studentId,
-            role: (row.role || 'STUDENT') as any,
-            department_id: deptUser.department_id,
-            is_active: 1,
-          },
-        });
-
-        // Create semester enrollment
-        if (activeSemester) {
-          await prisma.semester_enrollments.create({
+        const newUser = await prisma.$transaction(async (tx) => {
+          const user = await tx.users.create({
             data: {
-              id: randomUUID(),
-              user_id: userId,
-              semester_id: activeSemester.id,
-              class_id: resolvedClassId,
+              id: userId,
+              full_name: row.full_name.trim(),
+              email: row.email.trim(),
+              password_hash: passwordHash,
+              student_id: studentId,
+              user_roles: {
+                create: {
+                  id: randomUUID(),
+                  roles: { connect: { code: row.role === 'CLASS_COMMITTEE' ? 'MONITOR' : (row.role || 'STUDENT') } },
+                  is_active: 1
+                }
+              },
+              department_id: deptUser.department_id,
               is_active: 1,
             },
           });
-        }
+
+          // Create semester enrollment
+          if (activeSemester) {
+            await tx.semester_enrollments.create({
+              data: {
+                id: randomUUID(),
+                user_id: userId,
+                semester_id: activeSemester.id,
+                class_id: resolvedClassId!,
+                is_active: 1,
+              },
+            });
+          }
+          
+          return user;
+        });
+
+        const actorId = deptUser.id;
+        await logAdminAction(actorId, 'CREATE_USER_ENROLLMENT_BULK', 'users', userId, null, { ...newUser, password_hash: '***' });
 
         batchEmails.add(emailLower);
         if (studentId) batchStudentIds.add(studentId.toLowerCase());

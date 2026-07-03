@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Tính trạng thái học kỳ theo thời gian thực dựa trên ngày hiện tại và các deadline.
  *
@@ -76,11 +78,6 @@ export async function GET() {
     // ── Auto-compute trạng thái theo thời gian thực ──
     const computed = computeStatus(semester);
     if (computed !== semester.status) {
-      // Cập nhật DB để giữ nhất quán
-      await prisma.semesters.update({
-        where: { id: semester.id },
-        data: { status: computed as any },
-      });
       semester = { ...semester, status: computed as any };
     }
 
@@ -90,7 +87,7 @@ export async function GET() {
         'Pragma': 'no-cache',
       },
     });
-  } catch {
+  } catch (e) {
     return NextResponse.json({ data: null }, { status: 500 });
   }
 }

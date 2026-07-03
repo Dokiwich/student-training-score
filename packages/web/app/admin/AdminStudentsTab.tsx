@@ -19,6 +19,50 @@ export function AdminStudentsTab({ classId, classNameStr, onBack }: AdminStudent
   
   const [selectedStudentForEdit, setSelectedStudentForEdit] = useState<any | null>(null);
 
+  // Demote States
+  const [showDemoteModal, setShowDemoteModal] = useState(false);
+  const [demoteClass, setDemoteClass] = useState('AVERAGE');
+  const [demoteReason, setDemoteReason] = useState('');
+  const [demoting, setDemoting] = useState(false);
+
+  const handleDemote = async () => {
+    if (!demoteReason.trim()) {
+      alert('Vui lòng nhập lý do hạ bậc (VD: Cảnh cáo học vụ).');
+      return;
+    }
+    if (!selectedStudentForEdit?.sheetId) {
+      alert('Sinh viên chưa có phiếu điểm để hạ bậc.');
+      return;
+    }
+
+    if (!confirm('Bạn có chắc chắn muốn hạ bậc xếp loại của sinh viên này? Phiếu sẽ bị khóa (Đã chốt).')) return;
+
+    setDemoting(true);
+    try {
+      const res = await fetch(`/api/admin/scoring-sheets/${selectedStudentForEdit.sheetId}/demote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newClassification: demoteClass,
+          reason: demoteReason
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      
+      alert('Hạ bậc thành công!');
+      setShowDemoteModal(false);
+      setDemoteReason('');
+      fetchStudents(); // reload data
+      // Update local selected student
+      setSelectedStudentForEdit((prev: any) => ({ ...prev, classification: demoteClass, status: 'FINALIZED' }));
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setDemoting(false);
+    }
+  };
+
   useEffect(() => {
     fetch('/api/admin/semesters')
       .then(r => r.json())
@@ -131,14 +175,24 @@ export function AdminStudentsTab({ classId, classNameStr, onBack }: AdminStudent
                   Sinh viên: <strong>{selectedStudentForEdit.name}</strong> ({selectedStudentForEdit.studentCode}) — Lớp: <strong>{selectedStudentForEdit.className}</strong>
                 </div>
               </div>
-              <button 
-                onClick={() => setSelectedStudentForEdit(null)}
-                style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: '#e2e8f0', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                onMouseOver={e => e.currentTarget.style.background = '#cbd5e1'}
-                onMouseOut={e => e.currentTarget.style.background = '#e2e8f0'}
-              >
-                ✕
-              </button>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                {selectedStudentForEdit.sheetId && (
+                  <button 
+                    onClick={() => setShowDemoteModal(true)}
+                    style={{ background: '#ef4444', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, border: 'none', cursor: 'pointer' }}
+                  >
+                    Hạ Bậc Xếp Loại
+                  </button>
+                )}
+                <button 
+                  onClick={() => setSelectedStudentForEdit(null)}
+                  style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: '#e2e8f0', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                  onMouseOver={e => e.currentTarget.style.background = '#cbd5e1'}
+                  onMouseOut={e => e.currentTarget.style.background = '#e2e8f0'}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
             
             <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
@@ -153,6 +207,46 @@ export function AdminStudentsTab({ classId, classNameStr, onBack }: AdminStudent
               />
             </div>
           </div>
+
+          {/* DEMOTE MODAL */}
+          {showDemoteModal && (
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <div style={{ backgroundColor: '#fff', borderRadius: 12, width: 400, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#dc2626' }}>Hạ bậc xếp loại</h3>
+                <p style={{ margin: 0, fontSize: 14, color: '#64748b' }}>
+                  Lưu ý: Sau khi hạ bậc, phiếu sẽ chuyển sang trạng thái <strong>Đã chốt</strong> để ngăn hệ thống tự động tính lại điểm.
+                </p>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Xếp loại mới</label>
+                  <select className="form-select" value={demoteClass} onChange={e => setDemoteClass(e.target.value)} style={{ width: '100%' }}>
+                    <option value="EXCELLENT">Xuất sắc</option>
+                    <option value="VERY_GOOD">Giỏi</option>
+                    <option value="GOOD">Khá</option>
+                    <option value="AVERAGE">Trung bình</option>
+                    <option value="WEAK">Yếu</option>
+                    <option value="POOR">Kém</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Lý do Kỷ luật/Hạ bậc</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="VD: Cảnh cáo học vụ kỳ 1..." 
+                    style={{ width: '100%' }}
+                    value={demoteReason}
+                    onChange={e => setDemoteReason(e.target.value)}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 12, marginTop: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setShowDemoteModal(false)} className="btn-secondary">Hủy</button>
+                  <button onClick={handleDemote} disabled={demoting} className="btn-primary" style={{ background: '#dc2626' }}>
+                    {demoting ? 'Đang lưu...' : 'Xác nhận Hạ bậc'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -4,10 +4,13 @@ import { prisma } from '@student-score/database';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
+import { logAdminAction } from '../../../../lib/audit';
 
 function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
 }
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -59,6 +62,10 @@ export async function POST(req: Request) {
         is_active: 1,
       },
     });
+
+    const actorId = (session?.user as any)?.id;
+    await logAdminAction(actorId, 'CREATE_DEPARTMENT', 'departments', newDept.id, null, newDept);
+
     return NextResponse.json({ message: 'Tạo khoa thành công', data: newDept });
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002')
@@ -87,6 +94,9 @@ export async function PUT(req: Request) {
       }
     }
 
+    const oldDept = await prisma.departments.findUnique({ where: { id } });
+    if (!oldDept) return NextResponse.json({ message: 'Không tìm thấy khoa' }, { status: 404 });
+
     const updateData: Record<string, unknown> = {};
     if (code !== undefined) updateData.code = code;
     if (name !== undefined) updateData.name = name;
@@ -96,6 +106,10 @@ export async function PUT(req: Request) {
       where: { id },
       data: updateData,
     });
+
+    const actorId = (session?.user as any)?.id;
+    await logAdminAction(actorId, 'UPDATE_DEPARTMENT', 'departments', id, oldDept, dept);
+
     return NextResponse.json({ message: 'Cập nhật khoa thành công', data: dept });
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002')
@@ -125,9 +139,16 @@ export async function DELETE(req: Request) {
       );
     }
 
+    const oldDept = await prisma.departments.findUnique({ where: { id } });
+    if (!oldDept) return NextResponse.json({ message: 'Không tìm thấy khoa' }, { status: 404 });
+
     await prisma.departments.delete({ where: { id } });
+
+    const actorId = (session?.user as any)?.id;
+    await logAdminAction(actorId, 'DELETE_DEPARTMENT', 'departments', id, oldDept, null);
+
     return NextResponse.json({ message: 'Xóa khoa thành công' });
-  } catch {
+  } catch (e) {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }
 }
