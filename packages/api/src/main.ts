@@ -23,6 +23,9 @@ async function bootstrap() {
   // Lệnh này tự động nhét chữ '/api' lên trước tất cả các Controller
   app.setGlobalPrefix('api');
 
+  // Fix rate limit warnings on reverse proxies (Railway)
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   // --- Security Middleware ---
   const helmet = require('helmet');
   const rateLimit = require('express-rate-limit').default || require('express-rate-limit');
@@ -41,10 +44,15 @@ async function bootstrap() {
   // ---------------------------
 
   const allowedPrefixes = ['http://localhost', 'http://127.0.0.1', 'http://192.168.'];
+  if (process.env.NEXTAUTH_URL) {
+    // Cho phép Origin từ NEXTAUTH_URL
+    allowedPrefixes.push(process.env.NEXTAUTH_URL);
+  }
 
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin || allowedPrefixes.some(prefix => origin.startsWith(prefix))) {
+      // Cho phép các request nội bộ hoặc từ domain cấu hình và domain của Railway
+      if (!origin || allowedPrefixes.some(prefix => origin.startsWith(prefix)) || origin.includes('railway.app')) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
