@@ -105,10 +105,14 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { full_name, email, password, student_id, class_id } = await req.json();
+    const { full_name, email, password, student_id, class_id, role = 'STUDENT' } = await req.json();
 
     if (!full_name || !email || !password || !class_id) {
       return NextResponse.json({ message: 'Vui lòng nhập đầy đủ: Họ tên, Email, Mật khẩu, Lớp' }, { status: 400 });
+    }
+
+    if (['DEPARTMENT', 'SCHOOL_ADMIN'].includes(role)) {
+      return NextResponse.json({ message: 'Bạn không có quyền phân vai trò này' }, { status: 403 });
     }
 
     // Verify class belongs to department
@@ -154,7 +158,8 @@ export async function POST(req: Request) {
           user_roles: {
             create: {
               id: randomUUID(),
-              roles: { connect: { code: 'STUDENT' } },
+              roles: { connect: { code: role } },
+              entity_id: ['CLASS_COMMITTEE', 'ADVISOR'].includes(role) ? class_id : null,
               is_active: 1
             }
           },
@@ -234,6 +239,84 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ message: 'Đã xóa sinh viên khỏi lớp' });
   } catch (err: any) {
     console.error('Dept delete enrollment error:', err);
+    return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
+  }
+}
+
+/**
+ * PUT /api/department/users
+ * Update user details and role (limited to STUDENT, CLASS_COMMITTEE, ADVISOR)
+ */
+export async function PUT(req: Request) {
+  const session = await getServerSession(authOptions);
+  const deptUser = await getDepartmentUser(session);
+  if (!deptUser) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
+  }
+
+  try {
+    const { id, full_name, email, student_id, class_id, role } = await req.json();
+
+    if (!id || !full_name || !email || !class_id) {
+      return NextResponse.json({ message: 'Thiếu thông tin bắt buộc' }, { status: 400 });
+    }
+
+    if (role && ['DEPARTMENT', 'SCHOOL_ADMIN'].includes(role)) {
+      return NextResponse.json({ message: 'Bạn không có quyền phân vai trò này' }, { status: 403 });
+    }
+
+    // Verify class belongs to department
+    const cls = await prisma.classes.findFirst({
+      where: { id: class_id, department_id: deptUser.department_id! },
+    });
+    if (!cls) {
+      return NextResponse.json({ message: 'Lớp không thuộc khoa của bạn' }, { status: 403 });
+    }
+
+    if (student_id) {
+      const existingSid = await prisma.users.findUnique({ where: { student_id } });
+      if (existingSid && existingSid.id !== id) {
+        return NextResponse.json({ message: 'MSSV đã tồn tại' }, { status: 400 });
+      }
+    }
+
+    const oldData = await prisma.users.findUnique({ where: { id } });
+
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      // If role changed, update user_roles
+      if (role) {
+        await tx.user_roles.deleteMany({ where: { user_id: id } });
+        const targetRole = await tx.roles.findUnique({ where: { code: role } });
+        if (targetRole) {
+          await tx.user_roles.create({
+            data: { 
+              id: randomUUID(), 
+              user_id: id, 
+              role_id: targetRole.id, 
+              entity_id: ['CLASS_COMMITTEE', 'ADVISOR'].includes(role) ? class_id : null,
+              is_active: 1 
+            }
+          });
+        }
+      }
+
+      const user = await tx.users.update({
+        where: { id },
+        data: {
+          full_name,
+          email,
+          student_id: student_id || null,
+        },
+      });
+      return user;
+    });
+
+    const actorId = deptUser.id;
+    await logAdminAction(actorId, 'UPDATE_USER_DEPT', 'users', id, oldData ? { ...oldData, password_hash: '***' } : null, { ...updatedUser, password_hash: '***' });
+
+    return NextResponse.json({ message: 'Cập nhật sinh viên thành công' });
+  } catch (err: any) {
+    console.error('Dept update user error:', err);
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }
 }
