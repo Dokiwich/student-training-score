@@ -221,6 +221,15 @@ export function ScoringForm({
         const aMap: Record<number, number> = {};
         const evidenceMap: Record<number, string> = {};
 
+        let hasClassEntry = false;
+        let hasAdvisorEntry = false;
+        
+        scoresData.data.forEach((s: ScoreDetail) => {
+          const entries = s.score_entries || [];
+          if (entries.some(e => e.scorer_role === 'CLASS_COMMITTEE')) hasClassEntry = true;
+          if (entries.some(e => e.scorer_role === 'ADVISOR')) hasAdvisorEntry = true;
+        });
+
         scoresData.data.forEach((s: ScoreDetail) => {
           // Chỉ đọc từ score_entries
           const entries = s.score_entries || [];
@@ -235,11 +244,11 @@ export function ScoringForm({
           if (studentVal !== null && studentVal !== undefined) sMap[s.criteria_id] = Number(studentVal);
 
           if (classVal !== null && classVal !== undefined) cMap[s.criteria_id] = Number(classVal);
-          else if (studentVal !== null && studentVal !== undefined) cMap[s.criteria_id] = Number(studentVal);
+          else if (!hasClassEntry && studentVal !== null && studentVal !== undefined) cMap[s.criteria_id] = Number(studentVal);
 
           if (advisorVal !== null && advisorVal !== undefined) aMap[s.criteria_id] = Number(advisorVal);
-          else if (classVal !== null && classVal !== undefined) aMap[s.criteria_id] = Number(classVal);
-          else if (studentVal !== null && studentVal !== undefined) aMap[s.criteria_id] = Number(studentVal);
+          else if (!hasAdvisorEntry && classVal !== null && classVal !== undefined) aMap[s.criteria_id] = Number(classVal);
+          else if (!hasAdvisorEntry && studentVal !== null && studentVal !== undefined) aMap[s.criteria_id] = Number(studentVal);
 
           // ✅ Extract proof_url (minh chứng) từ API response
           if (s.proof_url) {
