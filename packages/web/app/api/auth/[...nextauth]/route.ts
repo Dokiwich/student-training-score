@@ -20,18 +20,16 @@ export const authOptions: AuthOptions = {
           return null;
         }
         
-        // Try finding by student_id first, then by email
-        let user = await prisma.users.findFirst({
-          where: { student_id: credentials.username },
+        // Find by student_id OR email in a single query to reduce DB roundtrips
+        const user = await prisma.users.findFirst({
+          where: {
+            OR: [
+              { student_id: credentials.username },
+              { email: credentials.username }
+            ]
+          },
           include: { user_roles: { include: { roles: true } } }
         });
-        
-        if (!user) {
-          user = await prisma.users.findFirst({
-            where: { email: credentials.username },
-            include: { user_roles: { include: { roles: true } } }
-          });
-        }
         
         if (!user) {
           return null;
