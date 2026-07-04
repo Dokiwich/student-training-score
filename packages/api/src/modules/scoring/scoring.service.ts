@@ -1415,9 +1415,13 @@ export class ScoringService {
       const cEntry = entries.find((e: any) => e.scorer_role === 'CLASS_COMMITTEE');
       const aEntry = entries.find((e: any) => e.scorer_role === 'ADVISOR');
 
-      if (sEntry !== undefined) studentScoreMap.set(d.criteria_id, Number(sEntry.score));
-      if (cEntry !== undefined) classScoreMap.set(d.criteria_id, Number(cEntry.score));
-      if (aEntry !== undefined) advisorScoreMap.set(d.criteria_id, Number(aEntry.score));
+      const sScore = sEntry !== undefined ? Number(sEntry.score) : 0;
+      const cScore = cEntry !== undefined ? Number(cEntry.score) : sScore;
+      const aScore = aEntry !== undefined ? Number(aEntry.score) : cScore;
+
+      studentScoreMap.set(d.criteria_id, sScore);
+      classScoreMap.set(d.criteria_id, cScore);
+      advisorScoreMap.set(d.criteria_id, aScore);
     }
 
     // Lấy toàn bộ cây tiêu chí đang active thuộc các danh mục trên để áp dụng Khóa Điểm Theo Nhóm (Sub-limits)
