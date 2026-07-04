@@ -81,7 +81,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [isResetting, setIsResetting] = useState(false);
+
   const [resetKey, setResetKey] = useState(0);
 
   // Drawer state
@@ -146,35 +146,6 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
     } catch { /* silent */ }
   }, [session]);
 
-  const handleResetSheet = async (studentId: string, studentName: string, formId: string | null) => {
-    if (!formId) { alert('Sinh viên chưa có phiếu điểm để xóa.'); return; }
-    if (!window.confirm(`CẢNH BÁO: Hành động này sẽ XÓA HOÀN TOÀN phiếu điểm của "${studentName}" và tạo phiếu mới trắng. Tiếp tục?`)) return;
-    setIsResetting(true);
-    try {
-      const customJwt = (session as any)?.customJwt;
-      if (!customJwt) { alert('Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.'); return; }
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${customJwt}`,
-      };
-      const res = await fetch(`${API_BASE}/scoring/${formId}/reject`, {
-        method: 'POST', credentials: 'include', headers,
-        body: JSON.stringify({ studentId }),
-      });
-      if (res.ok) {
-        alert('Đã xóa phiếu thành công! Phiếu mới sẽ được tự động tạo.');
-        await refetchStudents();
-        setResetKey(prev => prev + 1);
-      } else {
-        const err = await res.json().catch(() => null);
-        alert(err?.message || 'Lỗi khi xóa phiếu');
-      }
-    } catch {
-      alert('Không thể kết nối máy chủ');
-    } finally {
-      setIsResetting(false);
-    }
-  };
 
   const handleCloseDrawer = useCallback(() => {
     setClosingDrawer(true);
@@ -389,25 +360,7 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: 'var(--bg-page)' }}>
-              {role === 'ADVISOR' && (
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={() => handleResetSheet(selectedStudent.id, selectedStudent.name, selectedStudent.formId)}
-                    disabled={isResetting}
-                    style={{
-                      padding: '6px 14px', fontSize: 12, fontWeight: 600,
-                      borderRadius: 8, border: '1px solid #ef4444', color: '#ef4444', background: '#fff',
-                      cursor: isResetting ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
-                      display: 'flex', gap: 6, alignItems: 'center'
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.background = '#fef2f2'}
-                    onMouseOut={(e) => e.currentTarget.style.background = '#fff'}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    {isResetting ? 'Đang xóa...' : 'Xóa & Reset phiếu'}
-                  </button>
-                </div>
-              )}
+
               <ScoringForm key={`${selectedStudent.id}-${resetKey}`} forcedRole={role} studentId={selectedStudent.id} studentName={selectedStudent.name} stickyTop="top-0" />
             </div>
           </div>
