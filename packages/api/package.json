@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "npm run build --workspace=@student-score/database && npm run build --workspace=@student-score/shared && npx --yes @nestjs/cli build",
+    "build": "npx --yes @nestjs/cli build",
     "start": "npx ts-node src/main.ts",
     "start:dev": "npx ts-node src/main.ts",
     "start:prod": "node dist/main"
