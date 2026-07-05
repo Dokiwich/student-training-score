@@ -18,14 +18,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     setMounted(true);
-    
+
     const now = new Date();
     const month = now.getMonth(); // 0-11
     const year = now.getFullYear();
-    
+
     let semester = '';
     let academicYear = '';
-    
+
     if (month >= 7 && month <= 11) {
       semester = 'Học kỳ 1';
       academicYear = `${year}-${year + 1}`;
@@ -36,7 +36,7 @@ export default function LoginPage() {
       semester = 'Học kỳ Hè';
       academicYear = `${year - 1}-${year}`;
     }
-    
+
     setSemesterInfo(`Hệ thống đang hoạt động — ${semester}, Năm học ${academicYear}`);
   }, []);
 
@@ -124,7 +124,7 @@ export default function LoginPage() {
               type="text"
               required
               className="login-input"
-              placeholder="Nhập mã số sinh viên"
+              placeholder="Nhập gmail sinh viên"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={isLoading}
@@ -205,7 +205,7 @@ export default function LoginPage() {
               'ĐĂNG NHẬP'
             )}
           </button>
-          
+
           <div className="login-forgot-password">
             <Link href="/forgot-password" style={{ textDecoration: 'none' }}>
               <p style={{ cursor: 'pointer', transition: 'color 0.2s' }} onMouseOver={(e) => (e.currentTarget.style.color = '#b91c1c')} onMouseOut={(e) => (e.currentTarget.style.color = '#6b7280')}>
