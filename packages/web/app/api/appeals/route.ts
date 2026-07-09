@@ -45,11 +45,13 @@ export async function GET() {
           select: {
             id: true,
             status: true,
-            student_total: true,
-            class_total: true,
-            advisor_total: true,
-            final_total: true,
-            classification: true,
+            classification_override: true,
+            score_details: {
+              select: {
+                criteria: { select: { category_id: true } },
+                score_entries: { select: { scorer_role: true, score: true } },
+              },
+            },
             semester_enrollments: {
               select: {
                 semesters: {
@@ -110,6 +112,29 @@ export async function GET() {
         }
       }
 
+      // ✅ 3NF: Compute totals at runtime
+      let studentTotal: number | null = null;
+      let classTotal: number | null = null;
+      let advisorTotal: number | null = null;
+      let finalTotal: number | null = null;
+      if ((sheet as any).score_details) {
+        let sSum = 0, cSum = 0, aSum = 0;
+        for (const d of (sheet as any).score_details) {
+          const entries = d.score_entries || [];
+          const sEntry = entries.find((x: any) => x.scorer_role === 'STUDENT');
+          const cEntry = entries.find((x: any) => x.scorer_role === 'CLASS_COMMITTEE');
+          const aEntry = entries.find((x: any) => x.scorer_role === 'ADVISOR');
+          sSum += sEntry ? Number(sEntry.score) : 0;
+          cSum += cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0);
+          aSum += aEntry ? Number(aEntry.score) : (cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0));
+        }
+        studentTotal = Math.round(Math.min(100, Math.max(0, sSum)) * 10) / 10;
+        classTotal = Math.round(Math.min(100, Math.max(0, cSum)) * 10) / 10;
+        advisorTotal = Math.round(Math.min(100, Math.max(0, aSum)) * 10) / 10;
+        finalTotal = advisorTotal;
+      }
+      const getClassif = (score: number) => score >= 90 ? 'EXCELLENT' : score >= 80 ? 'VERY_GOOD' : score >= 65 ? 'GOOD' : score >= 50 ? 'AVERAGE' : score >= 35 ? 'WEAK' : 'POOR';
+
       return {
         id: a.id,
         reason: a.reason,
@@ -126,11 +151,11 @@ export async function GET() {
         semesterCode: enrollment.semesters.code,
         className: enrollment.classes.name,
         classCode: enrollment.classes.code,
-        studentTotal: sheet.student_total != null ? Number(sheet.student_total) : null,
-        classTotal: sheet.class_total != null ? Number(sheet.class_total) : null,
-        advisorTotal: sheet.advisor_total != null ? Number(sheet.advisor_total) : null,
-        finalTotal: sheet.final_total != null ? Number(sheet.final_total) : null,
-        classification: sheet.classification,
+        studentTotal,
+        classTotal,
+        advisorTotal,
+        finalTotal,
+        classification: (sheet as any).classification_override || (finalTotal != null ? getClassif(finalTotal) : null),
       };
     });
 

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { prisma } from '@student-score/database';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -21,7 +22,7 @@ export class AuthService {
 
     if (!user) {
       this.logger.warn(`Password reset requested for unknown email: ${email}`);
-      return true; // Silently return true to prevent email enumeration (timing attack mitigated by not awaiting email anyway)
+      return true; // Silently return true to prevent email enumeration
     }
 
     const otp = this.generateOTP();
@@ -30,16 +31,28 @@ export class AuthService {
     // Hash the OTP securely
     const hashedOtp = await bcrypt.hash(otp, 10);
 
-    // Update user record with hashed OTP
-    await prisma.users.update({
-      where: { id: user.id },
-      data: {
-        reset_token: hashedOtp,
-        reset_token_expires: expiresAt,
-        failed_login_attempts: 0, // Reset any existing brute-force counters
-        locked_until: null,
-      } as any,
-    });
+    // ✅ 3NF: Upsert into password_reset_requests instead of users table
+    // Delete old requests first, then create new one
+    await prisma.$transaction([
+      prisma.password_reset_requests.deleteMany({
+        where: { user_id: user.id },
+      }),
+      prisma.password_reset_requests.create({
+        data: {
+          id: randomUUID(),
+          user_id: user.id,
+          token: hashedOtp,
+          expires_at: expiresAt,
+        },
+      }),
+      prisma.users.update({
+        where: { id: user.id },
+        data: {
+          failed_login_attempts: 0,
+          locked_until: null,
+        },
+      }),
+    ]);
 
     this.logger.log(`Generated secure OTP for ${email} (Valid for 15m)`);
 
@@ -98,39 +111,41 @@ export class AuthService {
   }
 
   async verifyResetCode(email: string, code: string): Promise<boolean> {
+    // ✅ 3NF: Query from password_reset_requests + users (for brute-force fields)
     const user = await prisma.users.findUnique({
       where: { email },
-      select: { id: true, reset_token: true, reset_token_expires: true, failed_login_attempts: true, locked_until: true } as any,
+      select: { id: true, failed_login_attempts: true, locked_until: true },
     });
 
     if (!user) return false;
 
-    // Use type assertion since reset_token might not be in the generated types yet
-    const dbUser = user as any;
-
-    if (dbUser.locked_until && new Date() < new Date(dbUser.locked_until)) {
+    if (user.locked_until && new Date() < new Date(user.locked_until)) {
       this.logger.warn(`Verification denied: Account locked due to brute-force for ${email}`);
       throw new Error('Tài khoản đã bị khoá tạm thời do nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.');
     }
 
-    if (!dbUser.reset_token) {
-      return false;
-    }
+    // ✅ 3NF: Get token from password_reset_requests
+    const resetRequest = await prisma.password_reset_requests.findFirst({
+      where: { user_id: user.id },
+      orderBy: { created_at: 'desc' },
+    });
 
-    if (!dbUser.reset_token_expires || new Date() > new Date(dbUser.reset_token_expires)) {
+    if (!resetRequest) return false;
+
+    if (new Date() > new Date(resetRequest.expires_at)) {
       return false; // Expired
     }
 
-    const isMatch = await bcrypt.compare(code, dbUser.reset_token);
+    const isMatch = await bcrypt.compare(code, resetRequest.token);
 
     if (!isMatch) {
-      const attempts = (dbUser.failed_login_attempts || 0) + 1;
+      const attempts = (user.failed_login_attempts || 0) + 1;
       const updates: any = { failed_login_attempts: attempts };
       if (attempts >= 5) {
         updates.locked_until = new Date(Date.now() + 15 * 60 * 1000); // 15 mins lock
         this.logger.warn(`Locked account ${email} for 15m due to multiple failed OTPs`);
       }
-      await prisma.users.update({ where: { id: dbUser.id }, data: updates });
+      await prisma.users.update({ where: { id: user.id }, data: updates });
       return false;
     }
 
@@ -143,15 +158,19 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
-    await prisma.users.update({
-      where: { email },
-      data: {
-        password_hash: passwordHash,
-        failed_login_attempts: 0, // unlock account if it was locked
-        reset_token: null,
-        reset_token_expires: null,
-      } as any,
-    });
+    // ✅ 3NF: Update password + delete reset request in transaction
+    await prisma.$transaction([
+      prisma.users.update({
+        where: { email },
+        data: {
+          password_hash: passwordHash,
+          failed_login_attempts: 0,
+        },
+      }),
+      prisma.password_reset_requests.deleteMany({
+        where: { users: { email } },
+      }),
+    ]);
 
     this.logger.log(`Password reset successfully for user: ${email}`);
     return true;

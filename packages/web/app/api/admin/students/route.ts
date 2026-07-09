@@ -44,12 +44,44 @@ export async function GET(req: Request) {
       classes: {
         include: { departments: true }
       },
-      scoring_sheets: true
+      scoring_sheets: {
+        include: {
+          score_details: {
+            select: {
+              score_entries: { select: { scorer_role: true, score: true } },
+            },
+          },
+        },
+      }
     }
   });
 
   const students = enrollments.map(e => {
     const sheet = e.scoring_sheets;
+    // ✅ 3NF: Compute totals at runtime
+    let studentTotal: number | null = null;
+    let classTotal: number | null = null;
+    let advisorTotal: number | null = null;
+    let finalTotal: number | null = null;
+    let classification: string | null = null;
+    if (sheet && sheet.score_details) {
+      let sSum = 0, cSum = 0, aSum = 0;
+      for (const d of sheet.score_details) {
+        const entries = d.score_entries || [];
+        const sEntry = entries.find((x: any) => x.scorer_role === 'STUDENT');
+        const cEntry = entries.find((x: any) => x.scorer_role === 'CLASS_COMMITTEE');
+        const aEntry = entries.find((x: any) => x.scorer_role === 'ADVISOR');
+        sSum += sEntry ? Number(sEntry.score) : 0;
+        cSum += cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0);
+        aSum += aEntry ? Number(aEntry.score) : (cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0));
+      }
+      studentTotal = Math.round(Math.min(100, Math.max(0, sSum)) * 10) / 10;
+      classTotal = Math.round(Math.min(100, Math.max(0, cSum)) * 10) / 10;
+      advisorTotal = Math.round(Math.min(100, Math.max(0, aSum)) * 10) / 10;
+      finalTotal = advisorTotal;
+      const getClassif = (score: number) => score >= 90 ? 'EXCELLENT' : score >= 80 ? 'VERY_GOOD' : score >= 65 ? 'GOOD' : score >= 50 ? 'AVERAGE' : score >= 35 ? 'WEAK' : 'POOR';
+      classification = (sheet as any).classification_override || getClassif(finalTotal);
+    }
     return {
       id: e.users?.id || e.user_id,
       studentCode: e.users?.student_id || '',
@@ -59,12 +91,12 @@ export async function GET(req: Request) {
       classCode: e.classes?.code || '',
       departmentName: e.classes?.departments?.name || '',
       status: sheet?.status || 'UPCOMING',
-      studentTotal: sheet?.student_total != null ? Number(sheet.student_total) : null,
-      classTotal: sheet?.class_total != null ? Number(sheet.class_total) : null,
-      advisorTotal: sheet?.advisor_total != null ? Number(sheet.advisor_total) : null,
-      finalTotal: sheet?.final_total != null ? Number(sheet.final_total) : null,
-      score: sheet ? (sheet.final_total != null ? Number(sheet.final_total) : (sheet.advisor_total != null ? Number(sheet.advisor_total) : (sheet.class_total != null ? Number(sheet.class_total) : Number(sheet.student_total || 0)))) : 0,
-      classification: sheet?.classification || null,
+      studentTotal,
+      classTotal,
+      advisorTotal,
+      finalTotal,
+      score: finalTotal ?? advisorTotal ?? classTotal ?? studentTotal ?? 0,
+      classification,
       sheetId: sheet?.id || null,
       enrollmentId: e.id,
     };

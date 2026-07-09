@@ -20,28 +20,24 @@ const STATE_TRANSITIONS: Record<string, {
   requiredStatus: string | string[];
   nextStatus: string;
   timestampField: string;
-  currentStep: number;
   errorMessage: string;
 }> = {
   STUDENT: {
     requiredStatus: [WorkflowStatus.DRAFT, 'CLASS_REJECTED', 'ADVISOR_REJECTED'],
     nextStatus: WorkflowStatus.SUBMITTED,
     timestampField: 'student_submitted_at',
-    currentStep: 2,
     errorMessage: 'Sinh viên chỉ được nộp khi phiếu đang là Bản Nháp (DRAFT) hoặc bị Trả lại (REJECTED)',
   },
   CLASS_COMMITTEE: {
     requiredStatus: WorkflowStatus.SUBMITTED,
     nextStatus: WorkflowStatus.CLASS_APPROVED,
     timestampField: 'class_reviewed_at',
-    currentStep: 3,
     errorMessage: 'Lớp trưởng chỉ được duyệt khi Sinh viên đã nộp (SUBMITTED)',
   },
   ADVISOR: {
     requiredStatus: WorkflowStatus.CLASS_APPROVED,
     nextStatus: WorkflowStatus.ADVISOR_APPROVED,
     timestampField: 'advisor_approved_at',
-    currentStep: 4,
     errorMessage: 'Cố vấn chỉ được chốt khi Lớp trưởng đã duyệt (CLASS_APPROVED)',
   },
 };
@@ -51,6 +47,18 @@ const SCORING_PERMISSIONS: Record<string, string | string[]> = {
   CLASS_COMMITTEE: WorkflowStatus.SUBMITTED,
   ADVISOR: WorkflowStatus.CLASS_APPROVED,
 };
+
+// ✅ 3NF: current_step is derived from status at runtime
+const STEP_MAP: Record<string, number> = {
+  DRAFT: 1,
+  STUDENT_SUBMITTED: 2, CLASS_REVIEWING: 2, CLASS_REJECTED: 2,
+  CLASS_REVIEWED: 3, ADVISOR_REVIEWING: 3, ADVISOR_REJECTED: 3,
+  ADVISOR_APPROVED: 4, SCHOOL_REVIEWING: 4, SCHOOL_APPROVED: 4, FINALIZED: 4,
+  APPEALING: 4,
+};
+function getStepFromStatus(status: string): number {
+  return STEP_MAP[status] ?? 1;
+}
 
 
 
@@ -267,7 +275,6 @@ export class ScoringService {
           id: randomUUID(),
           enrollment_id: enrollment.id,
           status: 'DRAFT',
-          current_step: 1,
         },
       });
     } catch (createErr: any) {
@@ -362,14 +369,15 @@ export class ScoringService {
           select: {
             id: true,
             status: true,
-            student_total: true,
-            class_total: true,
-            advisor_total: true,
-            final_total: true,
-            classification: true,
             student_submitted_at: true,
             class_reviewed_at: true,
             advisor_approved_at: true,
+            score_details: {
+              select: {
+                criteria: { select: { category_id: true } },
+                score_entries: { select: { scorer_role: true, score: true } },
+              },
+            },
           },
         },
       },
@@ -380,6 +388,29 @@ export class ScoringService {
     const data = enrollments.map((e) => {
       const s = e.users;
       const sheet = e.scoring_sheets || null;
+      // ✅ 3NF: Compute totals at runtime from score_entries
+      let studentTotal: number | null = null;
+      let classTotal: number | null = null;
+      let advisorTotal: number | null = null;
+      let finalTotal: number | null = null;
+      let classification: string | null = null;
+      if (sheet && sheet.score_details) {
+        let sSum = 0, cSum = 0, aSum = 0;
+        for (const d of sheet.score_details as any[]) {
+          const entries = d.score_entries || [];
+          const sEntry = entries.find((x: any) => x.scorer_role === 'STUDENT');
+          const cEntry = entries.find((x: any) => x.scorer_role === 'CLASS_COMMITTEE');
+          const aEntry = entries.find((x: any) => x.scorer_role === 'ADVISOR');
+          sSum += sEntry ? Number(sEntry.score) : 0;
+          cSum += cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0);
+          aSum += aEntry ? Number(aEntry.score) : (cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0));
+        }
+        studentTotal = Math.round(Math.min(100, Math.max(0, sSum)) * 10) / 10;
+        classTotal = Math.round(Math.min(100, Math.max(0, cSum)) * 10) / 10;
+        advisorTotal = Math.round(Math.min(100, Math.max(0, aSum)) * 10) / 10;
+        finalTotal = advisorTotal;
+        classification = this.getClassification(finalTotal);
+      }
       return {
         id: s.id,
         studentCode: s.student_id,
@@ -388,11 +419,11 @@ export class ScoringService {
         className: e.classes?.name || null,
         formId: sheet?.id || null,
         status: sheet?.status || 'NO_SHEET',
-        studentTotal: sheet?.student_total != null ? Number(sheet.student_total) : null,
-        classTotal: sheet?.class_total != null ? Number(sheet.class_total) : null,
-        advisorTotal: sheet?.advisor_total != null ? Number(sheet.advisor_total) : null,
-        finalTotal: sheet?.final_total != null ? Number(sheet.final_total) : null,
-        classification: sheet?.classification || null,
+        studentTotal,
+        classTotal,
+        advisorTotal,
+        finalTotal,
+        classification,
         studentSubmittedAt: sheet?.student_submitted_at || null,
         classReviewedAt: sheet?.class_reviewed_at || null,
         advisorApprovedAt: sheet?.advisor_approved_at || null,
@@ -511,12 +542,7 @@ export class ScoringService {
     const form = {
       id: sheet.id,
       status: sheet.status,
-      current_step: sheet.current_step,
       rejection_reason: sheet.rejection_reason,
-      student_total: sheet.student_total,
-      class_total: sheet.class_total,
-      advisor_total: sheet.advisor_total,
-      final_total: sheet.final_total,
       student_submitted_at: sheet.student_submitted_at,
       class_reviewed_at: sheet.class_reviewed_at,
       advisor_approved_at: sheet.advisor_approved_at,
@@ -556,6 +582,9 @@ export class ScoringService {
 
     const formStatus = workflowStepMap[form.status] || 'DRAFT';
 
+    // ✅ 3NF: Compute totals at runtime
+    const totals = await this.calculateTotals(form.id);
+
     const studentInfo = {
       name: enrollmentData?.users?.full_name || '',
       studentId: enrollmentData?.users?.student_id || '',
@@ -569,15 +598,15 @@ export class ScoringService {
       formId: form.id,
       formStatus,
       formStatusDetail: form.status,
-      currentStep: form.current_step,
+      currentStep: getStepFromStatus(form.status),
       rejectionReason: form.rejection_reason || null,
       studentInfo,
       semesterName: enrollmentData?.semesters ? `Học kỳ ${enrollmentData.semesters.name} - Năm học ${enrollmentData.semesters.academic_year}` : '',
       totals: {
-        student: form.student_total,
-        class: form.class_total,
-        advisor: form.advisor_total,
-        final: form.final_total,
+        student: totals.studentTotal,
+        class: totals.classTotal,
+        advisor: totals.advisorTotal,
+        final: totals.advisorTotal,
       },
       timestamps: {
         studentSubmittedAt: form.student_submitted_at,
@@ -1130,32 +1159,17 @@ export class ScoringService {
     // 6d. (Đã gỡ bỏ ràng buộc "phải chấm ít nhất 1 điểm")
     // Cho phép nộp phiếu trống → tổng điểm = 0
 
-    // 6e. ✅ TÍNH TỔNG ĐIỂM TRƯỚC KHI CHUYỂN TRẠNG THÁI
-    const totals = await this.calculateTotals(form.id);
+    // 6e. ✅ 3NF: Không ghi totals/classification vào DB — tính runtime khi cần
 
-    // 6f. ✅ CẬP NHẬT DATABASE (Status + Timestamp + Tổng điểm + current_step)
+    // 6f. ✅ CẬP NHẬT DATABASE (Status + Timestamp)
     const updateData: Record<string, any> = {
       status: transition.nextStatus,
-      current_step: transition.currentStep,
       updated_at: new Date(),
       [transition.timestampField]: new Date(),
       // Clear rejection info when resubmitting
       rejection_reason: null,
       rejected_by_step: null,
     };
-
-    // Gắn tổng điểm tương ứng
-    if (role === 'STUDENT') {
-      updateData.student_total = totals.studentTotal;
-    } else if (role === 'CLASS_COMMITTEE') {
-      updateData.class_total = totals.classTotal;
-    } else if (role === 'ADVISOR') {
-      updateData.advisor_total = totals.advisorTotal;
-      updateData.final_total = totals.advisorTotal; // Điểm cuối = điểm CVHT
-      updateData.classification = this.getClassification(
-        Number(totals.advisorTotal),
-      );
-    }
 
     const updated = await prisma.$transaction(async (tx) => {
       const up = await tx.scoring_sheets.updateMany({
@@ -1172,8 +1186,8 @@ export class ScoringService {
 
       // ✅ Ghi audit log cho việc chuyển trạng thái phiếu
       await this.logAudit(actorId, 'SUBMIT_FORM', 'scoring_sheets', form.id,
-        { status: form.status, current_step: form.current_step },
-        { status: transition.nextStatus, current_step: transition.currentStep, role },
+        { status: form.status },
+        { status: transition.nextStatus, role },
         tx
       );
 

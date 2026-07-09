@@ -91,11 +91,7 @@ export async function GET(req: Request) {
           select: {
             id: true,
             status: true,
-            student_total: true,
-            class_total: true,
-            advisor_total: true,
-            final_total: true,
-            classification: true,
+            classification_override: true,
             student_submitted_at: true,
             class_reviewed_at: true,
             advisor_approved_at: true,
@@ -103,6 +99,12 @@ export async function GET(req: Request) {
             rejection_reason: true,
             created_at: true,
             updated_at: true,
+            score_details: {
+              select: {
+                criteria: { select: { category_id: true } },
+                score_entries: { select: { scorer_role: true, score: true } },
+              },
+            },
             comments: {
               select: {
                 id: true,
@@ -177,6 +179,38 @@ export async function GET(req: Request) {
         }
       }
 
+      // ✅ 3NF: Compute totals at runtime
+      let studentTotal: number | null = null;
+      let classTotal: number | null = null;
+      let advisorTotal: number | null = null;
+      let finalTotal: number | null = null;
+      let classification: string | null = null;
+      if (sheet && (sheet as any).score_details) {
+        let sSum = 0, cSum = 0, aSum = 0;
+        for (const d of (sheet as any).score_details) {
+          const entries = d.score_entries || [];
+          const sEntry = entries.find((x: any) => x.scorer_role === 'STUDENT');
+          const cEntry = entries.find((x: any) => x.scorer_role === 'CLASS_COMMITTEE');
+          const aEntry = entries.find((x: any) => x.scorer_role === 'ADVISOR');
+          sSum += sEntry ? Number(sEntry.score) : 0;
+          cSum += cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0);
+          aSum += aEntry ? Number(aEntry.score) : (cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0));
+        }
+        studentTotal = Math.round(Math.min(100, Math.max(0, sSum)) * 10) / 10;
+        classTotal = Math.round(Math.min(100, Math.max(0, cSum)) * 10) / 10;
+        advisorTotal = Math.round(Math.min(100, Math.max(0, aSum)) * 10) / 10;
+        finalTotal = advisorTotal;
+        const getClassification = (score: number): string => {
+          if (score >= 90) return 'EXCELLENT';
+          if (score >= 80) return 'VERY_GOOD';
+          if (score >= 65) return 'GOOD';
+          if (score >= 50) return 'AVERAGE';
+          if (score >= 35) return 'WEAK';
+          return 'POOR';
+        };
+        classification = (sheet as any).classification_override || getClassification(finalTotal);
+      }
+
       return {
         semesterId: sem.id,
         semesterCode: sem.code,
@@ -189,12 +223,12 @@ export async function GET(req: Request) {
         hasSheet: !!sheet,
         sheetId: sheet?.id || null,
         status: sheet?.status || 'NO_SHEET',
-        studentTotal: sheet?.student_total != null ? Number(sheet.student_total) : null,
-        classTotal: sheet?.class_total != null ? Number(sheet.class_total) : null,
-        advisorTotal: sheet?.advisor_total != null ? Number(sheet.advisor_total) : null,
-        finalTotal: sheet?.final_total != null ? Number(sheet.final_total) : null,
-        classification: sheet?.classification || null,
-        classificationLabel: sheet?.classification ? CLASSIFICATION_LABELS[sheet.classification] || sheet.classification : null,
+        studentTotal,
+        classTotal,
+        advisorTotal,
+        finalTotal,
+        classification,
+        classificationLabel: classification ? CLASSIFICATION_LABELS[classification] || classification : null,
         rejectionReason: sheet?.rejection_reason || null,
         studentSubmittedAt: sheet?.student_submitted_at?.toISOString() || null,
         classReviewedAt: sheet?.class_reviewed_at?.toISOString() || null,

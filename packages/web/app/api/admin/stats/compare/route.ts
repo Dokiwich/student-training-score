@@ -35,7 +35,15 @@ export async function GET(req: Request) {
           student_id: { not: null },
         },
       },
-      include: { scoring_sheets: true }
+      include: { scoring_sheets: {
+        include: {
+          score_details: {
+            select: {
+              score_entries: { select: { scorer_role: true, score: true } },
+            },
+          },
+        },
+      } }
     });
 
     let total = enrollments.length;
@@ -43,16 +51,30 @@ export async function GET(req: Request) {
     let countScore = 0;
     const byClassification: Record<string, number> = {};
 
+    const getClassif = (score: number) => score >= 90 ? 'EXCELLENT' : score >= 80 ? 'VERY_GOOD' : score >= 65 ? 'GOOD' : score >= 50 ? 'AVERAGE' : score >= 35 ? 'WEAK' : 'POOR';
+
     for (const enr of enrollments) {
       const sheet = enr.scoring_sheets;
-      if (sheet?.classification) {
-        byClassification[sheet.classification] = (byClassification[sheet.classification] || 0) + 1;
+      // ✅ 3NF: Compute totals at runtime
+      let computedTotal: number | null = null;
+      let classification: string | null = null;
+      if (sheet && sheet.score_details) {
+        let aSum = 0;
+        for (const d of sheet.score_details) {
+          const entries = d.score_entries || [];
+          const sEntry = entries.find((x: any) => x.scorer_role === 'STUDENT');
+          const cEntry = entries.find((x: any) => x.scorer_role === 'CLASS_COMMITTEE');
+          const aEntry = entries.find((x: any) => x.scorer_role === 'ADVISOR');
+          aSum += aEntry ? Number(aEntry.score) : (cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0));
+        }
+        computedTotal = Math.round(Math.min(100, Math.max(0, aSum)) * 10) / 10;
+        classification = (sheet as any).classification_override || getClassif(computedTotal);
       }
-      if (sheet?.final_total != null) {
-        sumScore += Number(sheet.final_total);
-        countScore++;
-      } else if (sheet?.advisor_total != null) {
-        sumScore += Number(sheet.advisor_total);
+      if (classification) {
+        byClassification[classification] = (byClassification[classification] || 0) + 1;
+      }
+      if (computedTotal != null) {
+        sumScore += computedTotal;
         countScore++;
       }
     }
