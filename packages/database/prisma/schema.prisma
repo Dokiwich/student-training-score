@@ -250,12 +250,13 @@ model scoring_sheets {
   id                      String                         @id @db.VarChar(36)
   status                  scoring_sheets_status          @default(DRAFT)
   classification_override scoring_sheets_classification?
+  // ⚠️ DENORMALIZED: These 4 timestamps duplicate review_actions.created_at for query performance.
+  // Must be kept in sync — see STATE_TRANSITIONS in scoring.service.ts.
   student_submitted_at    DateTime?                      @db.Timestamp(0)
   class_reviewed_at       DateTime?                      @db.Timestamp(0)
   advisor_approved_at     DateTime?                      @db.Timestamp(0)
   school_finalized_at     DateTime?                      @db.Timestamp(0)
   rejection_reason        String?
-  rejected_by_step        Int?                           @db.SmallInt
   created_at              DateTime                       @default(now()) @db.Timestamp(0)
   updated_at              DateTime                       @default(now()) @db.Timestamp(0)
   enrollment_id           String                         @unique(map: "uk_sheet_enrollment") @db.VarChar(36)
@@ -401,6 +402,7 @@ enum criteria_score_type {
   OPTIONS
   BOOLEAN
   DEDUCTION
+  FIXED
 }
 
 enum scorer_role {

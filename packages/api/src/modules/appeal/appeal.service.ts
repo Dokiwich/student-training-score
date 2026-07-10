@@ -499,16 +499,29 @@ export class AppealService {
         throw new BadRequestException('Khiếu nại này đã được xử lý rồi');
       }
 
-      // Cập nhật appeal → ACCEPTED / REJECTED (chốt sổ)
-      await prisma.appeals.update({
-        where: { id: appealId },
-        data: {
-          status: decision,
-          resolved_by: resolverId,
-          resolution: resolution.trim(),
-          resolved_at: new Date(),
-        },
-      });
+      // Cập nhật appeal → ACCEPTED / REJECTED (chốt sổ) + ghi appeal_resolutions
+      await prisma.$transaction([
+        prisma.appeals.update({
+          where: { id: appealId },
+          data: {
+            status: decision,
+            resolved_by: resolverId,
+            resolution: resolution.trim(),
+            resolved_at: new Date(),
+          },
+        }),
+        prisma.appeal_resolutions.create({
+          data: {
+            id: randomUUID(),
+            appeal_id: appealId,
+            level: 'SCHOOL',
+            resolver_id: resolverId,
+            decision,
+            resolution: resolution.trim(),
+            new_score: newScore ?? null,
+          },
+        }),
+      ]);
 
       // Nếu ACCEPTED + có newScore → cập nhật điểm chính thức
       if (decision === 'ACCEPTED' && newScore != null && appeal.evidence_note) {
@@ -742,14 +755,28 @@ export class AppealService {
     });
 
     if (unresolved.length > 0) {
-      await prisma.appeals.updateMany({
-        where: { scoring_sheet_id: sheetId, status: { in: ['PENDING', 'DEPT_REVIEWED'] } },
-        data: {
-          status: 'REJECTED',
-          resolved_by: resolverId,
-          resolution: resolveMessage,
-          resolved_at: new Date(),
-        },
+      const resolvedAt = new Date();
+      await prisma.$transaction(async (tx) => {
+        await tx.appeals.updateMany({
+          where: { scoring_sheet_id: sheetId, status: { in: ['PENDING', 'DEPT_REVIEWED'] } },
+          data: {
+            status: 'REJECTED',
+            resolved_by: resolverId,
+            resolution: resolveMessage,
+            resolved_at: resolvedAt,
+          },
+        });
+        await tx.appeal_resolutions.createMany({
+          data: unresolved.map(a => ({
+            id: randomUUID(),
+            appeal_id: a.id,
+            level: 'SCHOOL',
+            resolver_id: resolverId,
+            decision: 'REJECTED',
+            resolution: resolveMessage,
+            resolved_at: resolvedAt,
+          })),
+        });
       });
     }
 

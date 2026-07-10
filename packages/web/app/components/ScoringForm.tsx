@@ -6,7 +6,7 @@ import { AlertTriangle } from 'lucide-react';
 
 const API_BASE = '/proxy-api';
 
-const FIXED_CODES = ['1.1.1', '2.1', '4.1', '3.1.1', '2.2'];
+
 
 const QUANTITY_MULTIPLIERS: Record<string, number> = {
   '1.2.1': 1, '3.2.1': 1,
@@ -403,7 +403,7 @@ export function ScoringForm({
       visited.add(itemId);
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return 0;
-      if (FIXED_CODES.includes(item.code)) return item.point;
+      if (item.score_type === 'FIXED') return item.point;
       const children = criteria.filter((c) => c.parent_id === itemId);
       if (children.length > 0) {
         const sum = children.reduce(
@@ -425,7 +425,7 @@ export function ScoringForm({
       visited.add(itemId);
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return 0;
-      if (FIXED_CODES.includes(item.code)) return item.point;
+      if (item.score_type === 'FIXED') return item.point;
       const children = criteria.filter((c) => c.parent_id === itemId);
       if (children.length > 0) {
         const sum = children.reduce(
@@ -536,7 +536,7 @@ export function ScoringForm({
 
       const saveSingleItem = async (item: typeof leafItems[0]) => {
         let score = 0;
-        if (FIXED_CODES.includes(item.code)) {
+        if (item.score_type === 'FIXED') {
           score = item.point;
         } else {
           const raw = inputValues[item.id] ?? '';
@@ -982,7 +982,7 @@ export function ScoringForm({
                               const isParent = parentIds.has(item.id);
                               const depth = depthMap.get(item.id) || 0;
                               const isExpanded = expandedIds.has(item.id);
-                              const isFixed = FIXED_CODES.includes(item.code);
+                              const isFixed = item.score_type === 'FIXED';
                               const val = inputValues[item.id] || '';
                               const evidence = evidenceValues?.[item.id] || '';
                               const isRowSaving = savingId === item.id;
