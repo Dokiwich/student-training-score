@@ -126,6 +126,7 @@ export async function POST(req: Request) {
             create: {
               id: randomUUID(),
               roles: { connect: { code: role } },
+              entity_id: ['CLASS_COMMITTEE', 'ADVISOR'].includes(role) ? class_id : role === 'DEPARTMENT' ? resolvedDeptId : null,
               is_active: 1
             }
           },
@@ -211,7 +212,13 @@ export async function PUT(req: Request) {
         const targetRole = await tx.roles.findUnique({ where: { code: role } });
         if (targetRole) {
           await tx.user_roles.create({
-            data: { id: randomUUID(), user_id: id, role_id: targetRole.id, is_active: 1 }
+            data: { 
+              id: randomUUID(), 
+              user_id: id, 
+              role_id: targetRole.id, 
+              entity_id: ['CLASS_COMMITTEE', 'ADVISOR'].includes(role) ? class_id : role === 'DEPARTMENT' ? (updateData.department_id || department_id || null) : null,
+              is_active: 1 
+            }
           });
         }
       }

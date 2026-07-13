@@ -16,32 +16,30 @@ const WorkflowStatus = {
 
 // ✅ MA TRẬN CHUYỂN TRẠNG THÁI (State Machine)
 // Key: Role → Value: { requiredStatus, nextStatus }
+// ⚠️ SYNC OBLIGATION: timestampField values are denormalized on scoring_sheets
+// (duplicated from review_actions.created_at). Any new transition MUST update both.
 const STATE_TRANSITIONS: Record<string, {
   requiredStatus: string | string[];
   nextStatus: string;
   timestampField: string;
-  currentStep: number;
   errorMessage: string;
 }> = {
   STUDENT: {
     requiredStatus: [WorkflowStatus.DRAFT, 'CLASS_REJECTED', 'ADVISOR_REJECTED'],
     nextStatus: WorkflowStatus.SUBMITTED,
     timestampField: 'student_submitted_at',
-    currentStep: 2,
     errorMessage: 'Sinh viên chỉ được nộp khi phiếu đang là Bản Nháp (DRAFT) hoặc bị Trả lại (REJECTED)',
   },
   CLASS_COMMITTEE: {
     requiredStatus: WorkflowStatus.SUBMITTED,
     nextStatus: WorkflowStatus.CLASS_APPROVED,
     timestampField: 'class_reviewed_at',
-    currentStep: 3,
     errorMessage: 'Lớp trưởng chỉ được duyệt khi Sinh viên đã nộp (SUBMITTED)',
   },
   ADVISOR: {
     requiredStatus: WorkflowStatus.CLASS_APPROVED,
     nextStatus: WorkflowStatus.ADVISOR_APPROVED,
     timestampField: 'advisor_approved_at',
-    currentStep: 4,
     errorMessage: 'Cố vấn chỉ được chốt khi Lớp trưởng đã duyệt (CLASS_APPROVED)',
   },
 };
@@ -51,6 +49,18 @@ const SCORING_PERMISSIONS: Record<string, string | string[]> = {
   CLASS_COMMITTEE: WorkflowStatus.SUBMITTED,
   ADVISOR: WorkflowStatus.CLASS_APPROVED,
 };
+
+// ✅ 3NF: current_step is derived from status at runtime
+const STEP_MAP: Record<string, number> = {
+  DRAFT: 1,
+  STUDENT_SUBMITTED: 2, CLASS_REVIEWING: 2, CLASS_REJECTED: 2,
+  CLASS_REVIEWED: 3, ADVISOR_REVIEWING: 3, ADVISOR_REJECTED: 3,
+  ADVISOR_APPROVED: 4, SCHOOL_REVIEWING: 4, SCHOOL_APPROVED: 4, FINALIZED: 4,
+  APPEALING: 4,
+};
+function getStepFromStatus(status: string): number {
+  return STEP_MAP[status] ?? 1;
+}
 
 
 
@@ -267,7 +277,6 @@ export class ScoringService {
           id: randomUUID(),
           enrollment_id: enrollment.id,
           status: 'DRAFT',
-          current_step: 1,
         },
       });
     } catch (createErr: any) {
@@ -335,6 +344,12 @@ export class ScoringService {
       return { message: 'Không tìm thấy lớp phụ trách', data: [] };
     }
 
+    // ✅ PONYTAIL: Lấy toàn bộ danh mục và tiêu chí 1 lần duy nhất (tránh N+1 query)
+    const [categories, allCriteria] = await Promise.all([
+      prisma.criteria_categories.findMany({ select: { id: true, max_score: true } }),
+      prisma.criteria.findMany({ where: { is_active: 1 } })
+    ]);
+
     // Lấy tất cả sinh viên cùng lớp qua semester_enrollments
     const enrollments = await prisma.semester_enrollments.findMany({
       where: {
@@ -362,14 +377,16 @@ export class ScoringService {
           select: {
             id: true,
             status: true,
-            student_total: true,
-            class_total: true,
-            advisor_total: true,
-            final_total: true,
-            classification: true,
             student_submitted_at: true,
             class_reviewed_at: true,
             advisor_approved_at: true,
+            score_details: {
+              select: {
+                criteria_id: true,
+                criteria: { select: { category_id: true } },
+                score_entries: { select: { scorer_role: true, score: true } },
+              },
+            },
           },
         },
       },
@@ -380,6 +397,21 @@ export class ScoringService {
     const data = enrollments.map((e) => {
       const s = e.users;
       const sheet = e.scoring_sheets || null;
+      // ✅ 3NF: Compute totals at runtime from score_entries
+      let studentTotal: number | null = null;
+      let classTotal: number | null = null;
+      let advisorTotal: number | null = null;
+      let finalTotal: number | null = null;
+      let classification: string | null = null;
+      if (sheet && sheet.score_details) {
+        // Sử dụng pure function để tính điểm chuẩn xác áp trần giống hệt detail view
+        const totals = this.computeTotalsPure(sheet.score_details as any[], categories, allCriteria);
+        studentTotal = totals.studentTotal;
+        classTotal = totals.classTotal;
+        advisorTotal = totals.advisorTotal;
+        finalTotal = advisorTotal;
+        classification = this.getClassification(finalTotal);
+      }
       return {
         id: s.id,
         studentCode: s.student_id,
@@ -388,11 +420,11 @@ export class ScoringService {
         className: e.classes?.name || null,
         formId: sheet?.id || null,
         status: sheet?.status || 'NO_SHEET',
-        studentTotal: sheet?.student_total != null ? Number(sheet.student_total) : null,
-        classTotal: sheet?.class_total != null ? Number(sheet.class_total) : null,
-        advisorTotal: sheet?.advisor_total != null ? Number(sheet.advisor_total) : null,
-        finalTotal: sheet?.final_total != null ? Number(sheet.final_total) : null,
-        classification: sheet?.classification || null,
+        studentTotal,
+        classTotal,
+        advisorTotal,
+        finalTotal,
+        classification,
         studentSubmittedAt: sheet?.student_submitted_at || null,
         classReviewedAt: sheet?.class_reviewed_at || null,
         advisorApprovedAt: sheet?.advisor_approved_at || null,
@@ -456,7 +488,7 @@ export class ScoringService {
   // =============================================
   // HELPER: Xác định quyền ĐỌC phiếu điểm
   // =============================================
-  private async verifyReadPermission(actorId: string, studentId: string, semesterId?: string): Promise<void> {
+  private async verifyReadPermission(actorId: string, studentId: string, targetSemesterId: string): Promise<void> {
     if (actorId === studentId) return;
 
     const actorRoles = await prisma.user_roles.findMany({
@@ -470,17 +502,14 @@ export class ScoringService {
 
     const isDepartment = actorRoles.some(r => r.roles.code === 'DEPARTMENT');
     if (isDepartment) {
-      const actor = await prisma.users.findUnique({ where: { id: actorId } });
-      const student = await prisma.users.findUnique({ where: { id: studentId } });
+      // ✅ PONYTAIL: Gộp truy vấn user
+      const [actor, student] = await Promise.all([
+        prisma.users.findUnique({ where: { id: actorId } }),
+        prisma.users.findUnique({ where: { id: studentId } })
+      ]);
       if (actor?.department_id && actor.department_id === student?.department_id) {
         return;
       }
-    }
-
-    let targetSemesterId = semesterId;
-    if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
-      targetSemesterId = activeSemester?.id;
     }
 
     if (targetSemesterId) {
@@ -504,19 +533,21 @@ export class ScoringService {
   //    ✅ MỚI: Trả thêm formStatus để Frontend biết khóa/mở
   // =============================================
   async getScoresByFormId(formId: string, studentId: string, actorId: string, semesterId?: string) {
-    await this.verifyReadPermission(actorId, studentId, semesterId);
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
+      targetSemesterId = activeSemester.id;
+    }
+
+    await this.verifyReadPermission(actorId, studentId, targetSemesterId);
 
     // ✅ FIX: Dùng helper chung thay vì copy-paste logic tạo phiếu
-    const sheet = await this.getOrCreateDraftSheet(studentId, semesterId);
+    const sheet = await this.getOrCreateDraftSheet(studentId, targetSemesterId);
     const form = {
       id: sheet.id,
       status: sheet.status,
-      current_step: sheet.current_step,
       rejection_reason: sheet.rejection_reason,
-      student_total: sheet.student_total,
-      class_total: sheet.class_total,
-      advisor_total: sheet.advisor_total,
-      final_total: sheet.final_total,
       student_submitted_at: sheet.student_submitted_at,
       class_reviewed_at: sheet.class_reviewed_at,
       advisor_approved_at: sheet.advisor_approved_at,
@@ -556,6 +587,9 @@ export class ScoringService {
 
     const formStatus = workflowStepMap[form.status] || 'DRAFT';
 
+    // ✅ 3NF: Compute totals at runtime
+    const totals = await this.calculateTotals(form.id);
+
     const studentInfo = {
       name: enrollmentData?.users?.full_name || '',
       studentId: enrollmentData?.users?.student_id || '',
@@ -569,15 +603,15 @@ export class ScoringService {
       formId: form.id,
       formStatus,
       formStatusDetail: form.status,
-      currentStep: form.current_step,
+      currentStep: getStepFromStatus(form.status),
       rejectionReason: form.rejection_reason || null,
       studentInfo,
       semesterName: enrollmentData?.semesters ? `Học kỳ ${enrollmentData.semesters.name} - Năm học ${enrollmentData.semesters.academic_year}` : '',
       totals: {
-        student: form.student_total,
-        class: form.class_total,
-        advisor: form.advisor_total,
-        final: form.final_total,
+        student: totals.studentTotal,
+        class: totals.classTotal,
+        advisor: totals.advisorTotal,
+        final: totals.advisorTotal,
       },
       timestamps: {
         studentSubmittedAt: form.student_submitted_at,
@@ -590,7 +624,7 @@ export class ScoringService {
   // =============================================
   // HELPER: Xác định và kiểm tra quyền thực tế của người thao tác
   // =============================================
-  private async verifyActorRole(actorId: string, studentId: string, requestedRole: string, semesterId?: string): Promise<void> {
+  private async verifyActorRole(actorId: string, studentId: string, requestedRole: string, targetSemesterId: string): Promise<void> {
     // 1. Nếu requestedRole là STUDENT, bắt buộc actorId phải là studentId
     if (requestedRole === 'STUDENT') {
       if (actorId !== studentId) {
@@ -600,12 +634,6 @@ export class ScoringService {
     }
 
     // 2. Nếu là CLASS_COMMITTEE hoặc ADVISOR, kiểm tra trong bảng class_roles
-    let targetSemesterId = semesterId;
-    if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
-      targetSemesterId = activeSemester?.id;
-    }
-    
     if (!targetSemesterId) {
       throw new BadRequestException('Không tìm thấy học kỳ hoạt động.');
     }
@@ -653,11 +681,29 @@ export class ScoringService {
     score: number,
     role: string,
     studentId: string,
-    semesterId?: string,
+    targetSemesterId: string,
     proofUrl?: string,
   ) {
-    // 3a. ✅ FIX: Dùng helper chung thay vì copy-paste logic tạo phiếu
-    const form = await this.getOrCreateDraftSheet(studentId, semesterId);
+    criteriaId = Number(criteriaId);
+    score = Number(score);
+    if (isNaN(criteriaId)) throw new BadRequestException('ID tiêu chí không hợp lệ!');
+    if (isNaN(score)) throw new BadRequestException('Điểm không hợp lệ!');
+
+    // ✅ PONYTAIL: Gộp các truy vấn độc lập thành 1 Promise.all (Tiết kiệm 5 round-trips)
+    const [form, semester, criteria, childrenCount, activeVersion] = await Promise.all([
+      this.getOrCreateDraftSheet(studentId, targetSemesterId),
+      this.getSemesterWithDeadlines(targetSemesterId),
+      prisma.criteria.findUnique({
+        where: { id: criteriaId },
+        include: { criteria_categories: true },
+      }),
+      prisma.criteria.count({
+        where: { parent_id: criteriaId, is_active: 1 },
+      }),
+      prisma.criteria_versions.findFirst({
+        where: { semester_id: targetSemesterId, is_active: 1 },
+      })
+    ]);
 
     // 3b. ✅ KIỂM TRA QUYỀN CHẤM ĐIỂM THEO ROLE
     const allowedStatus = SCORING_PERMISSIONS[role];
@@ -699,17 +745,11 @@ export class ScoringService {
     }
 
     // 3b-2. ✅ KIỂM TRA HẠN CHÓT THEO ROLE
-    const semester = await this.getSemesterWithDeadlines(semesterId);
     if (semester) {
       this.checkDeadline(role, semester);
     }
 
     // 3c. Kiểm tra tiêu chí
-    const criteria = await prisma.criteria.findUnique({
-      where: { id: criteriaId },
-      include: { criteria_categories: true },
-    });
-
     if (!criteria) {
       throw new BadRequestException('Không tìm thấy tiêu chí!');
     }
@@ -719,23 +759,11 @@ export class ScoringService {
     }
 
     // ✅ MỚI: Cross-Semester Injection (Chống ném điểm tiêu chí khác học kỳ)
-    const enrollment = await prisma.semester_enrollments.findUnique({
-      where: { id: form.enrollment_id },
-    });
-    if (!enrollment) {
-      throw new BadRequestException('Không tìm thấy thông tin học kỳ của phiếu điểm!');
-    }
-    const activeVersion = await prisma.criteria_versions.findFirst({
-      where: { semester_id: enrollment.semester_id, is_active: 1 },
-    });
     if (activeVersion && criteria.criteria_categories?.criteria_version_id !== activeVersion.id) {
       throw new BadRequestException('Tiêu chí này không thuộc về học kỳ hiện tại của phiếu điểm!');
     }
 
     // ✅ MỚI: Chống ném điểm trực tiếp vào danh mục cha
-    const childrenCount = await prisma.criteria.count({
-      where: { parent_id: criteriaId, is_active: 1 },
-    });
     if (childrenCount > 0) {
       throw new BadRequestException('Không thể chấm điểm trực tiếp vào danh mục cha (cần chấm ở các mục con)!');
     }
@@ -805,26 +833,41 @@ export class ScoringService {
   // HELPER: enforceMutualExclusivity (Check 2 lần tránh gian lận)
   // =============================================
   private async enforceMutualExclusivity(tx: any, formId: string, criteriaId: number, role: string) {
-    const targetCriteria = await tx.criteria.findUnique({ where: { id: criteriaId } });
-    if (!targetCriteria || !targetCriteria.parent_id) return;
-    
-    const parent = await tx.criteria.findUnique({ where: { id: targetCriteria.parent_id } });
-    if (!parent || (parent.score_type !== 'RADIO' && parent.score_type !== 'OPTIONS')) return;
+    // ✅ PONYTAIL: Gộp 3 queries (target, parent, siblings) thành 1 nhờ Prisma include
+    const target = await tx.criteria.findUnique({
+      where: { id: criteriaId },
+      include: {
+        criteria: { // relation to parent
+          select: {
+            score_type: true,
+            other_criteria: { // relation to siblings (including self)
+              select: { id: true }
+            }
+          }
+        }
+      }
+    });
 
-    const siblings = await tx.criteria.findMany({ where: { parent_id: parent.id } });
-    const siblingIds = siblings.map((s: any) => s.id).filter((id: number) => id !== criteriaId);
+    if (!target || !target.criteria) return;
+    
+    const parentScoreType = target.criteria.score_type;
+    if (parentScoreType !== 'RADIO' && parentScoreType !== 'OPTIONS') return;
+
+    const siblingIds = target.criteria.other_criteria
+      .map((s: any) => s.id)
+      .filter((id: number) => id !== criteriaId);
 
     if (siblingIds.length > 0) {
-      const details = await tx.score_details.findMany({
-        where: { scoring_sheet_id: formId, criteria_id: { in: siblingIds } }
+      // ✅ PONYTAIL: Gộp lệnh find score_details và delete score_entries thành 1
+      await tx.score_entries.deleteMany({
+        where: {
+          scorer_role: role,
+          score_details: {
+            scoring_sheet_id: formId,
+            criteria_id: { in: siblingIds }
+          }
+        }
       });
-      const detailIds = details.map((d: any) => d.id);
-      
-      if (detailIds.length > 0) {
-        await tx.score_entries.deleteMany({
-          where: { score_detail_id: { in: detailIds }, scorer_role: role }
-        });
-      }
     }
   }
 
@@ -926,11 +969,23 @@ export class ScoringService {
     proofUrl?: string,
     semesterId?: string,
   ) {
+    criteriaId = Number(criteriaId);
+    score = Number(score);
+    if (isNaN(criteriaId)) throw new BadRequestException('ID tiêu chí không hợp lệ!');
+    if (isNaN(score)) throw new BadRequestException('Điểm không hợp lệ!');
+
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
+      targetSemesterId = activeSemester.id;
+    }
+
     // 5a-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
-    await this.verifyActorRole(actorId, studentId, role, semesterId);
+    await this.verifyActorRole(actorId, studentId, role, targetSemesterId);
 
     // 5a. Validate (bao gồm kiểm tra quyền role và security checks)
-    await this.validateBeforeScore(formId, criteriaId, score, role, studentId, semesterId, proofUrl);
+    await this.validateBeforeScore(formId, criteriaId, score, role, studentId, targetSemesterId, proofUrl);
 
     // 5b. Phân luồng theo Role
     const updateData: Record<string, any> = {};
@@ -955,11 +1010,6 @@ export class ScoringService {
     }
 
     // 5c. Tìm phiếu theo student_id (qua enrollment) để lấy scoring_sheet_id thực
-    let targetSemesterId = semesterId;
-    if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
-      targetSemesterId = activeSemester?.id;
-    }
     const scoreRecord = await prisma.scoring_sheets.findFirst({
       where: {
         semester_enrollments: {
@@ -1057,10 +1107,24 @@ export class ScoringService {
     actorId: string,
     semesterId?: string,
   ) {
-    await this.verifyActorRole(actorId, studentId, role, semesterId);
-    const scoreRecord = await this.getOrCreateDraftSheet(studentId, semesterId);
+    criteriaId = Number(criteriaId);
+    if (isNaN(criteriaId)) throw new BadRequestException('ID tiêu chí không hợp lệ!');
+
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
+      targetSemesterId = activeSemester.id;
+    }
+
+    await this.verifyActorRole(actorId, studentId, role, targetSemesterId);
     
-    const semester = await this.getSemesterWithDeadlines(semesterId);
+    // ✅ PONYTAIL: Gộp 2 truy vấn độc lập
+    const [scoreRecord, semester] = await Promise.all([
+      this.getOrCreateDraftSheet(studentId, targetSemesterId),
+      this.getSemesterWithDeadlines(targetSemesterId)
+    ]);
+
     if (semester) {
       this.checkDeadline(role, semester);
     }
@@ -1097,14 +1161,23 @@ export class ScoringService {
   //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
   // =============================================
   async submitForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string) {
-    // 6a-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
-    await this.verifyActorRole(actorId, studentId, role, semesterId);
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId) {
+      const activeSemester = await this.getActiveSemester();
+      if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
+      targetSemesterId = activeSemester.id;
+    }
 
-    // 6a. ✅ FIX: Dùng helper chung thay vì copy-paste logic tạo phiếu
-    const form = await this.getOrCreateDraftSheet(studentId, semesterId);
+    // 6a-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
+    await this.verifyActorRole(actorId, studentId, role, targetSemesterId);
+
+    // 6a. ✅ PONYTAIL: Gộp 2 truy vấn độc lập
+    const [form, semester] = await Promise.all([
+      this.getOrCreateDraftSheet(studentId, targetSemesterId),
+      this.getSemesterWithDeadlines(targetSemesterId)
+    ]);
 
     // 6a-2. ✅ KIỂM TRA HẠN CHÓT TRƯỚC KHI CHUYỂN TRẠNG THÁI
-    const semester = await this.getSemesterWithDeadlines(semesterId);
     if (semester) {
       this.checkDeadline(role, semester);
     }
@@ -1130,32 +1203,16 @@ export class ScoringService {
     // 6d. (Đã gỡ bỏ ràng buộc "phải chấm ít nhất 1 điểm")
     // Cho phép nộp phiếu trống → tổng điểm = 0
 
-    // 6e. ✅ TÍNH TỔNG ĐIỂM TRƯỚC KHI CHUYỂN TRẠNG THÁI
-    const totals = await this.calculateTotals(form.id);
+    // 6e. ✅ 3NF: Không ghi totals/classification vào DB — tính runtime khi cần
 
-    // 6f. ✅ CẬP NHẬT DATABASE (Status + Timestamp + Tổng điểm + current_step)
+    // 6f. ✅ CẬP NHẬT DATABASE (Status + Timestamp)
     const updateData: Record<string, any> = {
       status: transition.nextStatus,
-      current_step: transition.currentStep,
       updated_at: new Date(),
       [transition.timestampField]: new Date(),
       // Clear rejection info when resubmitting
       rejection_reason: null,
-      rejected_by_step: null,
     };
-
-    // Gắn tổng điểm tương ứng
-    if (role === 'STUDENT') {
-      updateData.student_total = totals.studentTotal;
-    } else if (role === 'CLASS_COMMITTEE') {
-      updateData.class_total = totals.classTotal;
-    } else if (role === 'ADVISOR') {
-      updateData.advisor_total = totals.advisorTotal;
-      updateData.final_total = totals.advisorTotal; // Điểm cuối = điểm CVHT
-      updateData.classification = this.getClassification(
-        Number(totals.advisorTotal),
-      );
-    }
 
     const updated = await prisma.$transaction(async (tx) => {
       const up = await tx.scoring_sheets.updateMany({
@@ -1172,8 +1229,8 @@ export class ScoringService {
 
       // ✅ Ghi audit log cho việc chuyển trạng thái phiếu
       await this.logAudit(actorId, 'SUBMIT_FORM', 'scoring_sheets', form.id,
-        { status: form.status, current_step: form.current_step },
-        { status: transition.nextStatus, current_step: transition.currentStep, role },
+        { status: form.status },
+        { status: transition.nextStatus, role },
         tx
       );
 
@@ -1290,14 +1347,15 @@ export class ScoringService {
   // 6.1 ✅ TRẢ LẠI PHIẾU (Chuyển sang REJECTED)
   // =============================================
   async rejectForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string, reason?: string) {
-    // 6.1-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
-    await this.verifyActorRole(actorId, studentId, role, semesterId);
-
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
       const activeSemester = await this.getActiveSemester();
-      targetSemesterId = activeSemester?.id;
+      if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
+      targetSemesterId = activeSemester.id;
     }
+
+    // 6.1-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
+    await this.verifyActorRole(actorId, studentId, role, targetSemesterId);
 
     const form = await prisma.scoring_sheets.findFirst({
       where: {
@@ -1328,7 +1386,6 @@ export class ScoringService {
     }
 
     const newStatus = role === 'CLASS_COMMITTEE' ? 'CLASS_REJECTED' : 'ADVISOR_REJECTED';
-    const rejectStep = role === 'CLASS_COMMITTEE' ? 2 : 3;
 
     await prisma.$transaction(async (tx) => {
       await tx.scoring_sheets.update({
@@ -1336,7 +1393,6 @@ export class ScoringService {
         data: {
           status: newStatus as any,
           rejection_reason: reason.trim(),
-          rejected_by_step: rejectStep,
           updated_at: new Date(),
         }
       });
@@ -1377,58 +1433,38 @@ export class ScoringService {
   //    ✅ FIX: Áp trần điểm theo danh mục (category max_score)
   //    Tránh tổng điểm vượt quá giới hạn khi gọi API trực tiếp
   // =============================================
-  private async calculateTotals(formId: string) {
-    // Lấy score_details + score_entries + criteria (để biết category_id)
-    const details = await prisma.score_details.findMany({
-      where: { scoring_sheet_id: formId },
-      select: {
-        criteria_id: true,
-        criteria: {
-          select: { category_id: true },
-        },
-        score_entries: {
-          select: { scorer_role: true, score: true },
-        },
-      },
-    });
-
-    // Lấy danh sách tất cả danh mục (để biết max_score mỗi danh mục)
-    const categories = await prisma.criteria_categories.findMany({
-      select: { id: true, max_score: true },
-    });
+  private computeTotalsPure(
+    details: any[],
+    categories: { id: string, max_score: number }[],
+    allCriteria: any[]
+  ) {
     const categoryMaxMap = new Map<string, number>();
     for (const cat of categories) {
       categoryMaxMap.set(cat.id, cat.max_score);
     }
 
-    // Chuẩn bị Map chứa điểm của các leaf node
     const studentScoreMap = new Map<number, number>();
     const classScoreMap = new Map<number, number>();
     const advisorScoreMap = new Map<number, number>();
-    const catIds = new Set<string>();
 
     for (const d of details) {
-      if (d.criteria?.category_id) catIds.add(d.criteria.category_id);
-
       const entries = d.score_entries || [];
       const sEntry = entries.find((e: any) => e.scorer_role === 'STUDENT');
       const cEntry = entries.find((e: any) => e.scorer_role === 'CLASS_COMMITTEE');
       const aEntry = entries.find((e: any) => e.scorer_role === 'ADVISOR');
 
-      if (sEntry !== undefined) studentScoreMap.set(d.criteria_id, Number(sEntry.score));
-      if (cEntry !== undefined) classScoreMap.set(d.criteria_id, Number(cEntry.score));
-      if (aEntry !== undefined) advisorScoreMap.set(d.criteria_id, Number(aEntry.score));
-    }
+      const sScore = sEntry !== undefined ? Number(sEntry.score) : 0;
+      const cScore = cEntry !== undefined ? Number(cEntry.score) : sScore;
+      const aScore = aEntry !== undefined ? Number(aEntry.score) : cScore;
 
-    // Lấy toàn bộ cây tiêu chí đang active thuộc các danh mục trên để áp dụng Khóa Điểm Theo Nhóm (Sub-limits)
-    const allCriteria = await prisma.criteria.findMany({
-      where: { category_id: { in: Array.from(catIds) }, is_active: 1 },
-    });
+      studentScoreMap.set(d.criteria_id, sScore);
+      classScoreMap.set(d.criteria_id, cScore);
+      advisorScoreMap.set(d.criteria_id, aScore);
+    }
 
     const criteriaIdsSet = new Set(allCriteria.map(c => c.id));
     const isRootItem = (c: any) => !c.parent_id || !criteriaIdsSet.has(c.parent_id);
 
-    // Hàm đệ quy tính điểm từ dưới lá lên, áp dụng khóa điểm (point limit) của tiêu chí cha
     const calculateTreeScore = (
       itemId: number,
       scoreMap: Map<number, number>,
@@ -1440,6 +1476,8 @@ export class ScoringService {
       const item = allCriteria.find((c) => c.id === itemId);
       if (!item) return 0;
       
+      if (item.score_type === 'FIXED') return item.point;
+      
       const children = allCriteria.filter((c) => c.parent_id === itemId);
       
       if (children.length > 0) {
@@ -1448,7 +1486,6 @@ export class ScoringService {
           sum += calculateTreeScore(child.id, scoreMap, visited);
         }
         
-        // Khóa điểm theo nhóm (Sub-limit/Group limit): Giới hạn điểm tổng của các con không vượt quá điểm của cha
         if (item.point > 0) return Math.min(sum, item.point);
         if (item.point < 0) return Math.min(0, Math.max(sum, item.point));
         return sum;
@@ -1463,7 +1500,6 @@ export class ScoringService {
 
     const rootCriteria = allCriteria.filter(isRootItem);
 
-    // Gom điểm theo từng danh mục (category_id) bằng cách duyệt qua các Root Items
     for (const root of rootCriteria) {
       const catId = root.category_id;
       
@@ -1477,7 +1513,6 @@ export class ScoringService {
       byCategoryAdvisor.set(catId, (byCategoryAdvisor.get(catId) || 0) + aScore);
     }
 
-    // Tính tổng sau khi áp trần cho mỗi danh mục
     let studentTotal = 0;
     let classTotal = 0;
     let advisorTotal = 0;
@@ -1487,25 +1522,49 @@ export class ScoringService {
       const rawClass = byCategoryClass.get(catId) || 0;
       const rawAdvisor = byCategoryAdvisor.get(catId) || 0;
 
-      // ✅ FIX: Áp sàn 0 và trần (max_score). 
-      // Điểm nhóm danh mục không được phép dưới 0 theo quy chế rèn luyện.
       studentTotal += Math.min(Math.max(0, rawStudent), maxScore);
       classTotal += Math.min(Math.max(0, rawClass), maxScore);
       advisorTotal += Math.min(Math.max(0, rawAdvisor), maxScore);
     }
 
-    // Đảm bảo tổng điểm cuối cùng không bị âm và không vượt quá 100 (đến khi tổng điểm phiếu về không thì dừng)
-    studentTotal = Math.min(100, Math.max(0, studentTotal));
-    classTotal = Math.min(100, Math.max(0, classTotal));
-    advisorTotal = Math.min(100, Math.max(0, advisorTotal));
-
-    // ✅ FIX: Làm tròn về 1 chữ số thập phân — khớp kiểu Decimal(5,1) trong DB
-    //    Tránh sai lệch xếp loại do JS float precision (79.999... vs 80.0)
-    studentTotal = Math.round(studentTotal * 10) / 10;
-    classTotal = Math.round(classTotal * 10) / 10;
-    advisorTotal = Math.round(advisorTotal * 10) / 10;
+    studentTotal = Math.round(Math.min(100, Math.max(0, studentTotal)) * 10) / 10;
+    classTotal = Math.round(Math.min(100, Math.max(0, classTotal)) * 10) / 10;
+    advisorTotal = Math.round(Math.min(100, Math.max(0, advisorTotal)) * 10) / 10;
 
     return { studentTotal, classTotal, advisorTotal };
+  }
+
+  // =============================================
+  // 7. ✅ TÍNH TỔNG ĐIỂM TỰ ĐỘNG
+  //    ✅ FIX: Áp trần điểm theo danh mục (category max_score)
+  //    Tránh tổng điểm vượt quá giới hạn khi gọi API trực tiếp
+  // =============================================
+  private async calculateTotals(formId: string) {
+    // ✅ PONYTAIL: Gộp truy vấn details và categories
+    const [details, categories] = await Promise.all([
+      prisma.score_details.findMany({
+        where: { scoring_sheet_id: formId },
+        select: {
+          criteria_id: true,
+          criteria: { select: { category_id: true } },
+          score_entries: { select: { scorer_role: true, score: true } },
+        },
+      }),
+      prisma.criteria_categories.findMany({
+        select: { id: true, max_score: true },
+      })
+    ]);
+
+    const catIds = new Set<string>();
+    for (const d of details) {
+      if (d.criteria?.category_id) catIds.add(d.criteria.category_id);
+    }
+
+    const allCriteria = await prisma.criteria.findMany({
+      where: { category_id: { in: Array.from(catIds) }, is_active: 1 },
+    });
+
+    return this.computeTotalsPure(details, categories, allCriteria);
   }
 
   // =============================================

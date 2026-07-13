@@ -6,7 +6,7 @@ import { AlertTriangle } from 'lucide-react';
 
 const API_BASE = '/proxy-api';
 
-const FIXED_CODES = ['1.1.1', '2.1', '4.1', '3.1.1', '2.2'];
+
 
 const QUANTITY_MULTIPLIERS: Record<string, number> = {
   '1.2.1': 1, '3.2.1': 1,
@@ -223,7 +223,7 @@ export function ScoringForm({
 
         let hasClassEntry = false;
         let hasAdvisorEntry = false;
-        
+
         scoresData.data.forEach((s: ScoreDetail) => {
           const entries = s.score_entries || [];
           if (entries.some(e => e.scorer_role === 'CLASS_COMMITTEE')) hasClassEntry = true;
@@ -403,7 +403,7 @@ export function ScoringForm({
       visited.add(itemId);
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return 0;
-      if (FIXED_CODES.includes(item.code)) return item.point;
+      if (item.score_type === 'FIXED') return item.point;
       const children = criteria.filter((c) => c.parent_id === itemId);
       if (children.length > 0) {
         const sum = children.reduce(
@@ -425,7 +425,7 @@ export function ScoringForm({
       visited.add(itemId);
       const item = criteria.find((c) => c.id === itemId);
       if (!item) return 0;
-      if (FIXED_CODES.includes(item.code)) return item.point;
+      if (item.score_type === 'FIXED') return item.point;
       const children = criteria.filter((c) => c.parent_id === itemId);
       if (children.length > 0) {
         const sum = children.reduce(
@@ -471,7 +471,7 @@ export function ScoringForm({
           const absMultiplier = Math.abs(multiplier);
           const inputQuantity = Math.abs(num) / absMultiplier;
           const maxQuantity = isDeduction ? 40 : 30;
-          
+
           if (inputQuantity > maxQuantity) {
             const clampedScore = maxQuantity * absMultiplier;
             finalValue = (multiplier < 0 ? -clampedScore : clampedScore).toString();
@@ -496,7 +496,7 @@ export function ScoringForm({
 
     setInputValues((prev) => {
       const next = { ...prev };
-      
+
       // Mutual Exclusivity Logic for OPTIONS/RADIO criteria
       if (item && item.parent_id) {
         const parent = criteria.find(c => c.id === item.parent_id);
@@ -536,26 +536,26 @@ export function ScoringForm({
 
       const saveSingleItem = async (item: typeof leafItems[0]) => {
         let score = 0;
-        if (FIXED_CODES.includes(item.code)) {
+        if (item.score_type === 'FIXED') {
           score = item.point;
         } else {
           const raw = inputValues[item.id] ?? '';
           if (raw === '') {
             const oldSavedMap = getSavedMap(currentRole);
             if (oldSavedMap[item.id] !== undefined) {
-               try {
-                 const r = await fetch(`${API_BASE}/scoring/${actualFormId}/delete-criteria`, {
-                   method: 'POST', credentials: 'include', headers: headersInit,
-                   body: JSON.stringify({ criteriaId: item.id, role: currentRole, studentId, semesterId }),
-                 });
-                 if (r.ok) return { id: item.id, score: null };
-                 const errData = await r.json().catch(() => null);
-                 lastError = errData?.message || `HTTP ${r.status}`;
-                 failCount++;
-               } catch (e) {
-                 console.error('Lỗi xóa điểm:', e);
-                 failCount++;
-               }
+              try {
+                const r = await fetch(`${API_BASE}/scoring/${actualFormId}/delete-criteria`, {
+                  method: 'POST', credentials: 'include', headers: headersInit,
+                  body: JSON.stringify({ criteriaId: item.id, role: currentRole, studentId, semesterId }),
+                });
+                if (r.ok) return { id: item.id, score: null };
+                const errData = await r.json().catch(() => null);
+                lastError = errData?.message || `HTTP ${r.status}`;
+                failCount++;
+              } catch (e) {
+                console.error('Lỗi xóa điểm:', e);
+                failCount++;
+              }
             }
             return null;
           }
@@ -962,7 +962,7 @@ export function ScoringForm({
                             <th className="px-2 py-1.5 w-16">Mã</th>
                             <th className="px-2 py-1.5">Nội dung</th>
                             <th className="px-2 py-1.5 w-16 text-center">Điểm</th>
-                            <th className="px-2 py-1.5 w-20 text-center">Số lượng</th>
+                            <th className="px-2 py-1.5 w-20 text-center">Số lần</th>
                             <th className="px-2 py-1.5 w-24 text-center">Tổng điểm</th>
                             {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
                               <th className="px-2 py-1.5 w-24 text-center">BCS Lớp</th>
@@ -982,7 +982,7 @@ export function ScoringForm({
                               const isParent = parentIds.has(item.id);
                               const depth = depthMap.get(item.id) || 0;
                               const isExpanded = expandedIds.has(item.id);
-                              const isFixed = FIXED_CODES.includes(item.code);
+                              const isFixed = item.score_type === 'FIXED';
                               const val = inputValues[item.id] || '';
                               const evidence = evidenceValues?.[item.id] || '';
                               const isRowSaving = savingId === item.id;
@@ -1089,10 +1089,10 @@ export function ScoringForm({
                                               style={{ textAlignLast: 'center' }}
                                             >
                                               <option value="" disabled>-</option>
-                                              {Array.isArray(item.score_options) 
+                                              {Array.isArray(item.score_options)
                                                 ? item.score_options.map((opt, idx) => (
-                                                    <option key={idx} value={String(opt)}>{opt}</option>
-                                                  ))
+                                                  <option key={idx} value={String(opt)}>{opt}</option>
+                                                ))
                                                 : <option value={item.point}>{item.point}</option>}
                                             </select>
                                             {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
@@ -1130,10 +1130,10 @@ export function ScoringForm({
                                                 style={{ textAlignLast: 'center' }}
                                               >
                                                 <option value="" disabled>-</option>
-                                                {Array.isArray(item.score_options) 
+                                                {Array.isArray(item.score_options)
                                                   ? item.score_options.map((opt, idx) => (
-                                                      <option key={idx} value={String(opt)}>{opt}</option>
-                                                    ))
+                                                    <option key={idx} value={String(opt)}>{opt}</option>
+                                                  ))
                                                   : <option value={item.point}>{item.point}</option>}
                                               </select>
                                               {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}
@@ -1172,10 +1172,10 @@ export function ScoringForm({
                                                 style={{ textAlignLast: 'center' }}
                                               >
                                                 <option value="" disabled>-</option>
-                                                {Array.isArray(item.score_options) 
+                                                {Array.isArray(item.score_options)
                                                   ? item.score_options.map((opt, idx) => (
-                                                      <option key={idx} value={String(opt)}>{opt}</option>
-                                                    ))
+                                                    <option key={idx} value={String(opt)}>{opt}</option>
+                                                  ))
                                                   : <option value={item.point}>{item.point}</option>}
                                               </select>
                                               {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-red-900 border-t-transparent rounded-full animate-spin bg-white"></div>}

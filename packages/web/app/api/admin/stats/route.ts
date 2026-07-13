@@ -40,7 +40,15 @@ export async function GET(req: Request) {
       },
     },
     include: {
-      scoring_sheets: true,
+      scoring_sheets: {
+        include: {
+          score_details: {
+            select: {
+              score_entries: { select: { scorer_role: true, score: true } },
+            },
+          },
+        },
+      },
       classes: {
         include: { departments: true }
       }
@@ -54,6 +62,8 @@ export async function GET(req: Request) {
   const byClassification: Record<string, number> = {};
   const deptMap = new Map<string, any>(); // departmentName -> stats
 
+  const getClassif = (score: number) => score >= 90 ? 'EXCELLENT' : score >= 80 ? 'VERY_GOOD' : score >= 65 ? 'GOOD' : score >= 50 ? 'AVERAGE' : score >= 35 ? 'WEAK' : 'POOR';
+
   for (const enr of enrollments) {
     const sheet = enr.scoring_sheets;
     const isSubmitted = sheet?.status && sheet.status !== 'DRAFT';
@@ -61,16 +71,29 @@ export async function GET(req: Request) {
     
     if (sheet?.status === 'FINALIZED' || sheet?.status === 'SCHOOL_REVIEWING') finalized++;
 
-    if (sheet?.final_total != null) {
-      totalScore += Number(sheet.final_total);
-      scoreCount++;
-    } else if (sheet?.advisor_total != null) {
-      totalScore += Number(sheet.advisor_total);
+    // ✅ 3NF: Compute totals at runtime
+    let computedTotal: number | null = null;
+    let classification: string | null = null;
+    if (sheet && sheet.score_details) {
+      let aSum = 0;
+      for (const d of sheet.score_details) {
+        const entries = d.score_entries || [];
+        const sEntry = entries.find((x: any) => x.scorer_role === 'STUDENT');
+        const cEntry = entries.find((x: any) => x.scorer_role === 'CLASS_COMMITTEE');
+        const aEntry = entries.find((x: any) => x.scorer_role === 'ADVISOR');
+        aSum += aEntry ? Number(aEntry.score) : (cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0));
+      }
+      computedTotal = Math.round(Math.min(100, Math.max(0, aSum)) * 10) / 10;
+      classification = (sheet as any).classification_override || getClassif(computedTotal);
+    }
+
+    if (computedTotal != null) {
+      totalScore += computedTotal;
       scoreCount++;
     }
 
-    if (sheet?.classification) {
-      byClassification[sheet.classification] = (byClassification[sheet.classification] || 0) + 1;
+    if (classification) {
+      byClassification[classification] = (byClassification[classification] || 0) + 1;
     }
 
     // Khoa stats
@@ -88,16 +111,13 @@ export async function GET(req: Request) {
     if (isSubmitted) dStat.submitted++;
     if (sheet?.status === 'FINALIZED' || sheet?.status === 'SCHOOL_REVIEWING') dStat.finalized++;
     
-    if (sheet?.final_total != null) {
-      dStat.sumScore += Number(sheet.final_total);
-      dStat.scoreCount++;
-    } else if (sheet?.advisor_total != null) {
-      dStat.sumScore += Number(sheet.advisor_total);
+    if (computedTotal != null) {
+      dStat.sumScore += computedTotal;
       dStat.scoreCount++;
     }
 
-    if (sheet?.classification) {
-      dStat.byClassification[sheet.classification] = (dStat.byClassification[sheet.classification] || 0) + 1;
+    if (classification) {
+      dStat.byClassification[classification] = (dStat.byClassification[classification] || 0) + 1;
     }
   }
 

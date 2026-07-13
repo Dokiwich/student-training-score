@@ -109,22 +109,42 @@ export class DepartmentService {
         users: { select: { id: true, student_id: true, full_name: true } },
         classes: { select: { code: true, name: true } },
         scoring_sheets: {
-          select: { id: true, status: true, student_total: true, class_total: true, advisor_total: true, final_total: true, classification: true, student_submitted_at: true, class_reviewed_at: true, advisor_approved_at: true },
+          select: { id: true, status: true, classification_override: true, student_submitted_at: true, class_reviewed_at: true, advisor_approved_at: true,
+            score_details: { select: { score_entries: { select: { scorer_role: true, score: true } } } },
+          },
         },
       },
       orderBy: [{ classes: { code: 'asc' } }, { users: { full_name: 'asc' } }],
     });
 
+    const getClassif = (score: number) => score >= 90 ? 'EXCELLENT' : score >= 80 ? 'VERY_GOOD' : score >= 65 ? 'GOOD' : score >= 50 ? 'AVERAGE' : score >= 35 ? 'WEAK' : 'POOR';
+
     const data: DeptStudent[] = enrollments.map((e) => {
       const s = e.users; const c = e.classes; const sheet = e.scoring_sheets || null;
+      // ✅ 3NF: Compute totals at runtime
+      let studentTotal: number | null = null, classTotal: number | null = null, advisorTotal: number | null = null, finalTotal: number | null = null;
+      let classification: string | null = null;
+      if (sheet && (sheet as any).score_details) {
+        let sSum = 0, cSum = 0, aSum = 0;
+        for (const d of (sheet as any).score_details) {
+          const entries = d.score_entries || [];
+          const sE = entries.find((x: any) => x.scorer_role === 'STUDENT');
+          const cE = entries.find((x: any) => x.scorer_role === 'CLASS_COMMITTEE');
+          const aE = entries.find((x: any) => x.scorer_role === 'ADVISOR');
+          sSum += sE ? Number(sE.score) : 0;
+          cSum += cE ? Number(cE.score) : (sE ? Number(sE.score) : 0);
+          aSum += aE ? Number(aE.score) : (cE ? Number(cE.score) : (sE ? Number(sE.score) : 0));
+        }
+        studentTotal = Math.round(Math.min(100, Math.max(0, sSum)) * 10) / 10;
+        classTotal = Math.round(Math.min(100, Math.max(0, cSum)) * 10) / 10;
+        advisorTotal = Math.round(Math.min(100, Math.max(0, aSum)) * 10) / 10;
+        finalTotal = advisorTotal;
+        classification = (sheet as any).classification_override || getClassif(finalTotal);
+      }
       return {
         id: s.id, studentCode: s.student_id, name: s.full_name, className: c.name, classCode: c.code,
         status: sheet?.status || 'NO_SHEET',
-        studentTotal: sheet?.student_total != null ? Number(sheet.student_total) : null,
-        classTotal: sheet?.class_total != null ? Number(sheet.class_total) : null,
-        advisorTotal: sheet?.advisor_total != null ? Number(sheet.advisor_total) : null,
-        finalTotal: sheet?.final_total != null ? Number(sheet.final_total) : null,
-        classification: sheet?.classification || null,
+        studentTotal, classTotal, advisorTotal, finalTotal, classification,
         studentSubmittedAt: sheet?.student_submitted_at?.toISOString() || null,
       };
     });
@@ -158,10 +178,13 @@ export class DepartmentService {
       },
       select: {
         status: true,
-        final_total: true,
-        advisor_total: true,
-        classification: true,
+        classification_override: true,
         student_submitted_at: true,
+        score_details: {
+          select: {
+            score_entries: { select: { scorer_role: true, score: true } },
+          },
+        },
         semester_enrollments: {
           select: {
             classes: { select: { code: true, name: true } },
@@ -205,18 +228,34 @@ export class DepartmentService {
     let scoreSum = 0;
     let scoreCount = 0;
 
+    const getClassifStats = (score: number) => score >= 90 ? 'EXCELLENT' : score >= 80 ? 'VERY_GOOD' : score >= 65 ? 'GOOD' : score >= 50 ? 'AVERAGE' : score >= 35 ? 'WEAK' : 'POOR';
+
     for (const s of sheets) {
       const isSubmitted = s.status !== 'DRAFT';
       const isFinalized = FINALIZED_STATUSES.includes(s.status);
-      const cls = s.classification || 'NONE';
       const classCode = s.semester_enrollments?.classes?.code || 'UNKNOWN';
+
+      // ✅ 3NF: Compute totals at runtime
+      let effectiveScore: number | null = null;
+      let cls = 'NONE';
+      if (s.score_details) {
+        let aSum = 0;
+        for (const d of s.score_details as any[]) {
+          const entries = d.score_entries || [];
+          const sE = entries.find((x: any) => x.scorer_role === 'STUDENT');
+          const cE = entries.find((x: any) => x.scorer_role === 'CLASS_COMMITTEE');
+          const aE = entries.find((x: any) => x.scorer_role === 'ADVISOR');
+          aSum += aE ? Number(aE.score) : (cE ? Number(cE.score) : (sE ? Number(sE.score) : 0));
+        }
+        effectiveScore = Math.round(Math.min(100, Math.max(0, aSum)) * 10) / 10;
+        cls = (s as any).classification_override || getClassifStats(effectiveScore);
+      }
 
       if (isSubmitted) submitted++;
       if (isFinalized) finalized++;
 
       byClassification[cls] = (byClassification[cls] || 0) + 1;
 
-      const effectiveScore = s.final_total != null ? Number(s.final_total) : (s.advisor_total != null ? Number(s.advisor_total) : null);
       if (effectiveScore != null) {
         scoreSum += effectiveScore;
         scoreCount++;

@@ -56,9 +56,9 @@ function useSemesterStatus(intervalMs = 30000) {
 
   useEffect(() => {
     fetchSemester();
-    timerRef.current = setInterval(fetchSemester, intervalMs);
+    // Bỏ polling liên tục cho semester/active vì dữ liệu rất ít thay đổi
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [intervalMs]);
+  }, []);
 
   return { semester, lastUpdated, refetch: fetchSemester };
 }
@@ -217,7 +217,7 @@ function useNotifications(intervalMs = 30000) {
 }
 
 function NotificationBell({ collapsed }: { collapsed: boolean }) {
-  const { notifications, unreadCount, loading, markAsRead } = useNotifications(30000);
+  const { notifications, unreadCount, loading, markAsRead } = useNotifications(60000);
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -539,7 +539,7 @@ export function DashboardLayout({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
-  const { semester: activeSemester } = useSemesterStatus(30000); // poll every 30s
+  const { semester: activeSemester } = useSemesterStatus();
 
   // Close sidebar on route change (mobile)
   useEffect(() => {

@@ -66,11 +66,13 @@ export class AppealService {
           select: {
             id: true,
             status: true,
-            student_total: true,
-            class_total: true,
-            advisor_total: true,
-            final_total: true,
-            classification: true,
+            classification_override: true,
+            score_details: {
+              select: {
+                criteria: { select: { category_id: true } },
+                score_entries: { select: { scorer_role: true, score: true } },
+              },
+            },
             semester_enrollments: {
               select: {
                 users: { select: { id: true, full_name: true, student_id: true } },
@@ -82,6 +84,9 @@ export class AppealService {
         },
         users_appeals_resolved_byTousers: {
           select: { full_name: true },
+        },
+        appeal_resolutions: {
+          include: { users: { select: { full_name: true } } },
         },
       },
     });
@@ -136,15 +141,31 @@ export class AppealService {
         }
       }
 
-      // Lấy tên người duyệt Khoa
-      let deptResolverName: string | null = null;
-      if (a.dept_resolved_by) {
-        const deptResolver = await prisma.users.findUnique({
-          where: { id: a.dept_resolved_by },
-          select: { full_name: true },
-        });
-        deptResolverName = deptResolver?.full_name || null;
+      // ✅ 3NF: Get dept resolution from appeal_resolutions table
+      const deptRes = (a.appeal_resolutions || []).find((r: any) => r.level === 'DEPARTMENT');
+
+      // ✅ 3NF: Compute totals at runtime
+      let studentTotal: number | null = null;
+      let classTotal: number | null = null;
+      let advisorTotal: number | null = null;
+      let finalTotal: number | null = null;
+      if (sheet.score_details) {
+        let sSum = 0, cSum = 0, aSum = 0;
+        for (const d of sheet.score_details as any[]) {
+          const entries = d.score_entries || [];
+          const sEntry = entries.find((x: any) => x.scorer_role === 'STUDENT');
+          const cEntry = entries.find((x: any) => x.scorer_role === 'CLASS_COMMITTEE');
+          const aEntry = entries.find((x: any) => x.scorer_role === 'ADVISOR');
+          sSum += sEntry ? Number(sEntry.score) : 0;
+          cSum += cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0);
+          aSum += aEntry ? Number(aEntry.score) : (cEntry ? Number(cEntry.score) : (sEntry ? Number(sEntry.score) : 0));
+        }
+        studentTotal = Math.round(Math.min(100, Math.max(0, sSum)) * 10) / 10;
+        classTotal = Math.round(Math.min(100, Math.max(0, cSum)) * 10) / 10;
+        advisorTotal = Math.round(Math.min(100, Math.max(0, aSum)) * 10) / 10;
+        finalTotal = advisorTotal;
       }
+      const classification = sheet.classification_override || (finalTotal != null ? this.getClassification(finalTotal) : null);
 
       return {
         id: a.id,
@@ -160,12 +181,12 @@ export class AppealService {
         resolvedBy: a.users_appeals_resolved_byTousers?.full_name || null,
         resolvedAt: a.resolved_at?.toISOString() || null,
         createdAt: a.created_at.toISOString(),
-        // Thông tin duyệt cấp Khoa
-        deptDecision: a.dept_decision || null,
-        deptResolution: a.dept_resolution || null,
-        deptResolvedBy: deptResolverName,
-        deptResolvedAt: a.dept_resolved_at?.toISOString() || null,
-        deptNewScore: a.dept_new_score != null ? Number(a.dept_new_score) : null,
+        // Thông tin duyệt cấp Khoa (từ appeal_resolutions)
+        deptDecision: deptRes?.decision || null,
+        deptResolution: deptRes?.resolution || null,
+        deptResolvedBy: deptRes?.users?.full_name || null,
+        deptResolvedAt: deptRes?.resolved_at?.toISOString() || null,
+        deptNewScore: deptRes?.new_score != null ? Number(deptRes.new_score) : null,
         sheetId: sheet.id,
         sheetStatus: sheet.status,
         studentName: enrollment.users.full_name,
@@ -174,11 +195,11 @@ export class AppealService {
         semesterCode: enrollment.semesters.code,
         className: enrollment.classes.name,
         classCode: enrollment.classes.code,
-        studentTotal: sheet.student_total != null ? Number(sheet.student_total) : null,
-        classTotal: sheet.class_total != null ? Number(sheet.class_total) : null,
-        advisorTotal: sheet.advisor_total != null ? Number(sheet.advisor_total) : null,
-        finalTotal: sheet.final_total != null ? Number(sheet.final_total) : null,
-        classification: sheet.classification,
+        studentTotal,
+        classTotal,
+        advisorTotal,
+        finalTotal,
+        classification,
       };
     }));
 
@@ -385,18 +406,24 @@ export class AppealService {
         throw new ForbiddenException('Sinh viên này không thuộc khoa của bạn');
       }
 
-      // Cập nhật appeal → DEPT_REVIEWED (chưa chốt, chỉ ghi đề xuất)
-      await prisma.appeals.update({
-        where: { id: appealId },
-        data: {
-          status: 'DEPT_REVIEWED',
-          dept_decision: decision,
-          dept_resolution: resolution.trim(),
-          dept_resolved_by: resolverId,
-          dept_resolved_at: new Date(),
-          dept_new_score: newScore != null ? newScore : null,
-        },
-      });
+      // ✅ 3NF: Cập nhật appeal → DEPT_REVIEWED và tạo appeal_resolutions record
+      await prisma.$transaction([
+        prisma.appeals.update({
+          where: { id: appealId },
+          data: { status: 'DEPT_REVIEWED' },
+        }),
+        prisma.appeal_resolutions.create({
+          data: {
+            id: randomUUID(),
+            appeal_id: appealId,
+            level: 'DEPARTMENT',
+            resolver_id: resolverId,
+            decision,
+            resolution: resolution.trim(),
+            new_score: newScore != null ? newScore : null,
+          },
+        }),
+      ]);
 
       // Audit log
       try {
@@ -408,7 +435,7 @@ export class AppealService {
             entity_type: 'appeals',
             entity_id: appealId,
             old_value: { status: 'PENDING' },
-            new_value: { status: 'DEPT_REVIEWED', dept_decision: decision, dept_new_score: newScore ?? null },
+            new_value: { status: 'DEPT_REVIEWED', decision, new_score: newScore ?? null, level: 'DEPARTMENT' },
           },
         });
       } catch (err) {
@@ -472,16 +499,29 @@ export class AppealService {
         throw new BadRequestException('Khiếu nại này đã được xử lý rồi');
       }
 
-      // Cập nhật appeal → ACCEPTED / REJECTED (chốt sổ)
-      await prisma.appeals.update({
-        where: { id: appealId },
-        data: {
-          status: decision,
-          resolved_by: resolverId,
-          resolution: resolution.trim(),
-          resolved_at: new Date(),
-        },
-      });
+      // Cập nhật appeal → ACCEPTED / REJECTED (chốt sổ) + ghi appeal_resolutions
+      await prisma.$transaction([
+        prisma.appeals.update({
+          where: { id: appealId },
+          data: {
+            status: decision,
+            resolved_by: resolverId,
+            resolution: resolution.trim(),
+            resolved_at: new Date(),
+          },
+        }),
+        prisma.appeal_resolutions.create({
+          data: {
+            id: randomUUID(),
+            appeal_id: appealId,
+            level: 'SCHOOL',
+            resolver_id: resolverId,
+            decision,
+            resolution: resolution.trim(),
+            new_score: newScore ?? null,
+          },
+        }),
+      ]);
 
       // Nếu ACCEPTED + có newScore → cập nhật điểm chính thức
       if (decision === 'ACCEPTED' && newScore != null && appeal.evidence_note) {
@@ -553,14 +593,11 @@ export class AppealService {
 
       let sheetTransitioned = false;
       if (remainingCount === 0) {
-        const totals = await this.recalculateTotals(appeal.scoring_sheet_id);
+        // ✅ 3NF: Chỉ cập nhật status, không ghi totals vào DB
         await prisma.scoring_sheets.update({
           where: { id: appeal.scoring_sheet_id },
           data: {
             status: 'SCHOOL_REVIEWING',
-            advisor_total: totals.advisorTotal,
-            final_total: totals.advisorTotal,
-            classification: this.getClassification(Number(totals.advisorTotal)) as any,
             updated_at: new Date(),
           },
         });
@@ -667,15 +704,21 @@ export class AppealService {
       });
 
       if (pendingAppeals.length > 0) {
+        // ✅ 3NF: Update appeals status + create appeal_resolutions records
         await prisma.appeals.updateMany({
           where: { scoring_sheet_id: sheetId, status: 'PENDING' },
-          data: {
-            status: 'DEPT_REVIEWED',
-            dept_decision: 'REJECTED',
-            dept_resolution: resolveMessage,
-            dept_resolved_by: resolverId,
-            dept_resolved_at: new Date(),
-          },
+          data: { status: 'DEPT_REVIEWED' },
+        });
+        // Create appeal_resolutions for each
+        await prisma.appeal_resolutions.createMany({
+          data: pendingAppeals.map(pa => ({
+            id: randomUUID(),
+            appeal_id: pa.id,
+            level: 'DEPARTMENT',
+            resolver_id: resolverId,
+            decision: 'REJECTED',
+            resolution: resolveMessage,
+          })),
         });
       }
 
@@ -712,28 +755,36 @@ export class AppealService {
     });
 
     if (unresolved.length > 0) {
-      await prisma.appeals.updateMany({
-        where: { scoring_sheet_id: sheetId, status: { in: ['PENDING', 'DEPT_REVIEWED'] } },
-        data: {
-          status: 'REJECTED',
-          resolved_by: resolverId,
-          resolution: resolveMessage,
-          resolved_at: new Date(),
-        },
+      const resolvedAt = new Date();
+      await prisma.$transaction(async (tx) => {
+        await tx.appeals.updateMany({
+          where: { scoring_sheet_id: sheetId, status: { in: ['PENDING', 'DEPT_REVIEWED'] } },
+          data: {
+            status: 'REJECTED',
+            resolved_by: resolverId,
+            resolution: resolveMessage,
+            resolved_at: resolvedAt,
+          },
+        });
+        await tx.appeal_resolutions.createMany({
+          data: unresolved.map(a => ({
+            id: randomUUID(),
+            appeal_id: a.id,
+            level: 'SCHOOL',
+            resolver_id: resolverId,
+            decision: 'REJECTED',
+            resolution: resolveMessage,
+            resolved_at: resolvedAt,
+          })),
+        });
       });
     }
 
-    // Tính lại tổng điểm
-    const totals = await this.recalculateTotals(sheetId);
-
-    // Chuyển trạng thái phiếu → SCHOOL_REVIEWING
+    // ✅ 3NF: Chuyển trạng thái phiếu → SCHOOL_REVIEWING (không ghi totals)
     await prisma.scoring_sheets.update({
       where: { id: sheetId },
       data: {
         status: 'SCHOOL_REVIEWING',
-        advisor_total: totals.advisorTotal,
-        final_total: totals.advisorTotal,
-        classification: this.getClassification(Number(totals.advisorTotal)) as any,
         updated_at: new Date(),
       },
     });
@@ -777,7 +828,6 @@ export class AppealService {
       data: {
         rejectedCount: unresolved.length,
         newStatus: 'SCHOOL_REVIEWING',
-        totals,
       },
     };
   }

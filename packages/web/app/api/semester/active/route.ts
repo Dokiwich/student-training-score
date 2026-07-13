@@ -50,10 +50,23 @@ const SEMESTER_SELECT = {
   school_deadline: true,
 } as const;
 
+let cachedSemester: any = null;
+let cacheExpires = 0;
+
 // Public endpoint — không cần auth, mọi role đều đọc được
 // Trả về học kỳ đang active (is_active = 1) hoặc học kỳ gần nhất
 export async function GET() {
   try {
+    const now = Date.now();
+    if (cachedSemester && cacheExpires > now) {
+      return NextResponse.json({ data: cachedSemester }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+      });
+    }
+
     // Ưu tiên học kỳ đang active
     let semester = await prisma.semesters.findFirst({
       where: { is_active: 1 },
@@ -80,6 +93,9 @@ export async function GET() {
     if (computed !== semester.status) {
       semester = { ...semester, status: computed as any };
     }
+
+    cachedSemester = semester;
+    cacheExpires = now + 60000; // cache 60s
 
     return NextResponse.json({ data: semester }, {
       headers: {

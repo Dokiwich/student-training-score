@@ -69,7 +69,11 @@ export function AdvisorSummary() {
     
     const byClass: Record<string, number> = {};
     students.forEach((s) => { const cls = s.classification || 'NONE'; byClass[cls] = (byClass[cls] || 0) + 1; });
-    const avgScore = total > 0 ? (students.reduce((sum, s) => sum + (s.finalTotal || s.advisorTotal || 0), 0) / total).toFixed(1) : '0';
+
+    const scoredStudents = students.filter(s => s.finalTotal != null || s.advisorTotal != null || s.classTotal != null || s.studentTotal != null);
+    const avgScore = scoredStudents.length > 0
+      ? (scoredStudents.reduce((sum, s) => sum + (s.finalTotal || s.advisorTotal || s.classTotal || s.studentTotal || 0), 0) / scoredStudents.length).toFixed(1)
+      : '0';
     
     return { total, submitted, unsubmitted, submittedPct, byClass, avgScore };
   }, [students]);

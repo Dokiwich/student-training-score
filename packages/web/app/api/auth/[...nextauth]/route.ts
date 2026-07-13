@@ -4,6 +4,9 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { prisma } from "@student-score/database";
 
+// In-memory cache for session version to avoid DB query on every request
+const sessionCache = new Map<string, { version: number, expires: number }>();
+
 export const authOptions: AuthOptions = {
   providers: [
     CredentialsProvider({
@@ -17,18 +20,16 @@ export const authOptions: AuthOptions = {
           return null;
         }
         
-        // Try finding by student_id first, then by email
-        let user = await prisma.users.findFirst({
-          where: { student_id: credentials.username },
+        // Find by student_id OR email in a single query to reduce DB roundtrips
+        const user = await prisma.users.findFirst({
+          where: {
+            OR: [
+              { student_id: credentials.username },
+              { email: credentials.username }
+            ]
+          },
           include: { user_roles: { include: { roles: true } } }
         });
-        
-        if (!user) {
-          user = await prisma.users.findFirst({
-            where: { email: credentials.username },
-            include: { user_roles: { include: { roles: true } } }
-          });
-        }
         
         if (!user) {
           return null;
@@ -90,13 +91,27 @@ export const authOptions: AuthOptions = {
         token.studentId = user.email;
         token.session_version = (user as any).session_version || 1;
       } else if (token.id) {
-        // Validate session_version against database for subsequent requests
-        const dbUser = await prisma.users.findUnique({
-          where: { id: token.id as string },
-          select: { session_version: true }
-        });
-        if (!dbUser || dbUser.session_version !== token.session_version) {
-          console.log("Session Invalidated!", { dbUser, token_session_version: token.session_version, token_id: token.id });
+        const now = Date.now();
+        const cached = sessionCache.get(token.id as string);
+        
+        let isValid = false;
+        if (cached && cached.expires > now) {
+          isValid = cached.version === token.session_version;
+        } else {
+          // Validate session_version against database for subsequent requests
+          const dbUser = await prisma.users.findUnique({
+            where: { id: token.id as string },
+            select: { session_version: true }
+          });
+          
+          if (dbUser) {
+            sessionCache.set(token.id as string, { version: dbUser.session_version, expires: now + 60000 }); // cache 60s
+            isValid = dbUser.session_version === token.session_version;
+          }
+        }
+
+        if (!isValid) {
+          console.log("Session Invalidated!", { token_session_version: token.session_version, token_id: token.id });
           return {}; // Invalidate token
         }
       }

@@ -42,15 +42,16 @@ export async function POST(
       return NextResponse.json({ message: 'Không tìm thấy phiếu điểm.' }, { status: 404 });
     }
 
-    const oldClassification = sheet.classification;
+    // ✅ 3NF: classification is now computed at runtime; store override
+    const oldClassification = (sheet as any).classification_override || 'Computed at runtime';
 
-    // We will update the sheet classification and set its status to FINALIZED 
+    // We will update the sheet classification_override and set its status to FINALIZED 
     // to prevent further automatic recalculation when others edit it.
     await prisma.$transaction(async (tx) => {
       await tx.scoring_sheets.update({
         where: { id: formId },
         data: {
-          classification: newClassification as any,
+          classification_override: newClassification as any,
           status: 'FINALIZED',
           school_finalized_at: new Date(),
           updated_at: new Date(),
@@ -73,8 +74,8 @@ export async function POST(
 
     // Write audit log safely outside the tx or use logAdminAction which has its own try/catch
     await logAdminAction(adminId, 'DEMOTE_CLASSIFICATION', 'scoring_sheets', formId, 
-      { classification: oldClassification, status: sheet.status },
-      { classification: newClassification, status: 'FINALIZED', reason }
+      { classification_override: oldClassification, status: sheet.status },
+      { classification_override: newClassification, status: 'FINALIZED', reason }
     );
 
     return NextResponse.json({ message: 'Đã hạ bậc xếp loại thành công.' });

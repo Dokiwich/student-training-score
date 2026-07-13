@@ -294,6 +294,9 @@ export function DepartmentDashboard() {
   const [newSvEmail, setNewSvEmail] = useState('');
   const [newSvPassword, setNewSvPassword] = useState('');
   const [newSvMssv, setNewSvMssv] = useState('');
+  const [newSvRole, setNewSvRole] = useState('STUDENT');
+  const [editingStudent, setEditingStudent] = useState<ClassStudent & { role: string, studentCode?: string | null } | null>(null);
+  const [editSvRole, setEditSvRole] = useState('STUDENT');
   const [manageSearch, setManageSearch] = useState('');
 
   // Add class modal state
@@ -444,9 +447,34 @@ export function DepartmentDashboard() {
   const handleAddStudent = async () => {
     if (!newSvName || !newSvEmail || !newSvPassword || !manageClassId) return alert('Vui lòng nhập đầy đủ');
     try {
-      const r = await fetch('/api/department/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ full_name: newSvName, email: newSvEmail, password: newSvPassword, student_id: newSvMssv || undefined, class_id: manageClassId }) });
+      const r = await fetch('/api/department/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ full_name: newSvName, email: newSvEmail, password: newSvPassword, student_id: newSvMssv || undefined, class_id: manageClassId, role: newSvRole }) });
       const d = await r.json();
-      if (r.ok) { alert('Thêm sinh viên thành công'); setShowAddStudentModal(false); setNewSvName(''); setNewSvEmail(''); setNewSvPassword(''); setNewSvMssv(''); const r2 = await fetch(`/api/department/users?classId=${manageClassId}`); if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); } } else { alert(d.message); }
+      if (r.ok) { alert('Thêm sinh viên thành công'); setShowAddStudentModal(false); setNewSvName(''); setNewSvEmail(''); setNewSvPassword(''); setNewSvMssv(''); setNewSvRole('STUDENT'); const r2 = await fetch(`/api/department/users?classId=${manageClassId}`); if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); } } else { alert(d.message); }
+    } catch { alert('Lỗi kết nối'); }
+  };
+
+  const handleEditStudentSave = async () => {
+    if (!editingStudent || !editingStudent.full_name || !editingStudent.email) return alert('Vui lòng nhập đầy đủ');
+    try {
+      const r = await fetch('/api/department/users', { 
+        method: 'PUT', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ 
+          id: editingStudent.id, 
+          full_name: editingStudent.full_name, 
+          email: editingStudent.email, 
+          student_id: editingStudent.studentCode || undefined, 
+          class_id: manageClassId, 
+          role: editSvRole 
+        }) 
+      });
+      const d = await r.json();
+      if (r.ok) { 
+        alert('Cập nhật sinh viên thành công'); 
+        setEditingStudent(null); 
+        const r2 = await fetch(`/api/department/users?classId=${manageClassId}`); 
+        if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); } 
+      } else { alert(d.message); }
     } catch { alert('Lỗi kết nối'); }
   };
 
@@ -684,14 +712,20 @@ export function DepartmentDashboard() {
       else { statusLabel = 'Hoàn tất'; statusColor = 'var(--success)'; }
       return <span style={{ fontSize: 12, fontWeight: 500, color: statusColor }}>{statusLabel}</span>;
     }},
+    { header: 'Vai trò', width: 90, align: 'center' as const, render: (s: any) => {
+      const roleLabel = s.role === 'CLASS_COMMITTEE' ? 'Ban cán sự' : s.role === 'ADVISOR' ? 'Cố vấn' : 'Sinh viên';
+      const rc = s.role === 'CLASS_COMMITTEE' ? { bg: '#fef3c7', color: '#d97706' } : s.role === 'ADVISOR' ? { bg: '#ecfdf5', color: '#059669' } : { bg: '#eff6ff', color: '#2563eb' };
+      return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: rc.bg, color: rc.color }}>{roleLabel}</span>;
+    }},
     { header: 'Điểm CVHT', width: 80, align: 'center' as const, render: (s: any) => <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{s.advisorTotal ?? '-'}</span> },
     { header: 'Xếp loại', width: 90, align: 'center' as const, render: (s: any) => {
       const clsLabel = s.classification ? CLASSIFICATION_LABELS[s.classification] || '' : '';
       const clsColor = CLS_COLORS[s.classification || ''] || { bg: '#f3f4f6', color: '#6b7280' };
       return clsLabel ? <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: clsColor.bg, color: clsColor.color }}>{clsLabel}</span> : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>-</span>;
     }},
-    { header: 'Thao tác', width: 120, align: 'center' as const, render: (s: any) => (
+    { header: 'Thao tác', width: 140, align: 'center' as const, render: (s: any) => (
       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+        <button onClick={() => { setEditingStudent(s); setEditSvRole(s.role); }} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #d1d5db', background: '#f9fafb', color: '#374151', cursor: 'pointer', transition: 'all 0.2s' }}>Sửa</button>
         <button onClick={() => setSelectedStudentForEdit(s)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #bfdbfe', background: '#fef2f2', color: '#1d4ed8', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#dbeafe'; }} onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}>Phiếu</button>
         <button onClick={() => handleDeleteStudent(s)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#fee2e2'; }} onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}>Xóa</button>
       </div>
@@ -1016,8 +1050,25 @@ export function DepartmentDashboard() {
               <div style={{ marginBottom: 16 }}><label className="form-label">MSSV</label><input type="text" className="form-input" value={newSvMssv} onChange={e => setNewSvMssv(e.target.value)} placeholder="Nhập MSSV" /></div>
               <div style={{ marginBottom: 16 }}><label className="form-label">Email *</label><input type="email" className="form-input" value={newSvEmail} onChange={e => setNewSvEmail(e.target.value)} placeholder="Nhập email" /></div>
               <div style={{ marginBottom: 16 }}><label className="form-label">Mật khẩu *</label><input type="password" className="form-input" value={newSvPassword} onChange={e => setNewSvPassword(e.target.value)} placeholder="Nhập mật khẩu" /></div>
+              <div style={{ marginBottom: 16 }}><label className="form-label">Vai trò *</label><select className="form-select" value={newSvRole} onChange={e => setNewSvRole(e.target.value)}><option value="STUDENT">Sinh viên</option><option value="CLASS_COMMITTEE">Ban cán sự</option><option value="ADVISOR">Cố vấn học tập</option></select></div>
             </div>
             <div className="modal-footer"><button onClick={() => setShowAddStudentModal(false)} className="btn-secondary">Hủy</button><button onClick={handleAddStudent} className="btn-primary">Thêm sinh viên</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Student Modal */}
+      {editingStudent && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: 450 }}>
+            <div className="modal-header"><h3 className="modal-header-title">Chỉnh sửa thông tin</h3><button onClick={() => setEditingStudent(null)} className="modal-close-btn">✕</button></div>
+            <div className="modal-body">
+              <div style={{ marginBottom: 16 }}><label className="form-label">Họ tên *</label><input type="text" className="form-input" value={editingStudent.full_name} onChange={e => setEditingStudent({...editingStudent, full_name: e.target.value})} placeholder="Nhập họ tên" /></div>
+              <div style={{ marginBottom: 16 }}><label className="form-label">MSSV</label><input type="text" className="form-input" value={editingStudent.studentCode || ''} onChange={e => setEditingStudent({...editingStudent, studentCode: e.target.value})} placeholder="Nhập MSSV" /></div>
+              <div style={{ marginBottom: 16 }}><label className="form-label">Email *</label><input type="email" className="form-input" value={editingStudent.email} onChange={e => setEditingStudent({...editingStudent, email: e.target.value})} placeholder="Nhập email" /></div>
+              <div style={{ marginBottom: 16 }}><label className="form-label">Vai trò *</label><select className="form-select" value={editSvRole} onChange={e => setEditSvRole(e.target.value)}><option value="STUDENT">Sinh viên</option><option value="CLASS_COMMITTEE">Ban cán sự</option><option value="ADVISOR">Cố vấn học tập</option></select></div>
+            </div>
+            <div className="modal-footer"><button onClick={() => setEditingStudent(null)} className="btn-secondary">Hủy</button><button onClick={handleEditStudentSave} className="btn-primary">Lưu thay đổi</button></div>
           </div>
         </div>
       )}
