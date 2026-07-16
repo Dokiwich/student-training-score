@@ -264,6 +264,46 @@ export async function DELETE(req: Request) {
   try {
     const body = await req.json();
 
+    if (body._type === 'version') {
+      const { id } = body;
+      if (!id) return NextResponse.json({ message: 'ID is required' }, { status: 400 });
+
+      const targetVersion = await prisma.criteria_versions.findUnique({ where: { id } });
+      if (!targetVersion) return NextResponse.json({ message: 'Không tìm thấy phiên bản' }, { status: 404 });
+      
+      if (targetVersion.is_active === 1) {
+        return NextResponse.json({ message: 'Không thể xóa: Phiên bản này đang được áp dụng.' }, { status: 400 });
+      }
+
+      // Check if any criteria in this version is being used
+      const categories = await prisma.criteria_categories.findMany({ where: { criteria_version_id: id }, select: { id: true } });
+      const catIds = categories.map(c => c.id);
+      if (catIds.length > 0) {
+        const crits = await prisma.criteria.findMany({ where: { category_id: { in: catIds } }, select: { id: true } });
+        const critIds = crits.map(c => c.id);
+        if (critIds.length > 0) {
+          const usageCount = await prisma.score_details.count({ where: { criteria_id: { in: critIds } } });
+          if (usageCount > 0) {
+            return NextResponse.json({
+              message: `Không thể xóa: Có ${usageCount} phiếu chấm điểm đang sử dụng tiêu chí thuộc phiên bản này.`
+            }, { status: 400 });
+          }
+        }
+      }
+
+      const oldData = targetVersion;
+      // Because of cascading deletes configured in DB or at least expected by standard, we delete the version.
+      // But let's safely delete criteria and categories first to prevent foreign key constraint fails if DB doesn't cascade
+      if (catIds.length > 0) {
+         await prisma.criteria.deleteMany({ where: { category_id: { in: catIds } } });
+         await prisma.criteria_categories.deleteMany({ where: { criteria_version_id: id } });
+      }
+      await prisma.criteria_versions.delete({ where: { id } });
+      await logAdminAction(actorId, 'DELETE_VERSION', 'criteria_versions', id, oldData, null);
+
+      return NextResponse.json({ message: 'Đã xóa phiên bản tiêu chí và tất cả dữ liệu liên quan' });
+    }
+
     if (body._type === 'category') {
       // Check if any criteria in this category is being used
       const crits = await prisma.criteria.findMany({ where: { category_id: body.id }, select: { id: true } });
