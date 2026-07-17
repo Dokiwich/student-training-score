@@ -15,6 +15,8 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
   const [description, setDescription] = useState('');
   const [isApplying, setIsApplying] = useState(false);
 
+  const [cloneFromId, setCloneFromId] = useState('');
+
   const handleSubmit = async () => {
     if (mode === 'edit') {
       if (!selectedVersionId) return alert('Vui lòng chọn một phiên bản để tiếp tục!');
@@ -24,13 +26,13 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
     }
 
     if (!name.trim()) return alert('Vui lòng nhập tên bộ tiêu chí!');
-    
+
     setIsApplying(true);
     try {
       const res = await fetch('/api/admin/criteria-versions', {
-        method: 'POST', 
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), description: description.trim() })
+        body: JSON.stringify({ name: name.trim(), description: description.trim(), cloneFromId: cloneFromId || undefined })
       });
       const resData = await res.json();
       if (res.ok) {
@@ -38,19 +40,19 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
       } else {
         alert(resData.message || 'Có lỗi xảy ra');
       }
-    } catch { 
-      alert('Lỗi kết nối'); 
-    } finally { 
-      setIsApplying(false); 
+    } catch {
+      alert('Lỗi kết nối');
+    } finally {
+      setIsApplying(false);
     }
   };
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200"
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-150 flex items-center justify-center p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
-      <div 
+      <div
         className="bg-white rounded-[12px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] w-full max-w-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
@@ -59,11 +61,11 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
             <h3 className="text-[18px] font-[590] text-[#1F2937] leading-[1.2]">
               Tạo hoặc chỉnh sửa bộ tiêu chí
             </h3>
-            <p className="text-[14px] text-[#64748B] font-[400] mt-1">
+            <p className="text-[14px] text-[#64748B] font-400 mt-1">
               Thiết lập thông tin và phương thức khởi tạo bộ tiêu chí.
             </p>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F1F5F9] text-[#64748B] transition-colors"
           >
@@ -74,13 +76,12 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
         <div className="p-6 flex flex-col gap-6">
           {/* Method Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div 
+            <div
               onClick={() => setMode('create')}
-              className={`flex gap-3 p-4 rounded-[8px] cursor-pointer border-[1.5px] transition-all ${
-                mode === 'create' 
-                  ? 'border-[#B91C1C] bg-[#FEF2F2]' 
+              className={`flex gap-3 p-4 rounded-[8px] cursor-pointer border-[1.5px] transition-all ${mode === 'create'
+                  ? 'border-[#B91C1C] bg-[#FEF2F2]'
                   : 'border-[#E5E7EB] hover:border-[#CBD5E1] bg-white'
-              }`}
+                }`}
             >
               <div className={`mt-0.5 ${mode === 'create' ? 'text-[#B91C1C]' : 'text-[#94A3B8]'}`}>
                 <FilePlus className="w-5 h-5" strokeWidth={1.5} />
@@ -95,13 +96,12 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
               </div>
             </div>
 
-            <div 
+            <div
               onClick={() => setMode('edit')}
-              className={`flex gap-3 p-4 rounded-[8px] cursor-pointer border-[1.5px] transition-all ${
-                mode === 'edit' 
-                  ? 'border-[#B91C1C] bg-[#FEF2F2]' 
+              className={`flex gap-3 p-4 rounded-[8px] cursor-pointer border-[1.5px] transition-all ${mode === 'edit'
+                  ? 'border-[#B91C1C] bg-[#FEF2F2]'
                   : 'border-[#E5E7EB] hover:border-[#CBD5E1] bg-white'
-              }`}
+                }`}
             >
               <div className={`mt-0.5 ${mode === 'edit' ? 'text-[#B91C1C]' : 'text-[#94A3B8]'}`}>
                 <Edit3 className="w-5 h-5" strokeWidth={1.5} />
@@ -126,26 +126,47 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
                 <label className="text-[14px] font-[510] text-[#374151]">
                   Tên bộ tiêu chí <span className="text-[#DC2626]">*</span>
                 </label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="VD: Bộ tiêu chí đánh giá rèn luyện năm 2024"
                   className="px-3 py-2.5 bg-white border border-[#D1D5DB] rounded-[6px] text-[15px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
                 />
               </div>
-              
+
               <div className="flex flex-col gap-2">
                 <label className="text-[14px] font-[510] text-[#374151]">
                   Mô tả
                 </label>
-                <textarea 
+                <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Nhập mô tả..."
                   rows={3}
                   className="px-3 py-2.5 bg-white border border-[#D1D5DB] rounded-[6px] text-[15px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all resize-none"
                 />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[14px] font-[510] text-[#374151]">
+                  Sao chép từ (Tùy chọn)
+                </label>
+                <select
+                  value={cloneFromId}
+                  onChange={(e) => setCloneFromId(e.target.value)}
+                  className="px-3 py-2.5 bg-white border border-[#D1D5DB] rounded-[6px] text-[15px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                >
+                  <option value="">-- Bắt đầu từ mẫu trống --</option>
+                  {versions.map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.name || v.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[12px] text-[#64748B]">
+                  Hệ thống sẽ sao chép toàn bộ danh mục và tiêu chí từ phiên bản đã chọn sang phiên bản mới này.
+                </span>
               </div>
             </div>
           ) : (
@@ -154,7 +175,7 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
                 <label className="text-[14px] font-[510] text-[#374151]">
                   Chọn bộ tiêu chí <span className="text-[#DC2626]">*</span>
                 </label>
-                <select 
+                <select
                   value={selectedVersionId}
                   onChange={(e) => setSelectedVersionId(e.target.value)}
                   className="px-3 py-2.5 bg-white border border-[#D1D5DB] rounded-[6px] text-[15px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
