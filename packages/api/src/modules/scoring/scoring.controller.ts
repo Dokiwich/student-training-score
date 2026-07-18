@@ -67,6 +67,17 @@ export class ScoringController {
     return this.scoringService.deleteCriteriaScore(formId, criteriaId, activeRole, studentId, req.user.id, semesterId);
   }
 
+  @Get(':formId/validate')
+  async validateForm(
+    @Param('formId') formId: string,
+    @Req() req: any,
+    @Query('role') role?: string
+  ) {
+    const activeRole = role || 'STUDENT';
+    await this.scoringService.validateFormForSubmission(formId, req.user.id, activeRole);
+    return { message: 'Phiếu điểm hợp lệ' };
+  }
+
   @Post(':formId/submit')
   async submitForm(
     @Param('formId') formId: string,

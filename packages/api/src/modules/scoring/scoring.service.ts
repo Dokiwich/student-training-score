@@ -1314,43 +1314,46 @@ export class ScoringService {
     return { message: `Xóa điểm thành công (${role})`, success: true };
   }
 
-  // =============================================
-  // 6. ✅ CHUYỂN TRẠNG THÁI PHIẾU (State Machine)
-  //    Gộp từ cả 2 phiên bản: NestJS exceptions + Role-based transitions
-  //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
-  // =============================================
-  async submitForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string) {
-    let targetSemesterId = semesterId;
-    if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
-      if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
-      targetSemesterId = activeSemester.id;
+  async validateFormForSubmission(formId: string, actorId: string, role: string) {
+    const form = await prisma.scoring_sheets.findUnique({
+      where: { id: formId },
+      include: {
+        semester_enrollments: {
+          include: { semesters: true }
+        },
+        score_details: {
+          include: {
+            criteria: {
+              include: { criteria_categories: true }
+            },
+            score_entries: true
+          }
+        }
+      }
+    });
+
+    if (!form || !form.semester_enrollments) {
+      throw new BadRequestException('Không tìm thấy phiếu điểm hợp lệ.');
     }
 
-    // 6a-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
+    const studentId = form.semester_enrollments.user_id;
+    const targetSemesterId = form.semester_enrollments.semester_id;
+    const semester = form.semester_enrollments.semesters;
+
+    // 1. Xác thực quyền
     await this.verifyActorRole(actorId, studentId, role, targetSemesterId);
 
-    // 6a. ✅ PONYTAIL: Gộp 2 truy vấn độc lập
-    const [form, semester] = await Promise.all([
-      this.getOrCreateDraftSheet(studentId, targetSemesterId),
-      this.getSemesterWithDeadlines(targetSemesterId)
-    ]);
-
-    // 6a-2. ✅ KIỂM TRA HẠN CHÓT TRƯỚC KHI CHUYỂN TRẠNG THÁI
+    // 2. Kiểm tra hạn chót
     if (semester) {
       this.checkDeadline(role, semester);
     }
 
-    // 6b. Lấy cấu hình chuyển trạng thái cho Role này
+    // 3. Kiểm tra trạng thái
     const transition = STATE_TRANSITIONS[role];
-
     if (!transition) {
-      throw new BadRequestException(
-        `Vai trò "${role}" không hợp lệ. Chỉ chấp nhận: STUDENT, CLASS_COMMITTEE, ADVISOR`,
-      );
+      throw new BadRequestException(`Vai trò "${role}" không hợp lệ. Chỉ chấp nhận: STUDENT, CLASS_COMMITTEE, ADVISOR`);
     }
 
-    // 6c. ✅ KIỂM TRA STATE MACHINE NGHIÊM NGẶT
     const isAllowed = Array.isArray(transition.requiredStatus)
       ? transition.requiredStatus.includes(form.status)
       : form.status === transition.requiredStatus;
@@ -1358,6 +1361,104 @@ export class ScoringService {
     if (!isAllowed) {
       throw new BadRequestException(transition.errorMessage);
     }
+
+    const activeVersion = await prisma.criteria_versions.findFirst({
+      where: { semester_id: targetSemesterId, is_active: 1 },
+      orderBy: { created_at: 'desc' },
+    });
+
+    // 4. Validate từng tiêu chí (chỉ validate các tiêu chí có điểm != 0 do role hiện tại chấm)
+    const parentMap = new Map<number, number[]>();
+    
+    for (const detail of form.score_details) {
+      const criteria = detail.criteria;
+      if (!criteria) continue;
+
+      const entry = detail.score_entries.find(e => e.scorer_role === role);
+      const score = entry ? Number(entry.score) : 0;
+
+      if (score !== 0) {
+        if (criteria.require_evidence === 1 && (!detail.proof_url || detail.proof_url.trim() === '')) {
+          throw new BadRequestException(`Tiêu chí "${criteria.code}" bắt buộc phải có link minh chứng!`);
+        }
+        
+        if (!criteria.is_active) {
+          throw new BadRequestException(`Tiêu chí "${criteria.code}" đã bị vô hiệu hóa!`);
+        }
+
+        if (activeVersion && criteria.criteria_categories?.criteria_version_id !== activeVersion.id) {
+          throw new BadRequestException(`Tiêu chí "${criteria.code}" không thuộc học kỳ hiện tại!`);
+        }
+        
+        const QUANTITY_MULTIPLIERS: Record<string, number> = {
+          '1.2.1': 1, '3.2.1': 1,
+          '1.2.2': 1, '3.2.2': 1, '4.2.1': 1,
+          '1.2.3': 2, '3.2.3': 2, '4.2.2': 2, '5.3.1': 2,
+          '1.2.4': 3, '3.2.4': 3, '5.2.2': 3,
+          '1.2.5': 4,
+          '5.3.4': 5,
+          '1.1.3': -2, '1.2.7': -2, '2.3': -2, '3.1.2': -2, '3.3': -2, '4.3': -2
+        };
+        const isQuantityBased = criteria.code in QUANTITY_MULTIPLIERS;
+        
+        if (isQuantityBased) {
+          const multiplier = QUANTITY_MULTIPLIERS[criteria.code];
+          const absMultiplier = Math.abs(multiplier);
+          const inputQuantity = Math.abs(score) / absMultiplier;
+          const isDeduction = criteria.score_type === 'DEDUCTION' || criteria.point < 0;
+          const maxQuantity = isDeduction ? 40 : 30;
+          
+          if (inputQuantity > maxQuantity) {
+            throw new BadRequestException(`Số lượng không được vượt quá ${maxQuantity} lần (tiêu chí "${criteria.code}")`);
+          }
+        } else if (criteria.score_type === 'DEDUCTION' || criteria.point < 0) {
+          if (score < criteria.point) {
+            throw new BadRequestException(`Điểm không được thấp hơn ${criteria.point} (tiêu chí "${criteria.code}")`);
+          }
+          if (score > 0) {
+            throw new BadRequestException(`Điểm không được vượt quá 0 (tiêu chí "${criteria.code}")`);
+          }
+        } else {
+          if (score < 0) {
+            throw new BadRequestException(`Điểm không được thấp hơn 0 (tiêu chí "${criteria.code}")`);
+          }
+          if (criteria.point > 0 && score > criteria.point) {
+            throw new BadRequestException(`Điểm không được vượt quá ${criteria.point} (tiêu chí "${criteria.code}")`);
+          }
+        }
+
+        if (criteria.parent_id) {
+          if (!parentMap.has(criteria.parent_id)) parentMap.set(criteria.parent_id, []);
+          parentMap.get(criteria.parent_id)!.push(criteria.id);
+        }
+      }
+    }
+
+    if (parentMap.size > 0) {
+      const parentIds = Array.from(parentMap.keys());
+      const parents = await prisma.criteria.findMany({
+        where: { id: { in: parentIds } }
+      });
+      for (const parent of parents) {
+        if (parent.score_type === 'OPTIONS' || (parent.score_type as string) === 'RADIO') {
+           const scoredChildren = parentMap.get(parent.id) || [];
+           if (scoredChildren.length > 1) {
+             throw new BadRequestException(`Mục "${parent.code}" chỉ cho phép chọn 1 tiêu chí, nhưng đang có nhiều hơn 1 tiêu chí có điểm.`);
+           }
+        }
+      }
+    }
+
+    return { form, transition, studentId };
+  }
+
+  // =============================================
+  // 6. ✅ CHUYỂN TRẠNG THÁI PHIẾU (State Machine)
+  //    Gộp từ cả 2 phiên bản: NestJS exceptions + Role-based transitions
+  //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
+  // =============================================
+  async submitForm(formId: string, role: string, inputStudentId: string, actorId: string, semesterId?: string) {
+    const { form, transition, studentId } = await this.validateFormForSubmission(formId, actorId, role);
 
     // 6d. (Đã gỡ bỏ ràng buộc "phải chấm ít nhất 1 điểm")
     // Cho phép nộp phiếu trống → tổng điểm = 0
