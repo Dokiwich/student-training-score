@@ -58,6 +58,12 @@ interface ScoreDetail {
   score_entries?: Array<{ scorer_role: string; score: number }>;
 }
 
+export type SubmissionValidationError = {
+  criterionId: number | null;
+  code: string;
+  message: string;
+};
+
 interface ToastMessage {
   id: number;
   type: 'success' | 'error';
@@ -142,6 +148,7 @@ export function ScoringForm({
   const [formStatus, setFormStatus] = useState<string>('DRAFT');
   const [actualFormId, setActualFormId] = useState<string>(formId);
   const [isDirty, setIsDirty] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<SubmissionValidationError[]>([]);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -624,7 +631,6 @@ export function ScoringForm({
       if (currentRole === 'STUDENT') setSavedStudentScores(newScores);
       else if (currentRole === 'CLASS_COMMITTEE') setSavedClassScores(newScores);
       else setSavedAdvisorScores(newScores);
-      setIsDirty(false);
 
       let success = true;
       if (failCount > 0 && results.length === 0) {
@@ -637,10 +643,18 @@ export function ScoringForm({
         addToast('success', 'Đã lưu nháp toàn bộ phiếu!');
         success = true;
       }
+      
+      if (success) {
+        setIsDirty(false);
+      } else {
+        setIsDirty(true);
+      }
+
       await fetchData();
       return success;
     } catch {
       addToast('error', 'Lỗi khi lưu nháp');
+      setIsDirty(true);
       return false;
     } finally {
       setIsSavingDraft(false);
@@ -721,11 +735,28 @@ export function ScoringForm({
       if (response.ok) {
         const data = await response.json();
         addToast('success', data.message || 'Nộp phiếu thành công!');
+        setValidationErrors([]);
         // ✅ Refresh lại dữ liệu để cập nhật formStatus
         await fetchData();
       } else {
         const errorData = await response.json().catch(() => null);
-        addToast('error', errorData?.message || 'Lỗi khi nộp phiếu');
+        if (response.status === 400 && errorData?.errors) {
+          const errors: SubmissionValidationError[] = errorData.errors;
+          setValidationErrors(errors);
+          addToast('error', `Phiếu chưa hợp lệ! Có ${errors.length} lỗi cần sửa.`);
+          
+          // Scroll to the first error
+          if (errors.length > 0) {
+            setTimeout(() => {
+              const firstErrorElement = document.getElementById(`criterion-${errors[0].criterionId}`);
+              if (firstErrorElement) {
+                firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 100);
+          }
+        } else {
+          addToast('error', errorData?.message || 'Lỗi khi nộp phiếu');
+        }
       }
     } catch {
       addToast('error', 'Không thể kết nối máy chủ');
@@ -1067,8 +1098,11 @@ export function ScoringForm({
                                 );
                               }
 
+                              const itemErrors = validationErrors.filter(e => e.criterionId === item.id);
+                              const hasError = itemErrors.length > 0;
+
                               return (
-                                <tr key={item.id} className={`hover:bg-surface-muted/50 transition-colors group ${isRowSaving ? 'opacity-50' : ''}`}>
+                                <tr key={item.id} id={`criterion-${item.id}`} className={`hover:bg-surface-muted/50 transition-colors group ${isRowSaving ? 'opacity-50' : ''} ${hasError ? 'bg-danger/10' : ''}`}>
                                   <td className="px-2 py-1.5 text-sm text-muted-foreground">{item.code}</td>
                                   <td className="px-2 py-1.5">
                                     <div style={{ paddingLeft: `${depth * 1.2}rem` }}>
@@ -1078,6 +1112,11 @@ export function ScoringForm({
                                       </span>
                                       {item.description && <span className="text-xs text-muted-foreground mt-0.5 block leading-relaxed">{item.description}</span>}
                                       {item.require_evidence === 1 && <span className="text-[10px] text-danger font-medium block mt-1 uppercase tracking-wide">⚠️ Bắt buộc đính kèm minh chứng</span>}
+                                      {itemErrors.map((err, idx) => (
+                                        <span key={idx} className="text-xs text-danger font-semibold block mt-1.5 flex items-center gap-1 bg-danger/10 p-1.5 rounded-md border border-danger/20">
+                                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {err.message}
+                                        </span>
+                                      ))}
                                     </div>
                                   </td>
                                   <td className="px-2 py-1.5 text-center text-sm text-muted-foreground">

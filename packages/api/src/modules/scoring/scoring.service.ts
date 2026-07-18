@@ -2,6 +2,22 @@ import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/com
 import { prisma } from '@student-score/database';
 import { randomUUID } from 'crypto';
 
+export type SubmissionValidationError = {
+  criterionId: number | null;
+  code:
+    | 'EVIDENCE_REQUIRED'
+    | 'CRITERION_INACTIVE'
+    | 'CRITERION_VERSION_MISMATCH'
+    | 'SCORE_OUT_OF_RANGE'
+    | 'INVALID_SCORE_DIRECTION'
+    | 'QUANTITY_EXCEEDED'
+    | 'MUTUALLY_EXCLUSIVE_OPTIONS'
+    | 'INVALID_FORM_STATE'
+    | 'DEADLINE_EXPIRED'
+    | 'FORBIDDEN'
+    | 'FORM_NOT_FOUND';
+  message: string;
+};
 // =============================================
 // WORKFLOW STATUS CONSTANTS (Thay cho enum import)
 // Map với cả 2 hệ thống: chi tiết (12 bước) & đơn giản (4 bước)
@@ -1369,6 +1385,7 @@ export class ScoringService {
 
     // 4. Validate từng tiêu chí (chỉ validate các tiêu chí có điểm != 0 do role hiện tại chấm)
     const parentMap = new Map<number, number[]>();
+    const errors: SubmissionValidationError[] = [];
     
     for (const detail of form.score_details) {
       const criteria = detail.criteria;
@@ -1379,15 +1396,27 @@ export class ScoringService {
 
       if (score !== 0) {
         if (criteria.require_evidence === 1 && (!detail.proof_url || detail.proof_url.trim() === '')) {
-          throw new BadRequestException(`Tiêu chí "${criteria.code}" bắt buộc phải có link minh chứng!`);
+          errors.push({
+            criterionId: criteria.id,
+            code: 'EVIDENCE_REQUIRED',
+            message: `Tiêu chí "${criteria.code}" bắt buộc phải có link minh chứng!`,
+          });
         }
         
         if (!criteria.is_active) {
-          throw new BadRequestException(`Tiêu chí "${criteria.code}" đã bị vô hiệu hóa!`);
+          errors.push({
+            criterionId: criteria.id,
+            code: 'CRITERION_INACTIVE',
+            message: `Tiêu chí "${criteria.code}" đã bị vô hiệu hóa!`,
+          });
         }
 
         if (activeVersion && criteria.criteria_categories?.criteria_version_id !== activeVersion.id) {
-          throw new BadRequestException(`Tiêu chí "${criteria.code}" không thuộc học kỳ hiện tại!`);
+          errors.push({
+            criterionId: criteria.id,
+            code: 'CRITERION_VERSION_MISMATCH',
+            message: `Tiêu chí "${criteria.code}" không thuộc học kỳ hiện tại!`,
+          });
         }
         
         const QUANTITY_MULTIPLIERS: Record<string, number> = {
@@ -1409,21 +1438,41 @@ export class ScoringService {
           const maxQuantity = isDeduction ? 40 : 30;
           
           if (inputQuantity > maxQuantity) {
-            throw new BadRequestException(`Số lượng không được vượt quá ${maxQuantity} lần (tiêu chí "${criteria.code}")`);
+            errors.push({
+              criterionId: criteria.id,
+              code: 'QUANTITY_EXCEEDED',
+              message: `Số lượng không được vượt quá ${maxQuantity} lần (tiêu chí "${criteria.code}")`,
+            });
           }
         } else if (criteria.score_type === 'DEDUCTION' || criteria.point < 0) {
           if (score < criteria.point) {
-            throw new BadRequestException(`Điểm không được thấp hơn ${criteria.point} (tiêu chí "${criteria.code}")`);
+            errors.push({
+              criterionId: criteria.id,
+              code: 'SCORE_OUT_OF_RANGE',
+              message: `Điểm không được thấp hơn ${criteria.point} (tiêu chí "${criteria.code}")`,
+            });
           }
           if (score > 0) {
-            throw new BadRequestException(`Điểm không được vượt quá 0 (tiêu chí "${criteria.code}")`);
+            errors.push({
+              criterionId: criteria.id,
+              code: 'INVALID_SCORE_DIRECTION',
+              message: `Điểm không được vượt quá 0 (tiêu chí "${criteria.code}")`,
+            });
           }
         } else {
           if (score < 0) {
-            throw new BadRequestException(`Điểm không được thấp hơn 0 (tiêu chí "${criteria.code}")`);
+            errors.push({
+              criterionId: criteria.id,
+              code: 'INVALID_SCORE_DIRECTION',
+              message: `Điểm không được thấp hơn 0 (tiêu chí "${criteria.code}")`,
+            });
           }
           if (criteria.point > 0 && score > criteria.point) {
-            throw new BadRequestException(`Điểm không được vượt quá ${criteria.point} (tiêu chí "${criteria.code}")`);
+            errors.push({
+              criterionId: criteria.id,
+              code: 'SCORE_OUT_OF_RANGE',
+              message: `Điểm không được vượt quá ${criteria.point} (tiêu chí "${criteria.code}")`,
+            });
           }
         }
 
@@ -1443,13 +1492,17 @@ export class ScoringService {
         if (parent.score_type === 'OPTIONS' || (parent.score_type as string) === 'RADIO') {
            const scoredChildren = parentMap.get(parent.id) || [];
            if (scoredChildren.length > 1) {
-             throw new BadRequestException(`Mục "${parent.code}" chỉ cho phép chọn 1 tiêu chí, nhưng đang có nhiều hơn 1 tiêu chí có điểm.`);
+             errors.push({
+               criterionId: parent.id,
+               code: 'MUTUALLY_EXCLUSIVE_OPTIONS',
+               message: `Mục "${parent.code}" chỉ cho phép chọn 1 tiêu chí, nhưng đang có nhiều hơn 1 tiêu chí có điểm.`,
+             });
            }
         }
       }
     }
 
-    return { form, transition, studentId };
+    return { form, transition, studentId, errors };
   }
 
   // =============================================
@@ -1458,7 +1511,14 @@ export class ScoringService {
   //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
   // =============================================
   async submitForm(formId: string, role: string, inputStudentId: string, actorId: string, semesterId?: string) {
-    const { form, transition, studentId } = await this.validateFormForSubmission(formId, actorId, role);
+    const { form, transition, studentId, errors } = await this.validateFormForSubmission(formId, actorId, role);
+
+    if (errors && errors.length > 0) {
+      throw new BadRequestException({
+        message: 'Phiếu chưa hợp lệ.',
+        errors: errors,
+      });
+    }
 
     // 6d. (Đã gỡ bỏ ràng buộc "phải chấm ít nhất 1 điểm")
     // Cho phép nộp phiếu trống → tổng điểm = 0

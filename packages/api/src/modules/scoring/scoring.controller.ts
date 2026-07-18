@@ -74,8 +74,11 @@ export class ScoringController {
     @Query('role') role?: string
   ) {
     const activeRole = role || 'STUDENT';
-    await this.scoringService.validateFormForSubmission(formId, req.user.id, activeRole);
-    return { message: 'Phiếu điểm hợp lệ' };
+    const { errors } = await this.scoringService.validateFormForSubmission(formId, req.user.id, activeRole);
+    return { 
+      isValid: errors ? errors.length === 0 : true, 
+      errors: errors || [] 
+    };
   }
 
   @Post(':formId/submit')
