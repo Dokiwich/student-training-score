@@ -8,21 +8,18 @@ import { Button } from '../../components/ui/Button';
 import { ClipboardCheck, Clock, FileText, Activity } from 'lucide-react';
 import Link from 'next/link';
 import { ProgressMiniCard } from './ProgressMiniCard';
+import { getStudentDashboardDeadlineInfo } from '@/lib/semester';
 
 export default async function StudentDashboardPage() {
   const session = await getServerSession(authOptions);
   const user = session?.user as { id: string; name?: string; role?: string; studentId?: string } | undefined;
 
-  let activeSemester = null;
+  const deadlineInfo = await getStudentDashboardDeadlineInfo();
+  const activeSemester = deadlineInfo.semester;
+
   let scoringSheet = null;
   
-  if (user?.studentId) {
-    activeSemester = await prisma.semesters.findFirst({
-      where: { status: { in: ['UPCOMING', 'STUDENT_SCORING', 'CLASS_REVIEWING', 'ADVISOR_REVIEWING', 'SCHOOL_REVIEWING', 'FINALIZED'] } },
-      orderBy: { end_date: 'desc' }
-    });
-
-    if (activeSemester) {
+  if (user?.studentId && activeSemester) {
       scoringSheet = await prisma.scoring_sheets.findFirst({
         where: {
           semester_enrollments: {
@@ -37,7 +34,6 @@ export default async function StudentDashboardPage() {
         }
       });
     }
-  }
 
   let progressData = null;
   if (scoringSheet && session) {
@@ -63,14 +59,9 @@ export default async function StudentDashboardPage() {
   const sheetStatus = scoringSheet?.status || 'NO_SHEET';
   const missingProofs = 0; // simplified for now
 
-  let deadlineLabel = 'Chưa xác định';
-  let daysLeft = 0;
-  if (activeSemester?.student_deadline) {
-    const d = new Date(activeSemester.student_deadline);
-    deadlineLabel = d.toLocaleDateString('vi-VN');
-    const diffTime = Math.max(0, d.getTime() - new Date().getTime());
-    daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  }
+  const deadlineLabel = deadlineInfo.studentSubmissionDeadline 
+    ? deadlineInfo.studentSubmissionDeadline.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) 
+    : 'Chưa xác định';
 
   return (
     <DashboardLayout
@@ -143,8 +134,8 @@ export default async function StudentDashboardPage() {
                   <Clock size={20} />
                 </div>
               </div>
-              <p className={`text-xs mt-4 ${daysLeft <= 3 ? 'text-danger' : 'text-muted-foreground'}`}>
-                {daysLeft > 0 ? `Còn ${daysLeft} ngày` : 'Đã hết hạn'}
+              <p className={`text-xs mt-4 ${deadlineInfo.isOverdue || deadlineInfo.daysLeft <= 3 ? 'text-danger' : 'text-muted-foreground'}`}>
+                {deadlineInfo.remainingTimeText}
               </p>
             </CardContent>
           </Card>

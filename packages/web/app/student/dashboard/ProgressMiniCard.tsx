@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { Button } from '../../components/ui/Button';
 
 export function ProgressMiniCard({ initialData }: { initialData?: Record<string, any> | null }) {
-  const [data, setData] = useState<Record<string, unknown> | null>(initialData || null);
+  const [data, setData] = useState<any>(initialData || null);
   const [loading, setLoading] = useState(!initialData);
 
   useEffect(() => {
