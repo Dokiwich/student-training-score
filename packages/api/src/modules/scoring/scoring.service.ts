@@ -1105,7 +1105,9 @@ export class ScoringService {
       where: { entity_id: form.semester_enrollments.class_id, is_active: 1 },
       include: { roles: true }
     });
-    const monitorIds = new Set(classRoles.filter(r => r.roles.code === 'CLASS_COMMITTEE').map(r => r.user_id));
+    
+    const monitorRoleCodes = ['MONITOR', 'VICE_MONITOR', 'SECRETARY'];
+    const monitorIds = new Set(classRoles.filter(r => monitorRoleCodes.includes(r.roles.code)).map(r => r.user_id));
     const advisorIds = new Set(classRoles.filter(r => r.roles.code === 'ADVISOR').map(r => r.user_id));
 
     const inferActorRole = (aId: string) => {
@@ -1115,15 +1117,21 @@ export class ScoringService {
       return null;
     };
 
-    const handledScoreDetailTimeMap = new Map<string, number>();
+    const findMatchingAdjustment = (detailId: string, actorId: string, oldScore: number | null, newScore: number | null, logTime: number) => {
+       return adjustLogs.find(adj => {
+           const timeDiff = Math.abs(adj.created_at.getTime() - logTime);
+           return adj.score_detail_id === detailId 
+               && adj.adjusted_by_id === actorId
+               && Number(adj.old_score) === oldScore
+               && Number(adj.new_score) === newScore
+               && timeDiff <= 5000; // within 5 seconds
+       });
+    };
 
     // 1. Map score adjustments
     for (const adj of adjustLogs) {
       const actorRole = inferActorRole(adj.adjusted_by_id);
       
-      const key = `${adj.score_detail_id}_${Math.floor(adj.created_at.getTime() / 60000)}`;
-      handledScoreDetailTimeMap.set(key, 1);
-
       events.push({
         id: `adj-${adj.id}`,
         eventType: 'SCORE_ADJUSTED',
@@ -1151,10 +1159,15 @@ export class ScoringService {
 
       if (log.action === 'SCORE_CRITERIA' || log.action === 'DELETE_CRITERIA_SCORE') {
          if (log.entity_type === 'score_details') {
-            const key = `${log.entity_id}_${Math.floor(log.created_at.getTime() / 60000)}`;
-            if (!handledScoreDetailTimeMap.has(key)) {
-                const detail = detailMap.get(log.entity_id);
-                if (detail) {
+            const detail = detailMap.get(log.entity_id);
+            if (detail) {
+                const oldScore = oldVal.old_score != null ? Number(oldVal.old_score) : null;
+                const newScore = newVal.new_score != null ? Number(newVal.new_score) : null;
+                
+                // Check if this audit log has a matching score adjustment log
+                const matchingAdj = findMatchingAdjustment(log.entity_id, log.actor_id, oldScore, newScore, log.created_at.getTime());
+                
+                if (!matchingAdj) {
                     const actorRole = newVal.role || inferActorRole(log.actor_id);
                     events.push({
                       id: `audit-${log.id}`,
@@ -1166,8 +1179,8 @@ export class ScoringService {
                       createdAt: log.created_at,
                       previousStatus: null,
                       newStatus: null,
-                      previousScore: oldVal.old_score != null ? Number(oldVal.old_score) : null,
-                      newScore: newVal.new_score != null ? Number(newVal.new_score) : null,
+                      previousScore: oldScore,
+                      newScore: newScore,
                       comment: null,
                       reason: null,
                       criterionId: detail.criteria.id,
