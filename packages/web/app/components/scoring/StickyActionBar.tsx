@@ -13,6 +13,7 @@ interface StickyActionBarProps {
   onSaveDraft: () => void;
   onSubmit: () => void;
   onReject: () => void;
+  currentStep?: number;
 }
 
 export function StickyActionBar({
@@ -26,6 +27,7 @@ export function StickyActionBar({
   onSaveDraft,
   onSubmit,
   onReject,
+  currentStep = 1,
 }: StickyActionBarProps) {
   // Determine text based on role
   const submitText = (currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Xác nhận' : 'Nộp Phiếu';
@@ -39,13 +41,7 @@ export function StickyActionBar({
     { id: 'APPROVED', label: 'Hoàn thành', num: 4 }
   ];
 
-  const currentStepIndex = steps.findIndex(s => {
-    if (formStatus === 'DRAFT' || formStatus === 'NOT_CREATED' || formStatus === 'CLASS_REJECTED' || formStatus === 'ADVISOR_REJECTED' || formStatus === 'REJECTED') return s.id === 'DRAFT';
-    if (formStatus === 'STUDENT_SUBMITTED' || formStatus === 'CLASS_REVIEWING') return s.id === 'STUDENT_SUBMITTED';
-    if (formStatus === 'CLASS_REVIEWED' || formStatus === 'ADVISOR_REVIEWING') return s.id === 'CLASS_REVIEWED';
-    if (formStatus === 'APPROVED' || formStatus === 'ADVISOR_APPROVED' || formStatus === 'SCHOOL_REVIEWING' || formStatus === 'SCHOOL_APPROVED' || formStatus === 'FINALIZED') return s.id === 'APPROVED';
-    return false;
-  });
+  const currentStepIndex = Math.max(0, currentStep - 1);
 
   return (
     <div className="sticky bottom-0 left-0 right-0 z-40 bg-surface border-t border-border shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] p-4 md:px-6">

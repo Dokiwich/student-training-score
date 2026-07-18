@@ -146,6 +146,7 @@ export function ScoringForm({
   }, [criteriaIds]);
 
   const [formStatus, setFormStatus] = useState<string>('DRAFT');
+  const [currentStep, setCurrentStep] = useState<number>(1);
   const [actualFormId, setActualFormId] = useState<string>(formId);
   const [isDirty, setIsDirty] = useState(false);
   const [validationErrors, setValidationErrors] = useState<SubmissionValidationError[]>([]);
@@ -276,6 +277,12 @@ export function ScoringForm({
         } else if (scoresData.formStatus) {
           setFormStatus(scoresData.formStatus);
         }
+        
+        // ✅ Cập nhật currentStep từ API response
+        if (scoresData.currentStep) {
+          setCurrentStep(scoresData.currentStep);
+        }
+
         // ✅ Cập nhật actualFormId
         if (scoresData.formId) {
           setActualFormId(scoresData.formId);
@@ -849,13 +856,7 @@ export function ScoringForm({
 
   const currentStatusConfig = scoringSheetStatusConfig[formStatus] || { label: formStatus, tone: 'neutral' };
 
-  const currentStepIndex = steps.findIndex(s => {
-    if (formStatus === 'DRAFT' || formStatus === 'NOT_CREATED' || formStatus === 'CLASS_REJECTED' || formStatus === 'ADVISOR_REJECTED' || formStatus === 'REJECTED') return s.id === 'DRAFT';
-    if (formStatus === 'STUDENT_SUBMITTED' || formStatus === 'CLASS_REVIEWING') return s.id === 'STUDENT_SUBMITTED';
-    if (formStatus === 'CLASS_REVIEWED' || formStatus === 'ADVISOR_REVIEWING') return s.id === 'CLASS_REVIEWED';
-    if (formStatus === 'APPROVED' || formStatus === 'ADVISOR_APPROVED' || formStatus === 'SCHOOL_REVIEWING' || formStatus === 'SCHOOL_APPROVED' || formStatus === 'FINALIZED') return s.id === 'APPROVED';
-    return false;
-  });
+  const currentStepIndex = Math.max(0, currentStep - 1);
 
   return (
     <>

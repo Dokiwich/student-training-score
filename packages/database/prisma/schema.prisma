@@ -250,7 +250,9 @@ model scoring_sheets {
   id                      String                         @id @db.VarChar(36)
   status                  scoring_sheets_status          @default(DRAFT)
   classification_override scoring_sheets_classification?
-  // ⚠️ DENORMALIZED: These 4 timestamps duplicate review_actions.created_at for query performance.
+  // ⚠️ DENORMALIZED: These 4 timestamps historically duplicated review_actions.created_at for query performance.
+  // Hiện tại (Phase 3), review_actions không còn là nguồn dữ liệu timeline chính.
+  // Lịch sử / timeline được chuẩn hóa từ bảng audit_logs và score_adjustment_logs.
   // Must be kept in sync — see STATE_TRANSITIONS in scoring.service.ts.
   student_submitted_at    DateTime?                      @db.Timestamp(0)
   class_reviewed_at       DateTime?                      @db.Timestamp(0)

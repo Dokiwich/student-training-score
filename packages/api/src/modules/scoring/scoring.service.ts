@@ -67,8 +67,9 @@ const WorkflowStatus = {
 
 // ✅ MA TRẬN CHUYỂN TRẠNG THÁI (State Machine)
 // Key: Role → Value: { requiredStatus, nextStatus }
-// ⚠️ SYNC OBLIGATION: timestampField values are denormalized on scoring_sheets
-// (duplicated from review_actions.created_at). Any new transition MUST update both.
+// ⚠️ SYNC OBLIGATION: timestampField values are denormalized on scoring_sheets.
+// (historically duplicated from review_actions.created_at). 
+// Lưu ý (Phase 3): review_actions không còn là nguồn timeline chính, timeline chuẩn lấy từ audit_logs.
 const STATE_TRANSITIONS: Record<string, {
   requiredStatus: string | string[];
   nextStatus: string;
@@ -101,16 +102,55 @@ const SCORING_PERMISSIONS: Record<string, string | string[]> = {
   ADVISOR: WorkflowStatus.CLASS_APPROVED,
 };
 
-// ✅ 3NF: current_step is derived from status at runtime
-const STEP_MAP: Record<string, number> = {
-  DRAFT: 1,
-  STUDENT_SUBMITTED: 2, CLASS_REVIEWING: 2, CLASS_REJECTED: 2,
-  CLASS_REVIEWED: 3, ADVISOR_REVIEWING: 3, ADVISOR_REJECTED: 3,
-  ADVISOR_APPROVED: 4, SCHOOL_REVIEWING: 4, SCHOOL_APPROVED: 4, FINALIZED: 4,
-  APPEALING: 4,
+export type ScoringWorkflowState = {
+  currentStage: 'STUDENT' | 'CLASS_COMMITTEE' | 'ADVISOR' | 'DEPARTMENT';
+  currentStep: 1 | 2 | 3 | 4;
+  currentHandler: 'STUDENT' | 'CLASS_COMMITTEE' | 'ADVISOR' | 'DEPARTMENT' | null;
+  isReturned: boolean;
+  returnedToStage: 'STUDENT' | 'CLASS_COMMITTEE' | 'ADVISOR' | 'DEPARTMENT' | null;
+  statusLabel: string;
 };
-function getStepFromStatus(status: string): number {
-  return STEP_MAP[status] ?? 1;
+
+export function getScoringWorkflowState(status: string): ScoringWorkflowState {
+  switch (status) {
+    case 'DRAFT':
+      return { currentStage: 'STUDENT', currentStep: 1, currentHandler: 'STUDENT', isReturned: false, returnedToStage: null, statusLabel: 'Bản nháp' };
+    case 'CLASS_REJECTED':
+      return { currentStage: 'STUDENT', currentStep: 1, currentHandler: 'STUDENT', isReturned: true, returnedToStage: 'STUDENT', statusLabel: 'Cần chỉnh sửa theo yêu cầu của Ban cán sự lớp' };
+    case 'ADVISOR_REJECTED':
+      return { currentStage: 'STUDENT', currentStep: 1, currentHandler: 'STUDENT', isReturned: true, returnedToStage: 'STUDENT', statusLabel: 'Cần chỉnh sửa theo yêu cầu của Cố vấn học tập' };
+      
+    case 'STUDENT_SUBMITTED':
+      return { currentStage: 'CLASS_COMMITTEE', currentStep: 2, currentHandler: 'CLASS_COMMITTEE', isReturned: false, returnedToStage: null, statusLabel: 'Đã nộp cho BCS' };
+    case 'CLASS_REVIEWING':
+      return { currentStage: 'CLASS_COMMITTEE', currentStep: 2, currentHandler: 'CLASS_COMMITTEE', isReturned: false, returnedToStage: null, statusLabel: 'BCS đang xét duyệt' };
+      
+    case 'CLASS_REVIEWED':
+      return { currentStage: 'ADVISOR', currentStep: 3, currentHandler: 'ADVISOR', isReturned: false, returnedToStage: null, statusLabel: 'BCS đã duyệt' };
+    case 'ADVISOR_REVIEWING':
+      return { currentStage: 'ADVISOR', currentStep: 3, currentHandler: 'ADVISOR', isReturned: false, returnedToStage: null, statusLabel: 'CVHT đang xét duyệt' };
+      
+    case 'ADVISOR_APPROVED':
+      return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: 'DEPARTMENT', isReturned: false, returnedToStage: null, statusLabel: 'CVHT đã duyệt' };
+    case 'SCHOOL_REVIEWING':
+      return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: 'DEPARTMENT', isReturned: false, returnedToStage: null, statusLabel: 'Khoa đang xét duyệt' };
+
+    case 'SCHOOL_APPROVED':
+      return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: 'DEPARTMENT', isReturned: false, returnedToStage: null, statusLabel: 'Khoa đã duyệt' };
+      
+    case 'SCHOOL_REJECTED':
+      return { currentStage: 'ADVISOR', currentStep: 3, currentHandler: 'ADVISOR', isReturned: true, returnedToStage: 'ADVISOR', statusLabel: 'Bị Khoa trả lại' };
+
+    case 'FINALIZED':
+    case 'COMPLETED':
+      return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: null, isReturned: false, returnedToStage: null, statusLabel: 'Hoàn tất' };
+      
+    case 'APPEALING':
+      return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: 'DEPARTMENT', isReturned: false, returnedToStage: null, statusLabel: 'Đang khiếu nại' };
+
+    default:
+      return { currentStage: 'STUDENT', currentStep: 1, currentHandler: 'STUDENT', isReturned: false, returnedToStage: null, statusLabel: 'Không xác định' };
+  }
 }
 
 
@@ -648,21 +688,7 @@ export class ScoringService {
       }),
     ]);
 
-    const workflowStepMap: Record<string, string> = {
-      DRAFT: 'DRAFT',
-      STUDENT_SUBMITTED: 'SUBMITTED',
-      CLASS_REVIEWING: 'SUBMITTED',
-      CLASS_REVIEWED: 'CLASS_APPROVED',
-      ADVISOR_REVIEWING: 'CLASS_APPROVED',
-      ADVISOR_APPROVED: 'ADVISOR_APPROVED',
-      SCHOOL_REVIEWING: 'ADVISOR_APPROVED',
-      SCHOOL_APPROVED: 'ADVISOR_APPROVED',
-      FINALIZED: 'ADVISOR_APPROVED',
-      CLASS_REJECTED: 'REJECTED',
-      ADVISOR_REJECTED: 'REJECTED',
-    };
-
-    const formStatus = workflowStepMap[form.status] || 'DRAFT';
+    const workflowState = getScoringWorkflowState(form.status);
 
     // ponytail: tính totals từ data đã có, không gọi calculateTotals (tránh re-query score_details)
     const totals = this.computeTotalsPure(scores as any[], categories, allCriteria);
@@ -678,9 +704,14 @@ export class ScoringService {
       message: 'Lấy danh sách điểm thành công',
       data: scores,
       formId: form.id,
-      formStatus,
+      formStatus: workflowState.statusLabel,
       formStatusDetail: form.status,
-      currentStep: getStepFromStatus(form.status),
+      currentStep: workflowState.currentStep,
+      currentStage: workflowState.currentStage,
+      currentHandler: workflowState.currentHandler,
+      isReturned: workflowState.isReturned,
+      returnedToStage: workflowState.returnedToStage,
+      statusLabel: workflowState.statusLabel,
       rejectionReason: form.rejection_reason || null,
       studentInfo,
       semesterName: enrollmentData?.semesters ? `Học kỳ ${enrollmentData.semesters.name} - Năm học ${enrollmentData.semesters.academic_year}` : '',
@@ -1315,23 +1346,7 @@ export class ScoringService {
 
     const totals = this.computeTotalsPure(scoreDetails as any[], categories, allCriteria);
 
-    const DB_STATUS_MAP: Record<string, any> = {
-      DRAFT: { label: 'Bản nháp', stage: 1, handler: 'STUDENT', isReturned: false },
-      STUDENT_SUBMITTED: { label: 'Đã nộp cho BCS', stage: 2, handler: 'CLASS_COMMITTEE', isReturned: false },
-      CLASS_REVIEWING: { label: 'BCS đang xét duyệt', stage: 2, handler: 'CLASS_COMMITTEE', isReturned: false },
-      CLASS_REVIEWED: { label: 'BCS đã duyệt', stage: 3, handler: 'ADVISOR', isReturned: false },
-      CLASS_REJECTED: { label: 'Bị BCS trả lại', stage: 1, handler: 'STUDENT', isReturned: true, returnedTo: 1 },
-      ADVISOR_REVIEWING: { label: 'CVHT đang xét duyệt', stage: 3, handler: 'ADVISOR', isReturned: false },
-      ADVISOR_APPROVED: { label: 'CVHT đã duyệt', stage: 4, handler: 'SCHOOL', isReturned: false },
-      ADVISOR_REJECTED: { label: 'Bị CVHT trả lại', stage: 1, handler: 'STUDENT', isReturned: true, returnedTo: 1 },
-      SCHOOL_REVIEWING: { label: 'Khoa đang xét duyệt', stage: 4, handler: 'SCHOOL', isReturned: false },
-      SCHOOL_APPROVED: { label: 'Khoa đã duyệt', stage: 4, handler: 'SCHOOL', isReturned: false },
-      SCHOOL_REJECTED: { label: 'Bị Khoa trả lại', stage: 3, handler: 'ADVISOR', isReturned: true, returnedTo: 3 },
-      FINALIZED: { label: 'Hoàn tất', stage: 4, handler: null, isReturned: false, isCompleted: true },
-      APPEALING: { label: 'Đang khiếu nại', stage: 4, handler: 'SCHOOL', isReturned: false }
-    };
-
-    const statusInfo = DB_STATUS_MAP[form.status] || { label: form.status, stage: 1, handler: null };
+    const workflowState = getScoringWorkflowState(form.status);
 
     const stages = [
       {
@@ -1368,18 +1383,20 @@ export class ScoringService {
       semesterInfo: { id: semester?.id, name: semester?.name, academicYear: semester?.academic_year },
       statusInfo: {
         dbStatus: form.status,
-        statusLabel: statusInfo.label,
-        isLocked: ['FINALIZED', 'APPEALING'].includes(form.status),
-        isCompleted: form.status === 'FINALIZED'
+        statusLabel: workflowState.statusLabel,
+        isLocked: workflowState.currentStage === 'DEPARTMENT' && form.status !== 'APPEALING',
+        isCompleted: form.status === 'FINALIZED' || form.status === 'COMPLETED'
       },
       progress: {
-        currentStageIndex: statusInfo.stage,
+        currentStep: workflowState.currentStep,
+        currentStage: workflowState.currentStage,
+        currentStageIndex: workflowState.currentStep,
         totalStages: 4,
-        isReturned: statusInfo.isReturned,
-        returnedToStage: statusInfo.returnedTo || null,
+        isReturned: workflowState.isReturned,
+        returnedToStage: workflowState.returnedToStage,
         currentHandler: {
-          role: statusInfo.handler,
-          roleLabel: statusInfo.handler ? roleMap[statusInfo.handler] : null,
+          role: workflowState.currentHandler,
+          roleLabel: workflowState.currentHandler ? roleMap[workflowState.currentHandler] : null,
           organizationName: form.semester_enrollments.classes?.name
         }
       },
