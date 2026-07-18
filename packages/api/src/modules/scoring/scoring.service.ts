@@ -1040,7 +1040,7 @@ export class ScoringService {
   // =============================================
   // GET NORMALIZED SCORING HISTORY
   // =============================================
-  async getNormalizedScoringHistory(formId: string, actorId: string, role?: string): Promise<ScoringTimelineEvent[]> {
+  async getNormalizedScoringHistory(formId: string, actorId: string): Promise<ScoringTimelineEvent[]> {
     // Auth check via sheet
     const form = await prisma.scoring_sheets.findUnique({
       where: { id: formId },
@@ -1091,24 +1091,46 @@ export class ScoringService {
     };
 
     // Helper: Map Audit action to EventType
-    const mapActionToEvent = (action: string): ScoringTimelineEvent['eventType'] => {
+    const mapActionToEvent = (action: string): ScoringTimelineEvent['eventType'] | null => {
       if (action === 'SUBMIT_FORM') return 'SUBMITTED';
       if (action === 'APPROVE_FORM') return 'APPROVED';
       if (action === 'REJECT_FORM') return 'RETURNED';
       if (action === 'FINALIZE_FORM') return 'FINALIZED';
       if (action === 'CREATE_FORM') return 'CREATED';
-      return 'SAVED'; // Default
+      return null;
     };
+
+    // Lấy thông tin lớp để suy diễn vai trò
+    const classRoles = await prisma.user_roles.findMany({
+      where: { entity_id: form.semester_enrollments.class_id, is_active: 1 },
+      include: { roles: true }
+    });
+    const monitorIds = new Set(classRoles.filter(r => r.roles.code === 'CLASS_COMMITTEE').map(r => r.user_id));
+    const advisorIds = new Set(classRoles.filter(r => r.roles.code === 'ADVISOR').map(r => r.user_id));
+
+    const inferActorRole = (aId: string) => {
+      if (aId === form.semester_enrollments.user_id) return 'STUDENT';
+      if (monitorIds.has(aId)) return 'CLASS_COMMITTEE';
+      if (advisorIds.has(aId)) return 'ADVISOR';
+      return null;
+    };
+
+    const handledScoreDetailTimeMap = new Map<string, number>();
 
     // 1. Map score adjustments
     for (const adj of adjustLogs) {
+      const actorRole = inferActorRole(adj.adjusted_by_id);
+      
+      const key = `${adj.score_detail_id}_${Math.floor(adj.created_at.getTime() / 60000)}`;
+      handledScoreDetailTimeMap.set(key, 1);
+
       events.push({
         id: `adj-${adj.id}`,
         eventType: 'SCORE_ADJUSTED',
         actorId: adj.adjusted_by_id,
         actorName: adj.users?.full_name || 'Không xác định',
-        actorRole: null, // we don't store role in adjustment logs directly, could infer but fine
-        actorRoleLabel: 'Người dùng',
+        actorRole: actorRole,
+        actorRoleLabel: actorRole ? ROLE_MAP[actorRole] : 'Người dùng',
         createdAt: adj.created_at,
         previousStatus: null,
         newStatus: null,
@@ -1124,28 +1146,56 @@ export class ScoringService {
 
     // 2. Map audit logs
     for (const log of auditLogs) {
-      // Skip SCORE_CRITERIA audit logs if they are redundant with score adjustments
-      if (log.action === 'SCORE_CRITERIA' || log.action === 'DELETE_CRITERIA_SCORE') {
-        continue;
-      }
-
       const oldVal: any = log.old_value || {};
       const newVal: any = log.new_value || {};
 
+      if (log.action === 'SCORE_CRITERIA' || log.action === 'DELETE_CRITERIA_SCORE') {
+         if (log.entity_type === 'score_details') {
+            const key = `${log.entity_id}_${Math.floor(log.created_at.getTime() / 60000)}`;
+            if (!handledScoreDetailTimeMap.has(key)) {
+                const detail = detailMap.get(log.entity_id);
+                if (detail) {
+                    const actorRole = newVal.role || inferActorRole(log.actor_id);
+                    events.push({
+                      id: `audit-${log.id}`,
+                      eventType: 'SCORE_ADJUSTED',
+                      actorId: log.actor_id,
+                      actorName: log.users?.full_name || 'Hệ thống',
+                      actorRole: actorRole,
+                      actorRoleLabel: actorRole ? ROLE_MAP[actorRole] : 'Hệ thống',
+                      createdAt: log.created_at,
+                      previousStatus: null,
+                      newStatus: null,
+                      previousScore: oldVal.old_score != null ? Number(oldVal.old_score) : null,
+                      newScore: newVal.new_score != null ? Number(newVal.new_score) : null,
+                      comment: null,
+                      reason: null,
+                      criterionId: detail.criteria.id,
+                      criterionCode: detail.criteria.code,
+                      criterionName: detail.criteria.content,
+                    });
+                }
+            }
+         }
+         continue;
+      }
+
       let eventType = mapActionToEvent(log.action);
+      if (!eventType) continue;
       
-      // Determine if RESUBMITTED
       if (eventType === 'SUBMITTED' && oldVal.status && oldVal.status.includes('REJECTED')) {
         eventType = 'RESUBMITTED';
       }
+
+      const role = newVal.role || inferActorRole(log.actor_id);
 
       events.push({
         id: `audit-${log.id}`,
         eventType,
         actorId: log.actor_id,
         actorName: log.users?.full_name || 'Hệ thống',
-        actorRole: newVal.role || null,
-        actorRoleLabel: ROLE_MAP[newVal.role] || 'Hệ thống',
+        actorRole: role,
+        actorRoleLabel: role ? ROLE_MAP[role] : 'Hệ thống',
         createdAt: log.created_at,
         previousStatus: oldVal.status || null,
         newStatus: newVal.status || null,
@@ -1209,7 +1259,7 @@ export class ScoringService {
     // Auth check
     await this.verifyReadPermission(actorId, form.semester_enrollments.user_id, form.semester_enrollments.semester_id);
 
-    const history = await this.getNormalizedScoringHistory(form.id, actorId, null as any);
+    const history = await this.getNormalizedScoringHistory(form.id, actorId);
 
     const semester = form.semester_enrollments.semesters;
 
