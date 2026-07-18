@@ -149,7 +149,15 @@ export function getScoringWorkflowState(status: string): ScoringWorkflowState {
       return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: 'DEPARTMENT', isReturned: false, returnedToStage: null, statusLabel: 'Đang khiếu nại' };
 
     default:
-      return { currentStage: 'STUDENT', currentStep: 1, currentHandler: 'STUDENT', isReturned: false, returnedToStage: null, statusLabel: 'Không xác định' };
+      console.warn(`[getScoringWorkflowState] Trạng thái không nhận diện được: ${status}`);
+      return { 
+        currentStage: 'STUDENT', 
+        currentStep: 1, 
+        currentHandler: null, 
+        isReturned: false, 
+        returnedToStage: null, 
+        statusLabel: 'Trạng thái chưa được hỗ trợ' 
+      };
   }
 }
 
@@ -704,7 +712,7 @@ export class ScoringService {
       message: 'Lấy danh sách điểm thành công',
       data: scores,
       formId: form.id,
-      formStatus: workflowState.statusLabel,
+      formStatus: form.status,
       formStatusDetail: form.status,
       currentStep: workflowState.currentStep,
       currentStage: workflowState.currentStage,
@@ -1384,7 +1392,7 @@ export class ScoringService {
       statusInfo: {
         dbStatus: form.status,
         statusLabel: workflowState.statusLabel,
-        isLocked: workflowState.currentStage === 'DEPARTMENT' && form.status !== 'APPEALING',
+        isLocked: ['FINALIZED', 'APPEALING'].includes(form.status),
         isCompleted: form.status === 'FINALIZED' || form.status === 'COMPLETED'
       },
       progress: {
