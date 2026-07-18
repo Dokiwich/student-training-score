@@ -1196,7 +1196,7 @@ export class ScoringService {
                 if (matchingAdj) {
                     matchedAdjustmentIds.add(matchingAdj.id);
                 } else {
-                    const actorRole = newVal.role || inferActorRole(log.actor_id);
+                    const actorRole = newVal.actor_role || newVal.role || inferActorRole(log.actor_id);
                     events.push({
                       id: `audit-${log.id}`,
                       eventType: 'SCORE_ADJUSTED',
@@ -1567,7 +1567,10 @@ export class ScoringService {
     
     const existingScoreDetail = await prisma.score_details.findUnique({
       where: { scoring_sheet_id_criteria_id: { scoring_sheet_id: scoreRecord.id, criteria_id: criteriaId } },
-      include: { score_entries: { where: { scorer_role: role as any } } },
+      include: { 
+        score_entries: { where: { scorer_role: role as any } },
+        criteria: true
+      },
     });
     
     const entry = existingScoreDetail?.score_entries?.[0];
@@ -1581,9 +1584,28 @@ export class ScoringService {
       });
       
       await this.logScoreAdjustment(existingScoreDetail.id, actorId, Number(entry.score), 0, `Xóa điểm bởi ${role}`, tx);
-      await this.logCriticalAudit(actorId, 'DELETE_CRITERIA_SCORE', 'score_entries', entry.id,
-        { criteria_id: criteriaId, old_score: Number(entry.score) },
-        { criteria_id: criteriaId, new_score: 0, role, deleted: true },
+      await this.logCriticalAudit(actorId, 'DELETE_CRITERIA_SCORE', 'score_details', existingScoreDetail.id,
+        {
+          scoring_sheet_id: scoreRecord.id,
+          score_detail_id: existingScoreDetail.id,
+          score_entry_id: entry.id,
+          criterion_id: criteriaId,
+          criterion_code: existingScoreDetail.criteria.code,
+          criterion_name: existingScoreDetail.criteria.content,
+          old_score: entry.score != null ? Number(entry.score) : null,
+          actor_role: role,
+        },
+        {
+          scoring_sheet_id: scoreRecord.id,
+          score_detail_id: existingScoreDetail.id,
+          score_entry_id: entry.id,
+          criterion_id: criteriaId,
+          criterion_code: existingScoreDetail.criteria.code,
+          criterion_name: existingScoreDetail.criteria.content,
+          new_score: 0,
+          actor_role: role,
+          deleted: true,
+        },
         tx
       );
     });
