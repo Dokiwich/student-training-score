@@ -521,13 +521,13 @@ export function ScoringForm({
     });
   };
 
-  const handleSaveDraft = async () => {
+  const handleSaveDraft = async (): Promise<boolean> => {
     const leafItems = criteria.filter((c) => !criteria.some((x) => x.parent_id === c.id));
-    if (leafItems.length === 0) return;
+    if (leafItems.length === 0) return true;
     setIsSavingDraft(true);
     try {
       const customJwt = (session as any)?.customJwt;
-      if (!customJwt) { addToast('error', 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.'); return; }
+      if (!customJwt) { addToast('error', 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.'); return false; }
       const headersInit: HeadersInit = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${customJwt}`,
@@ -626,16 +626,22 @@ export function ScoringForm({
       else setSavedAdvisorScores(newScores);
       setIsDirty(false);
 
+      let success = true;
       if (failCount > 0 && results.length === 0) {
         addToast('error', `Lỗi khi lưu: ${lastError}`);
+        success = false;
       } else if (failCount > 0) {
         addToast('error', `Lưu được ${results.length} tiêu chí, ${failCount} bị lỗi: ${lastError}`);
+        success = false;
       } else {
         addToast('success', 'Đã lưu nháp toàn bộ phiếu!');
+        success = true;
       }
       await fetchData();
+      return success;
     } catch {
       addToast('error', 'Lỗi khi lưu nháp');
+      return false;
     } finally {
       setIsSavingDraft(false);
     }
@@ -691,7 +697,11 @@ export function ScoringForm({
       const currentSavedMap = getSavedMap(currentRole);
       const isCompletelyEmpty = Object.keys(currentSavedMap).length === 0;
       if (isDirty || isCompletelyEmpty) {
-        await handleSaveDraft();
+        const saveSuccess = await handleSaveDraft();
+        if (!saveSuccess) {
+          setIsSubmitting(false);
+          return;
+        }
       }
 
       const customJwt = (session as any)?.customJwt;
@@ -861,7 +871,7 @@ export function ScoringForm({
                       {isSavingDraft ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-border border-t-primary animate-spin"></span> Đang lưu...</> : 'Lưu Nháp'}
                     </button>
                     <button onClick={handleSubmitForm} disabled={isSubmitting || isSavingDraft || isDeleting} className="px-5 py-2 rounded-xl text-xs font-semibold text-primary-foreground bg-primary hover:bg-primary-hover shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
-                      {isSubmitting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-primary-light border-t-white animate-spin"></span> {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Đang xác nhận...' : 'Đang nộp...'}</> : <>{(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Xác nhận' : 'Nộp Phiếu'} <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></>}
+                      {isSubmitting ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-primary-light border-t-white animate-spin"></span> {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Đang xác nhận...' : 'Đang nộp...'}</> : <>{(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') ? 'Xác nhận' : (currentRole === 'STUDENT' && (formStatus === 'CLASS_REJECTED' || formStatus === 'ADVISOR_REJECTED' || formStatus === 'REJECTED') ? 'Chỉnh sửa và nộp lại' : 'Nộp Phiếu')} <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></>}
                     </button>
                   </>
                 )}
