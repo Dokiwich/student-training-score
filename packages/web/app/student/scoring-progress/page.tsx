@@ -65,23 +65,30 @@ export default function StudentScoringProgressPage() {
       );
     }
 
-    const { statusInfo, progress, scores, stages, semesterInfo } = data;
+    const { statusInfo, progress, scores, stages, semesterInfo, history } = data;
 
     const actionIcons: Record<string, React.ReactNode> = {
-      SUBMIT: <CheckCircle2 size={16} className="text-primary" />,
-      RESUBMIT: <RefreshCcw size={16} className="text-warning" />,
-      APPROVE: <CheckCircle2 size={16} className="text-success" />,
-      REJECT: <AlertCircle size={16} className="text-danger" />,
-      COMMENT: <MessageSquare size={16} className="text-info" />
+      CREATED: <CheckCircle2 size={16} className="text-primary" />,
+      SAVED: <CheckCircle2 size={16} className="text-muted-foreground" />,
+      SUBMITTED: <CheckCircle2 size={16} className="text-primary" />,
+      RESUBMITTED: <RefreshCcw size={16} className="text-warning" />,
+      APPROVED: <CheckCircle2 size={16} className="text-success" />,
+      RETURNED: <AlertCircle size={16} className="text-danger" />,
+      COMMENTED: <MessageSquare size={16} className="text-info" />,
+      SCORE_ADJUSTED: <RefreshCcw size={16} className="text-info" />,
+      FINALIZED: <CheckCircle2 size={16} className="text-success" />
     };
 
     const actionLabels: Record<string, string> = {
-      SUBMIT: 'Đã nộp phiếu',
-      RESUBMIT: 'Đã nộp lại',
-      APPROVE: 'Đã duyệt',
-      REJECT: 'Đã trả lại',
-      COMMENT: 'Thêm ghi chú',
-      FINALIZE: 'Đã chốt điểm'
+      CREATED: 'Khởi tạo phiếu',
+      SAVED: 'Lưu nháp',
+      SUBMITTED: 'Đã nộp phiếu',
+      RESUBMITTED: 'Đã nộp lại',
+      APPROVED: 'Đã duyệt',
+      RETURNED: 'Đã trả lại',
+      COMMENTED: 'Thêm ghi chú',
+      SCORE_ADJUSTED: 'Điều chỉnh điểm',
+      FINALIZED: 'Đã chốt điểm'
     };
 
     return (
@@ -183,42 +190,69 @@ export default function StudentScoringProgressPage() {
                       )}
                     </div>
 
-                    {/* Stage Actions / History */}
-                    {stage.actions && stage.actions.length > 0 ? (
-                      <div className="mt-4 space-y-3">
-                        {stage.actions.map((action: Record<string, any>, idx: number) => (
-                          <div key={idx} className="bg-surface-muted rounded-lg p-3 md:p-4 text-sm border border-border">
-                            <div className="flex justify-between items-start mb-2 gap-4">
-                              <div className="flex items-center gap-2">
-                                {actionIcons[action.action] || <User size={16} className="text-muted-foreground" />}
-                                <span className="font-semibold text-foreground">{action.actorName}</span>
-                                <span className="text-muted-foreground text-xs bg-background px-1.5 py-0.5 rounded border border-border">
-                                  {actionLabels[action.action] || action.action}
-                                </span>
-                              </div>
-                              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                {new Date(action.time).toLocaleString('vi-VN')}
-                              </span>
-                            </div>
-                            
-                            {action.comment && (
-                              <div className="mt-2 text-foreground/90 bg-background/50 p-2.5 rounded-md border-l-2 border-primary/50 whitespace-pre-wrap break-words text-xs md:text-sm">
-                                {action.comment}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-3 text-sm text-muted-foreground italic">
-                        {isFuture ? 'Chưa tới giai đoạn này' : 'Chưa có hoạt động nào'}
-                      </div>
-                    )}
+                    {/* Removed Stage Actions from here */}
                   </div>
                 );
               })}
               
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Lịch sử hoạt động */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Lịch sử hoạt động</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            {!history || history.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground italic">
+                Phiếu hiện tại chưa có lịch sử xử lý.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {history.map((event: Record<string, any>) => (
+                  <div key={event.id} className="bg-surface-muted rounded-lg p-3 md:p-4 text-sm border border-border">
+                    <div className="flex justify-between items-start mb-2 gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          {actionIcons[event.eventType] || <User size={16} className="text-muted-foreground" />}
+                          <span className="font-semibold text-foreground">{event.actorName}</span>
+                          <span className="text-muted-foreground text-xs bg-background px-1.5 py-0.5 rounded border border-border">
+                            {actionLabels[event.eventType] || event.eventType}
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Vai trò: {event.actorRoleLabel}
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(event.createdAt).toLocaleString('vi-VN')}
+                      </span>
+                    </div>
+                    
+                    {event.eventType === 'SCORE_ADJUSTED' && (
+                      <div className="mt-3 bg-background border border-border p-3 rounded-md text-sm">
+                        <div className="font-medium mb-1">
+                          {event.criterionCode}: {event.criterionName}
+                        </div>
+                        <div className="flex items-center gap-3 text-muted-foreground">
+                          <span className="line-through">{event.previousScore} điểm</span>
+                          <span className="text-foreground">→</span>
+                          <span className="font-semibold text-primary">{event.newScore} điểm</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {(event.comment || event.reason) && (
+                      <div className="mt-2 text-foreground/90 bg-background/50 p-2.5 rounded-md border-l-2 border-primary/50 whitespace-pre-wrap break-words text-xs md:text-sm">
+                        {event.comment || event.reason}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -18,6 +18,41 @@ export type SubmissionValidationError = {
     | 'FORM_NOT_FOUND';
   message: string;
 };
+
+export type ScoringTimelineEvent = {
+  id: string;
+  eventType:
+    | 'CREATED'
+    | 'SAVED'
+    | 'SUBMITTED'
+    | 'RESUBMITTED'
+    | 'APPROVED'
+    | 'RETURNED'
+    | 'SCORE_ADJUSTED'
+    | 'COMMENTED'
+    | 'FINALIZED';
+
+  actorId: string | null;
+  actorName: string;
+  actorRole: string | null;
+  actorRoleLabel: string;
+
+  createdAt: Date;
+
+  previousStatus: string | null;
+  newStatus: string | null;
+
+  previousScore: number | null;
+  newScore: number | null;
+
+  comment: string | null;
+  reason: string | null;
+
+  criterionId: number | null;
+  criterionCode: string | null;
+  criterionName: string | null;
+};
+
 // =============================================
 // WORKFLOW STATUS CONSTANTS (Thay cho enum import)
 // Map với cả 2 hệ thống: chi tiết (12 bước) & đơn giản (4 bước)
@@ -215,20 +250,16 @@ export class ScoringService {
     tx: any = prisma,
   ) {
     if (oldScore === newScore) return;
-    try {
-      await tx.score_adjustment_logs.create({
-        data: {
-          id: randomUUID(),
-          score_detail_id: scoreDetailId,
-          adjusted_by_id: adjustedById,
-          old_score: oldScore,
-          new_score: newScore,
-          reason: reason || null,
-        },
-      });
-    } catch (err) {
-      console.warn('Lỗi khi ghi log điều chỉnh điểm:', err);
-    }
+    await tx.score_adjustment_logs.create({
+      data: {
+        id: randomUUID(),
+        score_detail_id: scoreDetailId,
+        adjusted_by_id: adjustedById,
+        old_score: oldScore,
+        new_score: newScore,
+        reason: reason || null,
+      },
+    });
   }
 
   // =============================================
@@ -258,6 +289,31 @@ export class ScoringService {
     } catch (err) {
       console.warn('Lỗi khi ghi audit log:', err);
     }
+  }
+
+  // =============================================
+  // HELPER: Ghi audit log quan trọng (Không bắt lỗi, nằm trong transaction)
+  // =============================================
+  private async logCriticalAudit(
+    actorId: string,
+    action: string,
+    entityType: string,
+    entityId: string,
+    oldValue?: any,
+    newValue?: any,
+    tx: any = prisma,
+  ) {
+    await tx.audit_logs.create({
+      data: {
+        id: randomUUID(),
+        actor_id: actorId,
+        action,
+        entity_type: entityType,
+        entity_id: entityId,
+        old_value: oldValue != null ? oldValue : undefined,
+        new_value: newValue != null ? newValue : undefined,
+      },
+    });
   }
 
   // =============================================
@@ -961,7 +1017,7 @@ export class ScoringService {
       }
 
       // ✅ Ghi audit log
-      await this.logAudit(studentId, 'SCORE_CRITERIA', 'score_details', savedDetail.id,
+      await this.logCriticalAudit(studentId, 'SCORE_CRITERIA', 'score_details', savedDetail.id,
         { criteria_id: criteriaId, old_score: oldStudentScore },
         { criteria_id: criteriaId, new_score: score, role: 'STUDENT' },
         tx
@@ -981,6 +1037,133 @@ export class ScoringService {
   //    ✅ MỚI: Validate quyền theo Role + Status
   // =============================================
   
+  // =============================================
+  // GET NORMALIZED SCORING HISTORY
+  // =============================================
+  async getNormalizedScoringHistory(formId: string, actorId: string, role?: string): Promise<ScoringTimelineEvent[]> {
+    // Auth check via sheet
+    const form = await prisma.scoring_sheets.findUnique({
+      where: { id: formId },
+      include: { semester_enrollments: true },
+    });
+    if (!form) return [];
+
+    await this.verifyReadPermission(actorId, form.semester_enrollments.user_id, form.semester_enrollments.semester_id);
+
+    const scoreDetails = await prisma.score_details.findMany({
+      where: { scoring_sheet_id: formId },
+      include: { criteria: true },
+    });
+    const detailIds = scoreDetails.map(d => d.id);
+    const detailMap = new Map(scoreDetails.map(d => [d.id, d]));
+
+    const scoreEntries = await prisma.score_entries.findMany({
+      where: { score_detail_id: { in: detailIds } },
+    });
+    const entryIds = scoreEntries.map(e => e.id);
+
+    const [auditLogs, adjustLogs] = await Promise.all([
+      prisma.audit_logs.findMany({
+        where: {
+          OR: [
+            { entity_type: 'scoring_sheets', entity_id: formId },
+            { entity_type: 'score_details', entity_id: { in: detailIds } },
+            { entity_type: 'score_entries', entity_id: { in: entryIds } },
+          ]
+        },
+        include: { users: { select: { full_name: true } } },
+        orderBy: { created_at: 'asc' },
+      }),
+      prisma.score_adjustment_logs.findMany({
+        where: { score_detail_id: { in: detailIds } },
+        include: { users: { select: { full_name: true } }, score_details: { include: { criteria: true } } },
+        orderBy: { created_at: 'asc' },
+      }),
+    ]);
+
+    const events: ScoringTimelineEvent[] = [];
+    const ROLE_MAP: Record<string, string> = {
+      STUDENT: 'Sinh viên',
+      CLASS_COMMITTEE: 'Ban cán sự lớp',
+      ADVISOR: 'Cố vấn học tập',
+      SCHOOL: 'Khoa',
+      SYSTEM: 'Hệ thống'
+    };
+
+    // Helper: Map Audit action to EventType
+    const mapActionToEvent = (action: string): ScoringTimelineEvent['eventType'] => {
+      if (action === 'SUBMIT_FORM') return 'SUBMITTED';
+      if (action === 'APPROVE_FORM') return 'APPROVED';
+      if (action === 'REJECT_FORM') return 'RETURNED';
+      if (action === 'FINALIZE_FORM') return 'FINALIZED';
+      if (action === 'CREATE_FORM') return 'CREATED';
+      return 'SAVED'; // Default
+    };
+
+    // 1. Map score adjustments
+    for (const adj of adjustLogs) {
+      events.push({
+        id: `adj-${adj.id}`,
+        eventType: 'SCORE_ADJUSTED',
+        actorId: adj.adjusted_by_id,
+        actorName: adj.users?.full_name || 'Không xác định',
+        actorRole: null, // we don't store role in adjustment logs directly, could infer but fine
+        actorRoleLabel: 'Người dùng',
+        createdAt: adj.created_at,
+        previousStatus: null,
+        newStatus: null,
+        previousScore: Number(adj.old_score),
+        newScore: Number(adj.new_score),
+        comment: null,
+        reason: adj.reason,
+        criterionId: adj.score_details.criteria.id,
+        criterionCode: adj.score_details.criteria.code,
+        criterionName: adj.score_details.criteria.content,
+      });
+    }
+
+    // 2. Map audit logs
+    for (const log of auditLogs) {
+      // Skip SCORE_CRITERIA audit logs if they are redundant with score adjustments
+      if (log.action === 'SCORE_CRITERIA' || log.action === 'DELETE_CRITERIA_SCORE') {
+        continue;
+      }
+
+      const oldVal: any = log.old_value || {};
+      const newVal: any = log.new_value || {};
+
+      let eventType = mapActionToEvent(log.action);
+      
+      // Determine if RESUBMITTED
+      if (eventType === 'SUBMITTED' && oldVal.status && oldVal.status.includes('REJECTED')) {
+        eventType = 'RESUBMITTED';
+      }
+
+      events.push({
+        id: `audit-${log.id}`,
+        eventType,
+        actorId: log.actor_id,
+        actorName: log.users?.full_name || 'Hệ thống',
+        actorRole: newVal.role || null,
+        actorRoleLabel: ROLE_MAP[newVal.role] || 'Hệ thống',
+        createdAt: log.created_at,
+        previousStatus: oldVal.status || null,
+        newStatus: newVal.status || null,
+        previousScore: null,
+        newScore: null,
+        comment: null,
+        reason: newVal.reason || null,
+        criterionId: null,
+        criterionCode: null,
+        criterionName: null,
+      });
+    }
+
+    // Sort all events by createdAt ascending
+    events.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    return events;
+  }
+
   // =============================================
   // GET SCORING PROGRESS (TIMELINE)
   // =============================================
@@ -1026,14 +1209,11 @@ export class ScoringService {
     // Auth check
     await this.verifyReadPermission(actorId, form.semester_enrollments.user_id, form.semester_enrollments.semester_id);
 
+    const history = await this.getNormalizedScoringHistory(form.id, actorId, null as any);
+
     const semester = form.semester_enrollments.semesters;
 
-    const [reviewActions, scoreDetails, categories, allCriteria] = await Promise.all([
-      prisma.review_actions.findMany({
-        where: { scoring_sheet_id: form.id },
-        include: { users: { select: { full_name: true } } },
-        orderBy: { created_at: 'asc' }
-      }),
+    const [scoreDetails, categories, allCriteria] = await Promise.all([
       prisma.score_details.findMany({
         where: { scoring_sheet_id: form.id },
         include: { score_entries: true }
@@ -1052,7 +1232,7 @@ export class ScoringService {
       CLASS_REJECTED: { label: 'Bị BCS trả lại', stage: 1, handler: 'STUDENT', isReturned: true, returnedTo: 1 },
       ADVISOR_REVIEWING: { label: 'CVHT đang xét duyệt', stage: 3, handler: 'ADVISOR', isReturned: false },
       ADVISOR_APPROVED: { label: 'CVHT đã duyệt', stage: 4, handler: 'SCHOOL', isReturned: false },
-      ADVISOR_REJECTED: { label: 'Bị CVHT trả lại', stage: 2, handler: 'CLASS_COMMITTEE', isReturned: true, returnedTo: 2 },
+      ADVISOR_REJECTED: { label: 'Bị CVHT trả lại', stage: 1, handler: 'STUDENT', isReturned: true, returnedTo: 1 },
       SCHOOL_REVIEWING: { label: 'Khoa đang xét duyệt', stage: 4, handler: 'SCHOOL', isReturned: false },
       SCHOOL_APPROVED: { label: 'Khoa đã duyệt', stage: 4, handler: 'SCHOOL', isReturned: false },
       SCHOOL_REJECTED: { label: 'Bị Khoa trả lại', stage: 3, handler: 'ADVISOR', isReturned: true, returnedTo: 3 },
@@ -1062,37 +1242,26 @@ export class ScoringService {
 
     const statusInfo = DB_STATUS_MAP[form.status] || { label: form.status, stage: 1, handler: null };
 
-    const formatAction = (a: any) => ({
-      action: a.action,
-      time: a.created_at,
-      actorName: a.users?.full_name || 'Hệ thống',
-      comment: a.comment
-    });
-
     const stages = [
       {
         stageIndex: 1,
         roleLabel: 'Sinh viên',
         deadline: semester?.student_deadline,
-        actions: reviewActions.filter(a => a.from_status === 'DRAFT' || a.action === 'SUBMIT' || a.action === 'RESUBMIT').map(formatAction)
       },
       {
         stageIndex: 2,
         roleLabel: 'Ban cán sự lớp',
         deadline: semester?.class_committee_deadline,
-        actions: reviewActions.filter(a => a.from_status.startsWith('CLASS_') || a.from_status === 'STUDENT_SUBMITTED').map(formatAction)
       },
       {
         stageIndex: 3,
         roleLabel: 'Cố vấn học tập',
         deadline: semester?.advisor_deadline,
-        actions: reviewActions.filter(a => a.from_status.startsWith('ADVISOR_') || a.from_status === 'CLASS_REVIEWED').map(formatAction)
       },
       {
         stageIndex: 4,
         roleLabel: 'Khoa',
         deadline: semester?.school_deadline,
-        actions: reviewActions.filter(a => a.from_status.startsWith('SCHOOL_') || a.from_status === 'ADVISOR_APPROVED' || a.action === 'FINALIZE').map(formatAction)
       }
     ];
 
@@ -1129,7 +1298,8 @@ export class ScoringService {
         advisorScore: totals.advisorTotal,
         finalScore: totals.advisorTotal 
       },
-      stages
+      stages,
+      history
     };
   }
 
@@ -1256,7 +1426,7 @@ export class ScoringService {
       }
 
       // ✅ Ghi audit log
-      await this.logAudit(actorId, 'SCORE_CRITERIA', 'score_details', dbScore.id,
+      await this.logCriticalAudit(actorId, 'SCORE_CRITERIA', 'score_details', dbScore.id,
         { criteria_id: criteriaId, old_score: oldScore },
         { criteria_id: criteriaId, new_score: score, role },
         tx
@@ -1320,7 +1490,7 @@ export class ScoringService {
       });
       
       await this.logScoreAdjustment(existingScoreDetail.id, actorId, Number(entry.score), 0, `Xóa điểm bởi ${role}`, tx);
-      await this.logAudit(actorId, 'DELETE_CRITERIA_SCORE', 'score_entries', entry.id,
+      await this.logCriticalAudit(actorId, 'DELETE_CRITERIA_SCORE', 'score_entries', entry.id,
         { criteria_id: criteriaId, old_score: Number(entry.score) },
         { criteria_id: criteriaId, new_score: 0, role, deleted: true },
         tx
@@ -1548,7 +1718,7 @@ export class ScoringService {
       }
 
       // ✅ Ghi audit log cho việc chuyển trạng thái phiếu
-      await this.logAudit(actorId, 'SUBMIT_FORM', 'scoring_sheets', form.id,
+      await this.logCriticalAudit(actorId, 'SUBMIT_FORM', 'scoring_sheets', form.id,
         { status: form.status },
         { status: transition.nextStatus, role },
         tx
@@ -1718,7 +1888,7 @@ export class ScoringService {
       });
 
       // ✅ Ghi audit log cho việc trả lại phiếu
-      await this.logAudit(actorId, 'REJECT_FORM', 'scoring_sheets', form.id,
+      await this.logCriticalAudit(actorId, 'REJECT_FORM', 'scoring_sheets', form.id,
         { status: form.status },
         { status: newStatus, role, reason },
         tx
