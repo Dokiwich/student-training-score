@@ -48,6 +48,7 @@ const SEMESTER_SELECT = {
   class_committee_deadline: true,
   advisor_deadline: true,
   school_deadline: true,
+  semester_number: true,
 } as const;
 
 let cachedSemester: any = null;
@@ -92,6 +93,11 @@ export async function GET() {
     const computed = computeStatus(semester);
     if (computed !== semester.status) {
       semester = { ...semester, status: computed as any };
+      // Async DB sync to prevent frontend mismatch
+      prisma.semesters.update({
+        where: { id: semester.id },
+        data: { status: computed as any }
+      }).catch(console.error);
     }
 
     cachedSemester = semester;

@@ -1,8 +1,8 @@
 'use client';
 
 import { Suspense } from 'react';
-import { DepartmentDashboard } from '../components/DepartmentDashboard';
-import { DashboardLayout } from '../components/DashboardLayout';
+import { DepartmentDashboard } from '../../components/DepartmentDashboard';
+import { DashboardLayout } from '../../components/DashboardLayout';
 
 function DepartmentContent() {
   return <DepartmentDashboard />;

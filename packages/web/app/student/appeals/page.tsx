@@ -3,6 +3,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '../../components/DashboardLayout';
+import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { StatusBadge } from '../../components/ui/StatusBadge';
+import { AlertTriangle, Plus, ChevronDown, CheckSquare, MessageSquare, ShieldAlert, FileText, ChevronRight } from 'lucide-react';
 
 interface AppealItem {
   id: string;
@@ -44,13 +49,6 @@ interface CriteriaItem {
   classScore: number | null;
   advisorScore: number | null;
 }
-
-const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> = {
-  PENDING: { label: 'Đang chờ Khoa xem xét', bg: '#fef3c7', color: '#d97706' },
-  DEPT_REVIEWED: { label: 'Khoa đã xem xét — Chờ Admin', bg: '#e0e7ff', color: '#4338ca' },
-  ACCEPTED: { label: 'Đã chấp nhận (Admin)', bg: '#ecfdf5', color: '#059669' },
-  REJECTED: { label: 'Đã từ chối (Admin)', bg: '#fef2f2', color: '#dc2626' },
-};
 
 export default function StudentAppealsPage() {
   const { data: session } = useSession();
@@ -129,16 +127,11 @@ export default function StudentAppealsPage() {
     setSelectedCriteriaIds(new Set());
     try {
       const r = await fetch(`/api/appeals/criteria?sheetId=${sheetId}`);
-      console.log('[appeals] criteria fetch status:', r.status);
       if (r.ok) {
         const j = await r.json();
-        console.log('[appeals] criteria data:', j.data?.length, 'items');
         setCriteriaList(j.data || []);
-      } else {
-        const errText = await r.text();
-        console.error('[appeals] criteria fetch error:', r.status, errText);
       }
-    } catch (err) { console.error('[appeals] criteria fetch exception:', err); }
+    } catch (err) { console.error(err); }
     finally { setLoadingCriteria(false); }
   }, []);
 
@@ -213,388 +206,366 @@ export default function StudentAppealsPage() {
     return leaves;
   };
 
-
   return (
     <DashboardLayout
       pageTitle="Khiếu nại điểm"
       pageSubtitle="Gửi khiếu nại về điểm Ban cán sự hoặc Cố vấn học tập"
+      breadcrumbs={[{ label: 'Khiếu nại điểm' }]}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div className="space-y-6">
         {/* Header actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            className="btn-primary"
+        <div className="flex justify-end">
+          <Button
+            variant={showForm ? 'outline' : 'primary'}
             onClick={() => { setShowForm(!showForm); if (!showForm) fetchSheets(); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            leftIcon={showForm ? undefined : <Plus size={16} />}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            {showForm ? 'Đóng' : 'Tạo khiếu nại mới'}
-          </button>
+            {showForm ? 'Đóng form khiếu nại' : 'Tạo khiếu nại mới'}
+          </Button>
         </div>
 
         {/* Create form */}
         {showForm && (
-          <div className="dashboard-card" style={{ padding: 24, animation: 'slideIn 0.3s ease-out' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-                <line x1="4" y1="22" x2="4" y2="15" />
-              </svg>
-              Tạo khiếu nại mới
-            </h3>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16, marginBottom: 20 }}>
-              {/* Chọn học kỳ */}
-              <div>
-                <label className="form-label">Học kỳ / Phiếu chấm điểm</label>
-                <select
-                  value={selectedSheetId}
-                  onChange={(e) => setSelectedSheetId(e.target.value)}
-                  className="form-select"
-                >
-                  {sheets.length === 0 && <option value="">-- Không có phiếu --</option>}
-                  {sheets.map((s) => (
-                    <option key={s.sheetId} value={s.sheetId}>{s.semesterName}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Loại khiếu nại */}
-              <div>
-                <label className="form-label">Loại khiếu nại</label>
-                <select
-                  value={appealType}
-                  onChange={(e) => setAppealType(e.target.value as 'class' | 'advisor')}
-                  className="form-select"
-                >
-                  <option value="class">Điểm Ban cán sự (BCS) chấm</option>
-                  <option value="advisor">Điểm Cố vấn học tập (CVHT) chấm</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Hiển thị điểm hiện tại */}
-            {selectedSheet && (
-              <div style={{
-                background: 'var(--bg-surface)', border: '1px solid var(--border)',
-                borderRadius: 10, padding: 16, marginBottom: 20,
-                display: 'flex', gap: 24, flexWrap: 'wrap',
-              }}>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
-                    Điểm BCS chấm
-                  </div>
-                  <div style={{
-                    fontSize: 24, fontWeight: 800,
-                    color: appealType === 'class' ? '#dc2626' : 'var(--text-primary)',
-                  }}>
-                    {selectedSheet.classTotal ?? '—'}
-                  </div>
+          <Card className="animate-in slide-in-from-top-4 duration-300 border-primary/20 shadow-md">
+            <CardHeader className="border-b border-border bg-surface-muted">
+              <CardTitle className="text-primary flex items-center gap-2">
+                <ShieldAlert size={20} />
+                Tạo khiếu nại mới
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-bold text-foreground">Học kỳ / Phiếu chấm điểm</label>
+                  <select
+                    value={selectedSheetId}
+                    onChange={(e) => setSelectedSheetId(e.target.value)}
+                    className="w-full h-10 px-3 text-sm border border-border rounded-lg bg-surface focus:border-primary focus:ring-1 focus:ring-ring outline-none transition-all"
+                  >
+                    {sheets.length === 0 && <option value="">-- Không có phiếu --</option>}
+                    {sheets.map((s) => (
+                      <option key={s.sheetId} value={s.sheetId}>{s.semesterName}</option>
+                    ))}
+                  </select>
                 </div>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
-                    Điểm CVHT chấm
-                  </div>
-                  <div style={{
-                    fontSize: 24, fontWeight: 800,
-                    color: appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)',
-                  }}>
-                    {selectedSheet.advisorTotal ?? '—'}
-                  </div>
-                </div>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-                  <div style={{
-                    fontSize: 12, color: '#d97706', background: '#fef3c7',
-                    padding: '6px 12px', borderRadius: 8, fontWeight: 500,
-                  }}>
-                    ⚠ Bạn đang khiếu nại về: <strong>{appealType === 'class' ? 'Điểm BCS' : 'Điểm CVHT'}</strong>
-                  </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-bold text-foreground">Loại khiếu nại</label>
+                  <select
+                    value={appealType}
+                    onChange={(e) => setAppealType(e.target.value as 'class' | 'advisor')}
+                    className="w-full h-10 px-3 text-sm border border-border rounded-lg bg-surface focus:border-primary focus:ring-1 focus:ring-ring outline-none transition-all"
+                  >
+                    <option value="class">Điểm Ban cán sự (BCS) chấm</option>
+                    <option value="advisor">Điểm Cố vấn học tập (CVHT) chấm</option>
+                  </select>
                 </div>
               </div>
-            )}
 
-            {/* Chọn tiêu chí */}
-            <div style={{ marginBottom: 20 }}>
-              <label className="form-label">Tiêu chí khiếu nại *</label>
-              {loadingCriteria ? (
-                <div style={{ padding: 12, color: 'var(--text-muted)', fontSize: 13 }}>Đang tải tiêu chí...</div>
-              ) : criteriaList.length === 0 ? (
-                <div style={{ padding: 12, color: 'var(--text-muted)', fontSize: 13 }}>Không có tiêu chí nào (chưa chọn phiếu hoặc chưa có dữ liệu)</div>
-              ) : (
-                <>
-                  <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-                    {rootCriteria.map(parent => {
-                      const isExpanded = expandedParents.has(parent.id);
-                      const children = getLeafDescendants(parent.id);
-                      
-                      if (children.length === 0) {
-                        // Root criteria without children -> Render as selectable item
-                        const isSelected = selectedCriteriaIds.has(parent.id);
-                        return (
-                          <div key={parent.id} style={{ borderBottom: '1px solid var(--border)', padding: '8px 16px', background: '#fff' }}>
-                            <div 
-                              onClick={() => toggleSelectedCriteria(parent.id)}
-                              style={{
-                                padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
-                                border: isSelected ? '2px solid var(--accent)' : '1px solid var(--border)',
-                                background: isSelected ? 'var(--accent-light)' : '#f8fafc',
-                                display: 'flex', alignItems: 'center', gap: 12
-                              }}
-                            >
-                              <input 
-                                type="checkbox" 
-                                checked={isSelected} 
-                                onChange={() => {}}
-                                style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
-                              />
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                  [{parent.code}] {parent.content}
+              {selectedSheet && (
+                <div className="bg-surface-muted border border-border rounded-xl p-5 flex flex-wrap gap-8">
+                  <div>
+                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Điểm BCS chấm</div>
+                    <div className={`text-3xl font-black ${appealType === 'class' ? 'text-danger' : 'text-foreground'}`}>
+                      {selectedSheet.classTotal ?? '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Điểm CVHT chấm</div>
+                    <div className={`text-3xl font-black ${appealType === 'advisor' ? 'text-danger' : 'text-foreground'}`}>
+                      {selectedSheet.advisorTotal ?? '—'}
+                    </div>
+                  </div>
+                  <div className="flex-1 flex items-center">
+                    <div className="bg-warning-bg text-warning-foreground px-4 py-2.5 rounded-lg text-sm font-medium border border-warning-border flex items-center gap-2">
+                      <AlertTriangle size={16} />
+                      Bạn đang khiếu nại về: <span className="font-bold">{appealType === 'class' ? 'Điểm BCS' : 'Điểm CVHT'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <label className="text-sm font-bold text-foreground">Tiêu chí khiếu nại <span className="text-danger">*</span></label>
+                
+                {loadingCriteria ? (
+                  <div className="p-4 text-center text-muted-foreground text-sm flex justify-center items-center gap-2">
+                    <div className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin"></div>
+                    Đang tải tiêu chí...
+                  </div>
+                ) : criteriaList.length === 0 ? (
+                  <div className="p-4 text-center text-muted-foreground text-sm border border-dashed border-border rounded-lg bg-surface-muted">
+                    Không có tiêu chí nào (chưa chọn phiếu hoặc chưa có dữ liệu)
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="border border-border rounded-xl overflow-hidden shadow-sm">
+                      {rootCriteria.map(parent => {
+                        const isExpanded = expandedParents.has(parent.id);
+                        const children = getLeafDescendants(parent.id);
+                        
+                        if (children.length === 0) {
+                          const isSelected = selectedCriteriaIds.has(parent.id);
+                          return (
+                            <div key={parent.id} className="border-b border-border last:border-b-0 bg-card p-2">
+                              <div 
+                                onClick={() => toggleSelectedCriteria(parent.id)}
+                                className={`p-3 rounded-lg cursor-pointer flex items-center gap-3 transition-all ${
+                                  isSelected 
+                                    ? 'border-2 border-primary bg-primary-light/10 shadow-sm' 
+                                    : 'border border-transparent hover:bg-surface-muted'
+                                }`}
+                              >
+                                <input 
+                                  type="checkbox" 
+                                  checked={isSelected} 
+                                  readOnly
+                                  className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-semibold text-foreground">
+                                    <span className="text-primary font-mono bg-primary-light px-1.5 py-0.5 rounded mr-2 text-xs">{parent.code}</span>
+                                    {parent.content}
+                                  </div>
+                                </div>
+                                <div className="text-center px-2">
+                                  <div className={`text-[10px] font-bold uppercase ${appealType === 'class' ? 'text-danger' : 'text-muted-foreground'}`}>BCS</div>
+                                  <div className={`text-lg font-black ${appealType === 'class' ? 'text-danger' : 'text-foreground'}`}>{parent.classScore ?? '—'}</div>
+                                </div>
+                                <div className="text-center px-2">
+                                  <div className={`text-[10px] font-bold uppercase ${appealType === 'advisor' ? 'text-danger' : 'text-muted-foreground'}`}>CVHT</div>
+                                  <div className={`text-lg font-black ${appealType === 'advisor' ? 'text-danger' : 'text-foreground'}`}>{parent.advisorScore ?? '—'}</div>
                                 </div>
                               </div>
-                              <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'class' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>BCS chấm</div>
-                                <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'class' ? '#dc2626' : 'var(--text-primary)' }}>{parent.classScore ?? '—'}</div>
-                              </div>
-                              <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>CVHT chấm</div>
-                                <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)' }}>{parent.advisorScore ?? '—'}</div>
-                              </div>
                             </div>
-                          </div>
-                        );
-                      }
+                          );
+                        }
 
-                      // Root criteria with children -> Render as accordion
-                      return (
-                        <div key={parent.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <div 
-                            onClick={() => toggleParent(parent.id)}
-                            style={{ 
-                              padding: '12px 16px', background: isExpanded ? 'var(--bg-surface)' : '#fff', 
-                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                              fontWeight: 600, fontSize: 14, color: 'var(--text-primary)'
-                            }}
-                          >
-                            <div>[{parent.code}] {parent.content}</div>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                              <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                          </div>
-                          
-                          {isExpanded && (
-                            <div style={{ padding: '0 16px 12px 16px', background: 'var(--bg-surface)' }}>
-                              {children.map((child: CriteriaItem) => {
-                                const isSelected = selectedCriteriaIds.has(child.id);
-                                return (
-                                  <div 
-                                    key={child.id}
-                                    onClick={() => toggleSelectedCriteria(child.id)}
-                                    style={{
-                                      padding: '10px 12px', marginTop: 8, borderRadius: 6, cursor: 'pointer',
-                                      border: isSelected ? '2px solid var(--accent)' : '1px solid var(--border)',
-                                      background: isSelected ? 'var(--accent-light)' : '#fff',
-                                      display: 'flex', alignItems: 'center', gap: 12
-                                    }}
-                                  >
-                                    <input 
-                                      type="checkbox" 
-                                      checked={isSelected} 
-                                      onChange={() => {}}
-                                      style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
-                                    />
-                                    <div style={{ flex: 1 }}>
-                                      <div style={{ fontSize: 13, fontWeight: isSelected ? 600 : 500, color: 'var(--text-primary)' }}>
-                                        [{child.code}] {child.content}
+                        return (
+                          <div key={parent.id} className="border-b border-border last:border-b-0">
+                            <div 
+                              onClick={() => toggleParent(parent.id)}
+                              className={`p-3 sm:px-4 cursor-pointer flex items-center justify-between font-bold text-sm text-foreground transition-colors ${
+                                isExpanded ? 'bg-surface-muted' : 'bg-card hover:bg-surface-muted'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-primary font-mono bg-primary-light px-1.5 py-0.5 rounded text-xs">{parent.code}</span>
+                                {parent.content}
+                              </div>
+                              <ChevronDown size={18} className={`text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                            </div>
+                            
+                            {isExpanded && (
+                              <div className="p-2 sm:p-3 bg-surface border-t border-border space-y-1.5">
+                                {children.map((child: CriteriaItem) => {
+                                  const isSelected = selectedCriteriaIds.has(child.id);
+                                  return (
+                                    <div 
+                                      key={child.id}
+                                      onClick={() => toggleSelectedCriteria(child.id)}
+                                      className={`p-3 rounded-lg cursor-pointer flex items-center gap-3 transition-all ${
+                                        isSelected 
+                                          ? 'border-2 border-primary bg-primary-light/10 shadow-sm' 
+                                          : 'border border-border bg-card hover:border-primary/30'
+                                      }`}
+                                    >
+                                      <input 
+                                        type="checkbox" 
+                                        checked={isSelected} 
+                                        readOnly
+                                        className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className={`text-sm ${isSelected ? 'font-bold' : 'font-medium'} text-foreground leading-tight`}>
+                                          <span className="text-muted-foreground font-mono text-xs mr-2">[{child.code}]</span>
+                                          {child.content}
+                                        </div>
+                                      </div>
+                                      <div className="text-center px-2">
+                                        <div className={`text-[10px] font-bold uppercase ${appealType === 'class' ? 'text-danger' : 'text-muted-foreground'}`}>BCS</div>
+                                        <div className={`text-base font-black ${appealType === 'class' ? 'text-danger' : 'text-foreground'}`}>{child.classScore ?? '—'}</div>
+                                      </div>
+                                      <div className="text-center px-2 border-l border-border pl-4">
+                                        <div className={`text-[10px] font-bold uppercase ${appealType === 'advisor' ? 'text-danger' : 'text-muted-foreground'}`}>CVHT</div>
+                                        <div className={`text-base font-black ${appealType === 'advisor' ? 'text-danger' : 'text-foreground'}`}>{child.advisorScore ?? '—'}</div>
                                       </div>
                                     </div>
-                                    <div style={{ textAlign: 'center' }}>
-                                      <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'class' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>BCS chấm</div>
-                                      <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'class' ? '#dc2626' : 'var(--text-primary)' }}>{child.classScore ?? '—'}</div>
-                                    </div>
-                                    <div style={{ textAlign: 'center' }}>
-                                      <div style={{ fontSize: 10, fontWeight: 600, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-muted)', textTransform: 'uppercase' }}>CVHT chấm</div>
-                                      <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)' }}>{child.advisorScore ?? '—'}</div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Hiện chi tiết điểm của tiêu chí đã chọn */}
-                  {selectedCriteria.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>Chi tiết các tiêu chí đang chọn ({selectedCriteria.length}):</div>
-                      {selectedCriteria.map(sc => (
-                        <div key={sc.id} style={{
-                          background: '#f8fafc', border: '1px solid var(--border)',
-                          borderRadius: 8, padding: 14, display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center',
-                        }}>
-                          <div style={{ flex: 1, minWidth: 200 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>[{sc.code}] {sc.content}</div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                          <div style={{ display: 'flex', gap: 16 }}>
-                            <div style={{ textAlign: 'center' }}>
-                              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>SV</div>
-                              <div style={{ fontSize: 18, fontWeight: 700 }}>{sc.studentScore ?? '—'}</div>
-                            </div>
-                            <div style={{ textAlign: 'center' }}>
-                              <div style={{ fontSize: 10, color: appealType === 'class' ? '#dc2626' : 'var(--text-muted)' }}>BCS</div>
-                              <div style={{ fontSize: 18, fontWeight: 700 }}>{sc.classScore ?? '—'}</div>
-                            </div>
-                            <div style={{ textAlign: 'center' }}>
-                              <div style={{ fontSize: 10, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-muted)' }}>CVHT</div>
-                              <div style={{ fontSize: 18, fontWeight: 700, color: appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)' }}>{sc.advisorScore ?? '—'}</div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
-                  )}
-                </>
-              )}
-            </div>
 
-            {/* Lý do */}
-            <div style={{ marginBottom: 20 }}>
-              <label className="form-label">Lý do khiếu nại *</label>
-              <textarea
-                className="form-input"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Mô tả chi tiết lý do bạn muốn khiếu nại điểm này..."
-                rows={4}
-                style={{ resize: 'vertical', minHeight: 100 }}
-              />
-            </div>
+                    {/* Selected Criteria Summary */}
+                    {selectedCriteria.length > 0 && (
+                      <div className="bg-primary-light border border-primary-light rounded-xl p-4">
+                        <div className="text-sm font-bold text-primary flex items-center gap-2 mb-3">
+                          <CheckSquare size={16} />
+                          Các tiêu chí đã chọn ({selectedCriteria.length})
+                        </div>
+                        <div className="space-y-2">
+                          {selectedCriteria.map(sc => (
+                            <div key={sc.id} className="bg-card border border-border rounded-lg p-3 flex items-center gap-4 shadow-sm">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-bold text-foreground truncate">
+                                  <span className="text-primary font-mono mr-1">[{sc.code}]</span>
+                                  {sc.content}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4 shrink-0">
+                                <div className="text-center">
+                                  <div className="text-[10px] font-bold text-muted-foreground uppercase">SV</div>
+                                  <div className="text-sm font-black text-foreground">{sc.studentScore ?? '—'}</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className={`text-[10px] font-bold uppercase ${appealType === 'class' ? 'text-danger' : 'text-muted-foreground'}`}>BCS</div>
+                                  <div className={`text-sm font-black ${appealType === 'class' ? 'text-danger' : 'text-foreground'}`}>{sc.classScore ?? '—'}</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className={`text-[10px] font-bold uppercase ${appealType === 'advisor' ? 'text-danger' : 'text-muted-foreground'}`}>CVHT</div>
+                                  <div className={`text-sm font-black ${appealType === 'advisor' ? 'text-danger' : 'text-foreground'}`}>{sc.advisorScore ?? '—'}</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn-secondary" onClick={() => setShowForm(false)}>Hủy</button>
-              <button
-                className="btn-primary"
-                onClick={handleSubmit}
-                disabled={submitting || !reason.trim() || !selectedSheetId || selectedCriteriaIds.size === 0}
-                style={{ opacity: submitting || !reason.trim() || !selectedSheetId || selectedCriteriaIds.size === 0 ? 0.5 : 1 }}
-              >
-                {submitting ? 'Đang gửi...' : 'Gửi khiếu nại'}
-              </button>
-            </div>
-          </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-bold text-foreground">Lý do khiếu nại <span className="text-danger">*</span></label>
+                <textarea
+                  className="w-full p-3 text-sm border border-border rounded-xl bg-surface focus:border-primary focus:ring-1 focus:ring-ring outline-none transition-all placeholder:text-muted-foreground resize-y min-h-[120px]"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Mô tả chi tiết lý do bạn muốn khiếu nại điểm này..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-border">
+                <Button variant="outline" onClick={() => setShowForm(false)}>Hủy</Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSubmit}
+                  disabled={submitting || !reason.trim() || !selectedSheetId || selectedCriteriaIds.size === 0}
+                  isLoading={submitting}
+                >
+                  Gửi khiếu nại
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Appeals list */}
-        <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-              Danh sách khiếu nại
-            </h3>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, margin: '4px 0 0 0' }}>
-              {appeals.length} khiếu nại
-            </p>
-          </div>
-
-          {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>
-          ) : appeals.length === 0 ? (
-            <div style={{ padding: 60, textAlign: 'center' }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 12px' }}>
-                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-                <line x1="4" y1="22" x2="4" y2="15" />
-              </svg>
-              <p style={{ color: 'var(--text-muted)', fontSize: 14, fontWeight: 500 }}>Bạn chưa có khiếu nại nào</p>
-              <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>Nhấn &quot;Tạo khiếu nại mới&quot; để bắt đầu</p>
+        <Card>
+          <CardHeader className="border-b border-border">
+            <div className="flex items-center justify-between">
+              <CardTitle>Danh sách khiếu nại</CardTitle>
+              <div className="text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
+                {appeals.length} yêu cầu
+              </div>
             </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="dashboard-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 50 }}>STT</th>
-                    <th>Học kỳ</th>
-                    <th style={{ width: 130 }}>Loại</th>
-                    <th>Tiêu chí</th>
-                    <th>Lý do</th>
-                    <th style={{ width: 140, textAlign: 'center' }}>Trạng thái</th>
-                    <th>Phản hồi</th>
-                    <th style={{ width: 130 }}>Ngày gửi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {appeals.map((a, i) => {
-                    const st = STATUS_MAP[a.status] || STATUS_MAP.PENDING;
-                    return (
-                      <tr key={a.id}>
-                        <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
-                        <td>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{a.semesterName}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.classCode} - {a.className}</div>
+          </CardHeader>
+          
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="p-12 flex flex-col items-center justify-center text-muted-foreground">
+                <div className="w-8 h-8 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4"></div>
+                <p className="text-sm font-medium">Đang tải dữ liệu...</p>
+              </div>
+            ) : appeals.length === 0 ? (
+              <EmptyState
+                icon={FileText}
+                title="Chưa có khiếu nại nào"
+                description="Nhấn 'Tạo khiếu nại mới' để gửi yêu cầu xem xét lại điểm số."
+                action={
+                  <Button variant="outline" onClick={() => setShowForm(true)}>
+                    Tạo khiếu nại
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-surface-muted border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-bold">
+                      <th className="px-4 py-3 font-semibold w-12 text-center">STT</th>
+                      <th className="px-4 py-3 font-semibold">Học kỳ / Lớp</th>
+                      <th className="px-4 py-3 font-semibold w-32">Loại</th>
+                      <th className="px-4 py-3 font-semibold">Tiêu chí & Lý do</th>
+                      <th className="px-4 py-3 font-semibold w-40 text-center">Trạng thái</th>
+                      <th className="px-4 py-3 font-semibold w-40">Ngày gửi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {appeals.map((a, i) => (
+                      <tr key={a.id} className="hover:bg-surface-muted transition-colors group">
+                        <td className="px-4 py-4 text-sm text-muted-foreground text-center">{i + 1}</td>
+                        <td className="px-4 py-4">
+                          <div className="text-sm font-bold text-foreground">{a.semesterName}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{a.classCode}</div>
                         </td>
-                        <td>
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
-                            background: a.appealType === 'advisor' ? '#f3e8ff' : '#eff6ff',
-                            color: a.appealType === 'advisor' ? '#7c3aed' : '#2563eb',
-                          }}>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            a.appealType === 'advisor' 
+                              ? 'bg-info-bg text-info-foreground border border-info-border' 
+                              : 'bg-primary-light text-primary-foreground border border-primary'
+                          }`}>
                             {a.appealType === 'advisor' ? 'Điểm CVHT' : 'Điểm BCS'}
                           </span>
                         </td>
-                        <td>
+                        <td className="px-4 py-4 max-w-xs">
                           {a.criteriaCode ? (
-                            <div>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'var(--accent-light)', padding: '1px 6px', borderRadius: 4, marginRight: 6 }}>{a.criteriaCode}</span>
-                              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{a.criteriaContent}</span>
+                            <div className="mb-2 line-clamp-1" title={a.criteriaContent || ''}>
+                              <span className="font-mono text-xs font-bold text-primary bg-primary-light px-1.5 py-0.5 rounded mr-2">{a.criteriaCode}</span>
+                              <span className="text-sm text-muted-foreground">{a.criteriaContent}</span>
                             </div>
                           ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                            <div className="text-sm text-muted-foreground mb-2">—</div>
+                          )}
+                          <div className="text-sm text-foreground bg-surface-muted p-2.5 rounded-lg border border-border mt-2 shadow-sm line-clamp-2" title={a.reason}>
+                            <span className="font-bold text-muted-foreground mr-1">Lý do:</span> {a.reason}
+                          </div>
+                          {a.resolution && (
+                            <div className="mt-3 p-3 bg-success-bg border border-success-border rounded-lg text-sm text-success-foreground flex items-start gap-2">
+                              <MessageSquare size={14} className="mt-0.5 shrink-0" />
+                              <div>
+                                <div className="font-medium">{a.resolution}</div>
+                                {a.resolvedBy && (
+                                  <div className="text-xs text-success-foreground mt-1 font-semibold">
+                                    Phản hồi bởi: {a.resolvedBy}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           )}
                         </td>
-                        <td>
-                          <div style={{ fontSize: 13, color: 'var(--text-primary)', maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.reason}>
-                            {a.reason}
+                        <td className="px-4 py-4 text-center">
+                          <StatusBadge status={a.status} type="appeal" />
+                        </td>
+                        <td className="px-4 py-4 text-xs text-muted-foreground font-medium">
+                          {new Date(a.createdAt).toLocaleDateString('vi-VN')}
+                          <div className="text-[10px] mt-0.5 text-muted-foreground opacity-80">
+                            {new Date(a.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 999,
-                            background: st.bg, color: st.color,
-                          }}>
-                            {st.label}
-                          </span>
-                        </td>
-                        <td>
-                          {a.resolution ? (
-                            <div>
-                              <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{a.resolution}</div>
-                              {a.resolvedBy && (
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                                  — {a.resolvedBy}
-                                  {a.resolvedAt && ` (${new Date(a.resolvedAt).toLocaleDateString('vi-VN')})`}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
-                          )}
-                        </td>
-                        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                          {new Date(a.createdAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

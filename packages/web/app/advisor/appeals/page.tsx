@@ -136,8 +136,8 @@ export default function AdvisorAppealsPage() {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>CẦN XỬ LÝ</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{pendingCount}</div>
+              <div style={{ fontSize: 13, color: 'var(--muted-foreground)', fontWeight: 600 }}>CẦN XỬ LÝ</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--foreground)' }}>{pendingCount}</div>
             </div>
           </div>
           <div className="dashboard-card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -145,8 +145,8 @@ export default function AdvisorAppealsPage() {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>ĐÃ XỬ LÝ</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{appeals.length - pendingCount}</div>
+              <div style={{ fontSize: 13, color: 'var(--muted-foreground)', fontWeight: 600 }}>ĐÃ XỬ LÝ</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--foreground)' }}>{appeals.length - pendingCount}</div>
             </div>
           </div>
           <div className="dashboard-card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -154,8 +154,8 @@ export default function AdvisorAppealsPage() {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>TỔNG CỘNG</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{appeals.length}</div>
+              <div style={{ fontSize: 13, color: 'var(--muted-foreground)', fontWeight: 600 }}>TỔNG CỘNG</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--foreground)' }}>{appeals.length}</div>
             </div>
           </div>
         </div>
@@ -163,20 +163,20 @@ export default function AdvisorAppealsPage() {
         {/* Appeals list */}
         <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
               Danh sách khiếu nại
             </h3>
           </div>
 
           {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted-foreground)' }}>Đang tải...</div>
           ) : appeals.length === 0 ? (
             <div style={{ padding: 60, textAlign: 'center' }}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 12px' }}>
                 <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
                 <line x1="4" y1="22" x2="4" y2="15" />
               </svg>
-              <p style={{ color: 'var(--text-muted)', fontSize: 14, fontWeight: 500 }}>Chưa có khiếu nại nào</p>
+              <p style={{ color: 'var(--muted-foreground)', fontSize: 14, fontWeight: 500 }}>Chưa có khiếu nại nào</p>
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
@@ -198,10 +198,10 @@ export default function AdvisorAppealsPage() {
                     const st = STATUS_MAP[a.status] || STATUS_MAP.PENDING;
                     return (
                       <tr key={a.id}>
-                        <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
+                        <td style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{i + 1}</td>
                         <td>
                           <div style={{ fontWeight: 600, fontSize: 13 }}>{a.studentName}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.studentCode} • Lớp {a.classCode}</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{a.studentCode} • Lớp {a.classCode}</div>
                         </td>
                         <td>
                           <span style={{
@@ -216,14 +216,14 @@ export default function AdvisorAppealsPage() {
                           {a.criteriaCode ? (
                             <div>
                               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'var(--accent-light)', padding: '1px 6px', borderRadius: 4, marginRight: 6 }}>{a.criteriaCode}</span>
-                              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={a.criteriaContent || ''}>{a.criteriaContent}</div>
+                              <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={a.criteriaContent || ''}>{a.criteriaContent}</div>
                             </div>
                           ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                            <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>—</span>
                           )}
                         </td>
                         <td>
-                          <div style={{ fontSize: 13, color: 'var(--text-primary)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.reason}>
+                          <div style={{ fontSize: 13, color: 'var(--foreground)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.reason}>
                             {a.reason}
                           </div>
                         </td>
@@ -235,7 +235,7 @@ export default function AdvisorAppealsPage() {
                             {st.label}
                           </span>
                         </td>
-                        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        <td style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
                           {new Date(a.createdAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </td>
                         <td style={{ textAlign: 'center' }}>
@@ -265,19 +265,19 @@ export default function AdvisorAppealsPage() {
               <h3 className="modal-header-title">
                 {selectedAppeal.status === 'PENDING' ? 'Xử lý khiếu nại' : 'Chi tiết khiếu nại'}
               </h3>
-              <button onClick={() => setSelectedAppeal(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+              <button onClick={() => setSelectedAppeal(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)' }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             </div>
             <div style={{ padding: 24 }}>
               <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-                <div style={{ flex: 1, background: 'var(--bg-surface)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Sinh viên</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{selectedAppeal.studentName}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{selectedAppeal.studentCode}</div>
+                <div style={{ flex: 1, background: 'var(--surface)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', marginBottom: 4 }}>Sinh viên</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)' }}>{selectedAppeal.studentName}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{selectedAppeal.studentCode}</div>
                 </div>
-                <div style={{ flex: 1, background: 'var(--bg-surface)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Đối tượng bị khiếu nại</div>
+                <div style={{ flex: 1, background: 'var(--surface)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', marginBottom: 4 }}>Đối tượng bị khiếu nại</div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: selectedAppeal.appealType === 'advisor' ? '#7c3aed' : '#2563eb' }}>
                     {selectedAppeal.appealType === 'advisor' ? 'Điểm CVHT chấm' : 'Điểm BCS chấm'}
                   </div>
@@ -285,8 +285,8 @@ export default function AdvisorAppealsPage() {
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Tiêu chí: <span style={{ color: 'var(--accent)' }}>[{selectedAppeal.criteriaCode}]</span></div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-surface)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 8 }}>Tiêu chí: <span style={{ color: 'var(--accent)' }}>[{selectedAppeal.criteriaCode}]</span></div>
+                <div style={{ fontSize: 13, color: 'var(--muted-foreground)', background: 'var(--surface)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
                   {selectedAppeal.criteriaContent}
                 </div>
                 <div style={{ marginTop: 12 }}>
@@ -296,7 +296,7 @@ export default function AdvisorAppealsPage() {
                       Xem minh chứng
                     </a>
                   ) : (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--muted-foreground)', background: 'var(--surface)', padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path><line x1="4" y1="4" x2="20" y2="20"></line></svg>
                       Không có minh chứng đính kèm
                     </span>
@@ -307,23 +307,23 @@ export default function AdvisorAppealsPage() {
               {selectedAppeal.currentScores && (
                 <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
                   <div style={{ flex: 1, textAlign: 'center', background: '#f8fafc', padding: '12px 8px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>SV tự chấm</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{selectedAppeal.currentScores.STUDENT ?? '—'}</div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>SV tự chấm</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--foreground)' }}>{selectedAppeal.currentScores.STUDENT ?? '—'}</div>
                   </div>
                   <div style={{ flex: 1, textAlign: 'center', background: '#f8fafc', padding: '12px 8px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>BCS chấm</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: selectedAppeal.appealType === 'class' ? '#dc2626' : 'var(--text-primary)' }}>{selectedAppeal.currentScores.CLASS_COMMITTEE ?? '—'}</div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>BCS chấm</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: selectedAppeal.appealType === 'class' ? '#dc2626' : 'var(--foreground)' }}>{selectedAppeal.currentScores.CLASS_COMMITTEE ?? '—'}</div>
                   </div>
                   <div style={{ flex: 1, textAlign: 'center', background: '#f8fafc', padding: '12px 8px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>CVHT chấm</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: selectedAppeal.appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)' }}>{selectedAppeal.currentScores.ADVISOR ?? '—'}</div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>CVHT chấm</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: selectedAppeal.appealType === 'advisor' ? '#dc2626' : 'var(--foreground)' }}>{selectedAppeal.currentScores.ADVISOR ?? '—'}</div>
                   </div>
                 </div>
               )}
 
               <div style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Lý do của sinh viên:</div>
-                <div style={{ fontSize: 14, color: 'var(--text-primary)', background: '#fffbeb', padding: 12, borderRadius: 8, border: '1px solid #fde68a', fontStyle: 'italic' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 8 }}>Lý do của sinh viên:</div>
+                <div style={{ fontSize: 14, color: 'var(--foreground)', background: '#fffbeb', padding: 12, borderRadius: 8, border: '1px solid #fde68a', fontStyle: 'italic' }}>
                   &quot;{selectedAppeal.reason}&quot;
                 </div>
               </div>
@@ -381,8 +381,8 @@ export default function AdvisorAppealsPage() {
                   </div>
                 </>
               ) : (
-                <div style={{ background: 'var(--bg-surface)', padding: 16, borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Kết quả xử lý:</div>
+                <div style={{ background: 'var(--surface)', padding: 16, borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)', marginBottom: 12 }}>Kết quả xử lý:</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                     <span style={{
                       fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 999,
@@ -390,11 +390,11 @@ export default function AdvisorAppealsPage() {
                     }}>
                       {STATUS_MAP[selectedAppeal.status]?.label}
                     </span>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
                       bởi <strong>{selectedAppeal.resolvedBy}</strong> vào ngày {new Date(selectedAppeal.resolvedAt!).toLocaleDateString('vi-VN')}
                     </span>
                   </div>
-                  <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>
+                  <div style={{ fontSize: 14, color: 'var(--foreground)' }}>
                     <strong>Phản hồi:</strong> {selectedAppeal.resolution}
                   </div>
                 </div>

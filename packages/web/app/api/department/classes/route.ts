@@ -25,6 +25,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const semesterId = searchParams.get('semesterId');
+
   const classes = await prisma.classes.findMany({
     where: { department_id: deptUser.department_id!, is_active: 1 },
     orderBy: { code: 'asc' },
@@ -33,7 +36,11 @@ export async function GET(req: Request) {
       code: true,
       name: true,
       academic_year: true,
-      _count: { select: { semester_enrollments: true } },
+      _count: { 
+        select: { 
+          semester_enrollments: semesterId ? { where: { semester_id: semesterId } } : true 
+        } 
+      },
     },
   });
 

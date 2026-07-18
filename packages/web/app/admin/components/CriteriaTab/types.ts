@@ -57,6 +57,7 @@ export interface CriteriaVersion {
     name: string;
     code: string;
   } | null;
+  totalCategories?: number;
 }
 
 // --- API Payloads (only fields the API actually handles) ---

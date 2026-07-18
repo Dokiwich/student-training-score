@@ -39,8 +39,8 @@ export function CriteriaTab() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <Loader2 className="w-8 h-8 text-[#d0d6e0] animate-spin" />
-        <span className="text-[#62666d] text-[15px] font-[510]">Đang tải dữ liệu bộ tiêu chí...</span>
+        <Loader2 className="w-8 h-8 text-muted animate-spin" />
+        <span className="text-muted-foreground text-[15px] font-[510]">Đang tải dữ liệu bộ tiêu chí...</span>
       </div>
     );
   }

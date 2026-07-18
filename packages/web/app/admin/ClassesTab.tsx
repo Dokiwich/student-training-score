@@ -60,16 +60,16 @@ export function ClassesTab() {
 
   const startEdit = (c: ClassItem) => { setEditing(c); setCode(c.code); setName(c.name); setDeptId(c.department_id); setYear(c.academic_year); setShowForm(true); };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted-foreground)' }}>Đang tải...</div>;
 
   const columns = [
-    { header: 'STT', width: 50, render: (_c: ClassItem, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
-    { header: 'Mã lớp', width: 110, render: (c: ClassItem) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>{c.code}</span> },
+    { header: 'STT', width: 50, render: (_c: ClassItem, i: number) => <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'Mã lớp', width: 110, render: (c: ClassItem) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--foreground)' }}>{c.code}</span> },
     { header: 'Tên lớp', render: (c: ClassItem) => <span style={{ fontWeight: 500 }}>{c.name}</span> },
     { header: 'Khoa', render: (c: ClassItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{c.departmentName}</span> },
-    { header: 'Năm học', width: 100, render: (c: ClassItem) => <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.academic_year}</span> },
+    { header: 'Năm học', width: 100, render: (c: ClassItem) => <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{c.academic_year}</span> },
     { header: 'Sĩ số', width: 70, align: 'center' as const, render: (c: ClassItem) => <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', padding: '2px 8px', borderRadius: 9999, fontSize: 12, fontWeight: 600 }}>{c.studentCount}</span> },
-    { header: 'Trạng thái', width: 100, align: 'center' as const, render: (c: ClassItem) => <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: c.is_active ? 'var(--success-bg)' : '#f3f4f6', color: c.is_active ? 'var(--success)' : 'var(--text-muted)' }}>{c.is_active ? 'Hoạt động' : 'Ẩn'}</span> },
+    { header: 'Trạng thái', width: 100, align: 'center' as const, render: (c: ClassItem) => <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: c.is_active ? 'var(--success-bg)' : '#f3f4f6', color: c.is_active ? 'var(--success)' : 'var(--muted-foreground)' }}>{c.is_active ? 'Hoạt động' : 'Ẩn'}</span> },
     { header: 'Thao tác', width: 200, align: 'center' as const, render: (c: ClassItem) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
           <button onClick={(e) => { e.stopPropagation(); startEdit(c); }} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
@@ -93,7 +93,7 @@ export function ClassesTab() {
     <div>
       {showForm && (
         <form onSubmit={handleSubmit} className="dashboard-card" style={{ marginBottom: 16 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)', marginBottom: 12 }}>
             {editing ? `Sửa lớp [${editing.code}]` : 'Thêm lớp mới'}
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 12 }}>

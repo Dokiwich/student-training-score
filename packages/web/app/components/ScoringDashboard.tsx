@@ -1,9 +1,14 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { ScoringForm } from './ScoringForm';
+import { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
+import { StatusBadge } from './ui/StatusBadge';
+import { Input } from './ui/Input';
+import { EmptyState } from './ui/EmptyState';
+import { Search, Users, CheckCircle, Clock, FileWarning, X } from 'lucide-react';
 
 const API_BASE = '/proxy-api';
 
@@ -21,36 +26,22 @@ interface StudentRow {
   classification: string | null;
 }
 
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  NO_SHEET: { label: 'Chưa tạo', color: '#9ca3af', bg: '#f3f4f6' },
-  DRAFT: { label: 'Chưa nộp', color: '#6b7280', bg: '#f3f4f6' },
-  STUDENT_SUBMITTED: { label: 'SV đã nộp', color: '#991b1b', bg: '#fef2f2' },
-  CLASS_REVIEWING: { label: 'Đang xét', color: '#d97706', bg: '#fffbeb' },
-  CLASS_REVIEWED: { label: 'Đã duyệt', color: '#059669', bg: '#ecfdf5' },
-  ADVISOR_REVIEWING: { label: 'CVHT xét', color: '#d97706', bg: '#fffbeb' },
-  ADVISOR_APPROVED: { label: 'CVHT duyệt', color: '#059669', bg: '#ecfdf5' },
-  SCHOOL_REVIEWING: { label: 'Trường xét', color: '#7c3aed', bg: '#f5f3ff' },
-  SCHOOL_APPROVED: { label: 'Trường duyệt', color: '#059669', bg: '#ecfdf5' },
-  APPEALING: { label: 'Phúc khảo', color: '#d97706', bg: '#fffbeb' },
-  FINALIZED: { label: 'Đã chốt', color: '#059669', bg: '#ecfdf5' },
-};
-
 interface ScoringDashboardProps {
   role: 'CLASS_COMMITTEE' | 'ADVISOR';
   showHeader?: boolean;
+  defaultTab?: 'all' | 'pending' | 'unscored' | 'scored';
 }
 
 const ROLE_META = {
   CLASS_COMMITTEE: {
-    title: 'Ban Can Su Cham Diem',
+    title: 'Ban cán sự chấm điểm',
     scoreCol: 'classTotal' as const,
   },
   ADVISOR: {
-    title: 'Co Van Duyet Diem',
+    title: 'Cố vấn học tập duyệt điểm',
     scoreCol: 'advisorTotal' as const,
   },
 };
-
 
 function useCountUp(end: number, duration: number = 1000) {
   const [count, setCount] = useState(0);
@@ -75,22 +66,22 @@ function useCountUp(end: number, duration: number = 1000) {
   return count;
 }
 
-export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardProps) {
+export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }: ScoringDashboardProps) {
   const { data: session } = useSession();
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [fetchError, setFetchError] = useState<string | null>(null);
+  
+  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'unscored' | 'scored'>(defaultTab);
 
-  const [resetKey, setResetKey] = useState(0);
-
-  // Drawer state
+  // Modal state
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [closingDrawer, setClosingDrawer] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
 
   const meta = ROLE_META[role];
   const searchParams = useSearchParams();
-  const filterParam = searchParams ? searchParams.get('filter') : null;
   const selectedStudentId = searchParams ? searchParams.get('studentId') : null;
   const router = useRouter();
   const pathname = usePathname();
@@ -130,23 +121,6 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
     fetchStudents();
   }, [session]);
 
-  const refetchStudents = useCallback(async () => {
-    try {
-      const customJwt = (session as any)?.customJwt;
-      if (!customJwt) return;
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${customJwt}`,
-      };
-      const res = await fetch(`${API_BASE}/scoring/students`, { headers, credentials: 'include' });
-      if (res.ok) {
-        const json = await res.json();
-        setStudents(json.data || []);
-      }
-    } catch { /* silent */ }
-  }, [session]);
-
-
   const handleCloseDrawer = useCallback(() => {
     setClosingDrawer(true);
     setTimeout(() => {
@@ -155,25 +129,19 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
       const params = new URLSearchParams(searchParams?.toString());
       params.delete('studentId');
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    }, 300);
+    }, 200);
   }, [searchParams, pathname, router]);
 
   const handleStudentClick = (id: string) => {
     const params = new URLSearchParams(searchParams?.toString());
     params.set('studentId', id);
-    // Use View Transitions API if supported
-    if (document.startViewTransition) {
-      document.startViewTransition(() => {
-        router.push(`${pathname}?${params.toString()}`, { scroll: false });
-      });
-    } else {
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    }
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   useEffect(() => {
     if (selectedStudentId) {
       setIsDrawerOpen(true);
+      setResetKey(prev => prev + 1);
     } else {
       setIsDrawerOpen(false);
     }
@@ -195,127 +163,189 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
       result = result.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()) || (s.studentCode || '').includes(search));
     }
 
-    if (filterParam === 'scored') {
+    if (activeTab === 'scored') {
       if (role === 'CLASS_COMMITTEE') {
         result = result.filter(s => s.status === 'CLASS_REVIEWED' || s.status === 'FINALIZED' || s.status === 'ADVISOR_REVIEWING' || s.status === 'ADVISOR_APPROVED');
       } else {
         result = result.filter(s => s.status === 'ADVISOR_APPROVED' || s.status === 'FINALIZED');
       }
-    } else if (filterParam === 'unscored') {
+    } else if (activeTab === 'unscored') {
       if (role === 'CLASS_COMMITTEE') {
         result = result.filter(s => s.status === 'STUDENT_SUBMITTED' || s.status === 'CLASS_REVIEWING');
       } else {
         result = result.filter(s => s.status === 'CLASS_REVIEWED' || s.status === 'ADVISOR_REVIEWING');
       }
-    } else if (filterParam === 'pending') {
+    } else if (activeTab === 'pending') {
       result = result.filter(s => s.status === 'NO_SHEET' || s.status === 'DRAFT');
     }
 
     return result;
-  }, [students, search, filterParam, role]);
+  }, [students, search, activeTab, role]);
 
   const stats = useMemo(() => {
     const total = students.length;
     const submitted = students.filter((s) => s.status !== 'NO_SHEET' && s.status !== 'DRAFT').length;
-    return { total, submitted, pct: total > 0 ? Math.round((submitted / total) * 100) : 0 };
-  }, [students]);
+    
+    // Calculate counts for tabs
+    let scoredCount = 0;
+    let unscoredCount = 0;
+    let pendingCount = 0;
+    
+    students.forEach(s => {
+      if (s.status === 'NO_SHEET' || s.status === 'DRAFT') {
+        pendingCount++;
+      } else {
+        if (role === 'CLASS_COMMITTEE') {
+          if (['CLASS_REVIEWED', 'FINALIZED', 'ADVISOR_REVIEWING', 'ADVISOR_APPROVED'].includes(s.status)) scoredCount++;
+          else unscoredCount++;
+        } else {
+          if (['ADVISOR_APPROVED', 'FINALIZED'].includes(s.status)) scoredCount++;
+          else unscoredCount++;
+        }
+      }
+    });
+    
+    return { total, submitted, scoredCount, unscoredCount, pendingCount };
+  }, [students, role]);
 
   const animatedTotal = useCountUp(stats.total);
   const animatedSubmitted = useCountUp(stats.submitted);
 
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
 
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column',
-      height: showHeader ? '100vh' : 'calc(100vh - 160px)',
-      minHeight: 600, background: 'var(--bg-surface)', overflow: 'hidden',
-      border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
-      position: 'relative'
-    }}>
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+  const tabs = [
+    { id: 'all', label: 'Tất cả sinh viên', count: stats.total, icon: Users },
+    { id: 'unscored', label: 'Cần chấm', count: stats.unscoredCount, icon: Clock },
+    { id: 'scored', label: 'Đã chấm', count: stats.scoredCount, icon: CheckCircle },
+    { id: 'pending', label: 'Chưa nộp phiếu', count: stats.pendingCount, icon: FileWarning },
+  ] as const;
 
-        {/* MAIN CONTENT AREA */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-page)' }}>
-          {/* Header & Stats */}
-          <div style={{ padding: '24px 32px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-              Danh sách sinh viên
-            </h2>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <div style={{ position: 'relative' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}>
-                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                <input type="text" placeholder="Tìm tên, MSSV..." value={search} onChange={(e) => setSearch(e.target.value)}
-                  style={{ width: 220, fontSize: 13, padding: '8px 10px 8px 32px', border: '1px solid var(--border)', borderRadius: 8, outline: 'none' }} />
+  return (
+    <div className={`flex flex-col overflow-hidden ${showHeader ? 'h-full min-h-[600px]' : ''}`}>
+      <div className="flex-1 flex flex-col min-h-0 bg-background relative">
+        
+        {/* Header Section */}
+        <div className="p-6 md:p-8 shrink-0">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+            <div>
+              <h2 className="text-2xl font-bold text-foreground mb-2">Quản lý đánh giá lớp</h2>
+              <p className="text-sm text-muted-foreground">Xét duyệt điểm rèn luyện của sinh viên trong lớp</p>
+            </div>
+            
+            <div className="flex items-center gap-4 bg-surface border border-border p-3 rounded-2xl shadow-sm">
+              <div className="text-center px-4 border-r border-border">
+                <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Sĩ số</div>
+                <div className="text-xl font-black text-foreground">{animatedTotal}</div>
               </div>
-              <div style={{ background: '#fff', border: '1px solid var(--border)', padding: '6px 16px', borderRadius: 'var(--radius-full)', display: 'flex', gap: 16, fontSize: 13, boxShadow: 'var(--shadow-sm)' }}>
-                <div style={{ color: 'var(--text-secondary)' }}>Sĩ số: <strong style={{ color: 'var(--text-primary)' }}>{animatedTotal}</strong></div>
-                <div style={{ width: 1, background: 'var(--border)' }}></div>
-                <div style={{ color: 'var(--text-secondary)' }}>Đã nộp: <strong style={{ color: 'var(--success)' }}>{animatedSubmitted}</strong></div>
+              <div className="text-center px-4">
+                <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Đã nộp</div>
+                <div className="text-xl font-black text-primary">{animatedSubmitted}</div>
               </div>
             </div>
           </div>
 
+          <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
+            {/* Tabs */}
+            <div className="flex overflow-x-auto w-full lg:w-auto bg-surface-muted p-1.5 rounded-xl border border-border">
+              {tabs.map(tab => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                      isActive 
+                        ? 'bg-background text-primary shadow-sm ring-1 ring-border' 
+                        : 'text-muted-foreground hover:text-foreground hover:bg-surface-elevated'
+                    }`}
+                  >
+                    <Icon size={16} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
+                    {tab.label}
+                    <span className={`ml-1.5 px-2 py-0.5 rounded-full text-xs ${
+                      isActive ? 'bg-primary-light/20 text-primary' : 'bg-surface-muted text-muted-foreground'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
-          <div style={{ flex: 1, padding: '0 32px 24px', overflowY: 'auto' }}>
-            {isLoading ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {[1, 2, 3, 4, 5].map(i => <div key={i} className="skeleton" style={{ height: 60, borderRadius: 8 }} />)}
-              </div>
-            ) : fetchError ? (
-              <div style={{ textAlign: 'center', padding: 60, color: 'var(--danger)' }}>
-                <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
-                <div style={{ fontWeight: 600, fontSize: 16 }}>Lỗi tải dữ liệu</div>
-                <div style={{ marginTop: 8 }}>{fetchError}</div>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Không tìm thấy sinh viên nào.</div>
-            ) : (
-              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            {/* Search */}
+            <div className="w-full lg:w-72 shrink-0">
+              <Input
+                placeholder="Tìm MSSV, họ tên..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                icon={<Search size={18} />}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Content Section */}
+        <div className="flex-1 overflow-y-auto px-6 md:px-8 pb-8">
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="h-16 bg-surface-muted animate-pulse rounded-xl" />
+              ))}
+            </div>
+          ) : fetchError ? (
+            <EmptyState
+              icon={FileWarning}
+              title="Lỗi tải dữ liệu"
+              description={fetchError}
+            />
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="Không tìm thấy sinh viên"
+              description="Không có sinh viên nào khớp với điều kiện tìm kiếm hiện tại."
+            />
+          ) : (
+            <Card className="overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[700px]">
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-inset)', textAlign: 'left' }}>
-                      <th style={{ width: 60, padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'center' }}>STT</th>
-                      <th style={{ width: 140, padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>MSSV</th>
-                      <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Họ và Tên</th>
-                      <th style={{ width: 140, padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Trạng thái</th>
-                      <th style={{ width: 120, padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'center' }}>Điểm tổng</th>
+                    <tr className="bg-surface-muted border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-bold">
+                      <th className="px-6 py-4 text-center w-16">STT</th>
+                      <th className="px-6 py-4 w-32">MSSV</th>
+                      <th className="px-6 py-4">Họ và tên</th>
+                      <th className="px-6 py-4 w-40">Trạng thái</th>
+                      <th className="px-6 py-4 text-center w-32">Điểm tổng</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-border">
                     {filtered.map((student, index) => {
-                      const st = STATUS_MAP[student.status] || { label: student.status, color: '#6b7280', bg: '#f3f4f6' };
                       const score = student[meta.scoreCol];
-                      const isWarning = student.status === 'NO_SHEET' || student.status === 'DRAFT';
-
                       return (
                         <tr
-                          key={`${student.id}-${index}`}
+                          key={student.id}
                           onClick={() => handleStudentClick(student.id)}
-                          className="staggered-item"
-                          style={{
-                            '--index': index > 20 ? 0 : index,
-                            borderBottom: '1px solid var(--border-light)', cursor: 'pointer', transition: 'background 0.2s'
-                          } as React.CSSProperties}
-                          onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-surface-hover)'}
-                          onMouseOut={(e) => e.currentTarget.style.background = '#fff'}
+                          className="hover:bg-surface-muted cursor-pointer transition-colors group"
                         >
-                          <td style={{ padding: '16px', textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>{index + 1}</td>
-                          <td style={{ padding: '16px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)' }}>{student.studentCode}</td>
-                          <td style={{ padding: '16px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{student.name}</td>
-                          <td style={{ padding: '16px' }}>
-                            <span style={{
-                              display: 'inline-block', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 9999,
-                              background: st.bg, color: st.color,
-                              animation: isWarning ? 'pulseWarning 2s infinite' : 'none'
-                            }}>
-                              {st.label}
+                          <td className="px-6 py-4 text-center text-sm font-medium text-muted-foreground">
+                            {index + 1}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="font-mono text-sm font-semibold text-muted-foreground group-hover:text-primary transition-colors">
+                              {student.studentCode}
                             </span>
                           </td>
-                          <td style={{ padding: '16px', textAlign: 'center', fontSize: 15, fontWeight: 800, color: score !== null ? 'var(--accent)' : 'var(--text-muted)' }}>
-                            {score ?? '—'}
+                          <td className="px-6 py-4">
+                            <span className="text-sm font-bold text-foreground">
+                              {student.name}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <StatusBadge status={student.status} />
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`text-base font-black ${score !== null ? 'text-primary' : 'text-muted-foreground'}`}>
+                              {score ?? '—'}
+                            </span>
                           </td>
                         </tr>
                       );
@@ -323,45 +353,50 @@ export function ScoringDashboard({ role, showHeader = true }: ScoringDashboardPr
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
+            </Card>
+          )}
         </div>
       </div>
 
-      {/* MODAL OVERLAY & CONTENT */}
+      {/* Modal / Drawer for Scoring */}
       {(isDrawerOpen || closingDrawer) && selectedStudent && (
         <div
-          className="modal-overlay"
-          style={{ animation: closingDrawer ? 'fadeIn 0.3s reverse forwards' : 'fadeIn 0.3s forwards' }}
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-sm transition-opacity duration-200 ${
+            closingDrawer ? 'opacity-0' : 'opacity-100'
+          }`}
           onClick={handleCloseDrawer}
         >
-          {/* Modal Content */}
           <div
-            className="modal-content"
-            style={{
-              maxWidth: '1200px', width: '96vw', height: '90vh', display: 'flex', flexDirection: 'column',
-              animation: closingDrawer ? 'modalSlideUp 0.3s reverse forwards' : 'modalSlideUp 0.3s forwards'
-            }}
+            className={`bg-background w-full max-w-7xl h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-transform duration-200 ${
+              closingDrawer ? 'scale-95 translate-y-4' : 'scale-100 translate-y-0'
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="modal-header">
-              <h3 className="modal-header-title">
-                Chấm điểm: <span style={{ color: 'var(--accent)' }}>{selectedStudent.name}</span>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface shrink-0">
+              <h3 className="text-lg font-bold text-foreground">
+                Chấm điểm sinh viên: <span className="text-primary">{selectedStudent.name}</span>
+                <span className="ml-2 font-mono text-sm text-muted-foreground font-semibold bg-gray-100 px-2 py-0.5 rounded">
+                  {selectedStudent.studentCode}
+                </span>
               </h3>
               <button
                 onClick={handleCloseDrawer}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', transition: 'background 0.2s' }}
-                onMouseOver={e => e.currentTarget.style.background = 'var(--bg-inset)'}
-                onMouseOut={e => e.currentTarget.style.background = 'transparent'}
-                title="Đóng"
+                className="p-2 text-muted-foreground hover:text-foreground hover:bg-surface-muted rounded-lg transition-colors"
+                title="Đóng (Esc)"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <X size={20} />
               </button>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: 'var(--bg-page)' }}>
-
-              <ScoringForm key={`${selectedStudent.id}-${resetKey}`} forcedRole={role} studentId={selectedStudent.id} studentName={selectedStudent.name} stickyTop="top-0" />
+            {/* Modal Body */}
+            <div className="flex-1 overflow-hidden relative flex flex-col bg-background">
+              <ScoringForm 
+                key={`${selectedStudent.id}-${resetKey}`} 
+                forcedRole={role} 
+                studentId={selectedStudent.id} 
+                studentName={selectedStudent.name} 
+              />
             </div>
           </div>
         </div>

@@ -294,11 +294,14 @@ export async function DELETE(req: Request) {
       const oldData = targetVersion;
       // Because of cascading deletes configured in DB or at least expected by standard, we delete the version.
       // But let's safely delete criteria and categories first to prevent foreign key constraint fails if DB doesn't cascade
+      const transactions = [];
       if (catIds.length > 0) {
-         await prisma.criteria.deleteMany({ where: { category_id: { in: catIds } } });
-         await prisma.criteria_categories.deleteMany({ where: { criteria_version_id: id } });
+        transactions.push(prisma.criteria.deleteMany({ where: { category_id: { in: catIds } } }));
+        transactions.push(prisma.criteria_categories.deleteMany({ where: { criteria_version_id: id } }));
       }
-      await prisma.criteria_versions.delete({ where: { id } });
+      transactions.push(prisma.criteria_versions.delete({ where: { id } }));
+      
+      await prisma.$transaction(transactions);
       await logAdminAction(actorId, 'DELETE_VERSION', 'criteria_versions', id, oldData, null);
 
       return NextResponse.json({ message: 'Đã xóa phiên bản tiêu chí và tất cả dữ liệu liên quan' });

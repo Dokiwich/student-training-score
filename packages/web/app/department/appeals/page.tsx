@@ -3,6 +3,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '../../components/DashboardLayout';
+import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { StatusBadge } from '../../components/ui/StatusBadge';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { FileText, ShieldAlert, AlertTriangle, CheckSquare } from 'lucide-react';
 
 interface AppealItem {
   id: string;
@@ -33,12 +38,6 @@ interface AppealItem {
   proofUrl?: string | null;
 }
 
-const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> = {
-  PENDING: { label: 'Chờ Khoa xem xét', bg: '#fef3c7', color: '#d97706' },
-  DEPT_REVIEWED: { label: 'Đã xem xét — Chờ Admin', bg: '#e0e7ff', color: '#4338ca' },
-  ACCEPTED: { label: 'Đã chấp nhận (Admin)', bg: '#ecfdf5', color: '#059669' },
-  REJECTED: { label: 'Đã từ chối (Admin)', bg: '#fef2f2', color: '#dc2626' },
-};
 
 export default function DepartmentAppealsPage() {
   const { data: session } = useSession();
@@ -129,124 +128,123 @@ export default function DepartmentAppealsPage() {
       pageTitle="Quản lý khiếu nại (Khoa)"
       pageSubtitle="Giám sát và xét duyệt các khiếu nại về điểm rèn luyện của sinh viên thuộc Khoa"
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div className="space-y-6">
         {/* Dashboard stats / Header */}
-        <div style={{ display: 'flex', gap: 16 }}>
-           <div className="dashboard-card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              </div>
-              <div>
-                 <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>CẦN XỬ LÝ</div>
-                 <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{pendingCount}</div>
-              </div>
-           </div>
-           <div className="dashboard-card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
-              <div>
-                 <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>ĐÃ XỬ LÝ</div>
-                 <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{appeals.length - pendingCount}</div>
-              </div>
-           </div>
-           <div className="dashboard-card" style={{ flex: 1, padding: '20px', display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-              </div>
-              <div>
-                 <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>TỔNG CỘNG</div>
-                 <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{appeals.length}</div>
-              </div>
-           </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+           <Card>
+              <CardContent className="p-6 flex items-center gap-4">
+                 <div className="w-12 h-12 rounded-xl bg-warning-bg text-warning-foreground flex items-center justify-center">
+                    <AlertTriangle size={24} />
+                 </div>
+                 <div>
+                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">CẦN XỬ LÝ</div>
+                    <div className="text-3xl font-black text-foreground mt-1">{pendingCount}</div>
+                 </div>
+              </CardContent>
+           </Card>
+           <Card>
+              <CardContent className="p-6 flex items-center gap-4">
+                 <div className="w-12 h-12 rounded-xl bg-success-bg text-success-foreground flex items-center justify-center">
+                    <CheckSquare size={24} />
+                 </div>
+                 <div>
+                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">ĐÃ XỬ LÝ</div>
+                    <div className="text-3xl font-black text-foreground mt-1">{appeals.length - pendingCount}</div>
+                 </div>
+              </CardContent>
+           </Card>
+           <Card>
+              <CardContent className="p-6 flex items-center gap-4">
+                 <div className="w-12 h-12 rounded-xl bg-info-bg text-info-foreground flex items-center justify-center">
+                    <FileText size={24} />
+                 </div>
+                 <div>
+                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">TỔNG CỘNG</div>
+                    <div className="text-3xl font-black text-foreground mt-1">{appeals.length}</div>
+                 </div>
+              </CardContent>
+           </Card>
         </div>
 
         {/* Appeals list */}
-        <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-              Danh sách khiếu nại
-            </h3>
-          </div>
-
+        <Card>
+          <CardHeader className="border-b border-border">
+            <CardTitle>Danh sách khiếu nại</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
           {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>
+            <div className="p-12 text-center text-muted-foreground">Đang tải...</div>
           ) : appeals.length === 0 ? (
-            <div style={{ padding: 60, textAlign: 'center' }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 12px' }}>
-                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-                <line x1="4" y1="22" x2="4" y2="15" />
-              </svg>
-              <p style={{ color: 'var(--text-muted)', fontSize: 14, fontWeight: 500 }}>Chưa có khiếu nại nào</p>
-            </div>
+            <EmptyState
+              icon={FileText}
+              title="Chưa có khiếu nại nào"
+              description="Hiện không có yêu cầu khiếu nại nào cần xử lý."
+            />
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="dashboard-table">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr>
-                    <th style={{ width: 50 }}>STT</th>
-                    <th>Sinh viên</th>
-                    <th style={{ width: 120 }}>Đối tượng bị khiếu nại</th>
-                    <th style={{ width: 250 }}>Tiêu chí</th>
-                    <th>Lý do</th>
-                    <th style={{ width: 140, textAlign: 'center' }}>Trạng thái</th>
-                    <th style={{ width: 130 }}>Ngày gửi</th>
-                    <th style={{ width: 100, textAlign: 'center' }}>Thao tác</th>
+                  <tr className="bg-surface-muted border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-bold">
+                    <th className="px-4 py-3 font-semibold w-12 text-center">STT</th>
+                    <th className="px-4 py-3 font-semibold">Sinh viên</th>
+                    <th className="px-4 py-3 font-semibold w-32">Đối tượng</th>
+                    <th className="px-4 py-3 font-semibold w-64">Tiêu chí</th>
+                    <th className="px-4 py-3 font-semibold">Lý do</th>
+                    <th className="px-4 py-3 font-semibold w-40 text-center">Trạng thái</th>
+                    <th className="px-4 py-3 font-semibold w-40">Ngày gửi</th>
+                    <th className="px-4 py-3 font-semibold w-32 text-center">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border">
                   {appeals.map((a, i) => {
-                    const st = STATUS_MAP[a.status] || STATUS_MAP.PENDING;
                     return (
-                      <tr key={a.id}>
-                        <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
-                        <td>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{a.studentName}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.studentCode} • Lớp {a.classCode}</div>
+                      <tr key={a.id} className="hover:bg-surface-muted transition-colors">
+                        <td className="px-4 py-4 text-sm text-muted-foreground text-center">{i + 1}</td>
+                        <td className="px-4 py-4">
+                          <div className="text-sm font-bold text-foreground">{a.studentName}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{a.studentCode} • Lớp {a.classCode}</div>
                         </td>
-                        <td>
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
-                            background: a.appealType === 'advisor' ? '#f3e8ff' : '#eff6ff',
-                            color: a.appealType === 'advisor' ? '#7c3aed' : '#2563eb',
-                          }}>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            a.appealType === 'advisor' 
+                              ? 'bg-info-bg text-info-foreground border border-info-border' 
+                              : 'bg-primary-light text-primary-foreground border border-primary'
+                          }`}>
                             {a.appealType === 'advisor' ? 'Điểm CVHT' : 'Điểm BCS'}
                           </span>
                         </td>
-                        <td>
+                        <td className="px-4 py-4">
                           {a.criteriaCode ? (
                             <div>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'var(--accent-light)', padding: '1px 6px', borderRadius: 4, marginRight: 6 }}>{a.criteriaCode}</span>
-                              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={a.criteriaContent || ''}>{a.criteriaContent}</div>
+                              <span className="font-mono text-xs font-bold text-primary bg-primary-light px-1.5 py-0.5 rounded mr-2">{a.criteriaCode}</span>
+                              <div className="text-sm text-muted-foreground mt-1 line-clamp-2" title={a.criteriaContent || ''}>{a.criteriaContent}</div>
                             </div>
                           ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                            <span className="text-sm text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td>
-                          <div style={{ fontSize: 13, color: 'var(--text-primary)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.reason}>
+                        <td className="px-4 py-4">
+                          <div className="text-sm text-foreground bg-surface-muted p-2.5 rounded-lg border border-border shadow-sm line-clamp-2" title={a.reason}>
                             {a.reason}
                           </div>
                         </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 999,
-                            background: st.bg, color: st.color,
-                          }}>
-                            {st.label}
-                          </span>
+                        <td className="px-4 py-4 text-center">
+                          <StatusBadge status={a.status} type="appeal" />
                         </td>
-                        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                          {new Date(a.createdAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        <td className="px-4 py-4 text-xs text-muted-foreground font-medium">
+                          {new Date(a.createdAt).toLocaleDateString('vi-VN')}
+                          <div className="text-[10px] mt-0.5 opacity-80">
+                            {new Date(a.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                             className="btn-secondary"
-                             style={{ padding: '4px 12px', fontSize: 12 }}
+                        <td className="px-4 py-4 text-center">
+                          <Button
+                             variant="secondary"
+                             size="sm"
                              onClick={() => handleOpenResolve(a)}
                           >
                              {a.status === 'PENDING' ? 'Xử lý' : 'Chi tiết'}
-                          </button>
+                          </Button>
                         </td>
                       </tr>
                     );
@@ -255,102 +253,108 @@ export default function DepartmentAppealsPage() {
               </table>
             </div>
           )}
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Resolve Modal */}
       {selectedAppeal && (
-         <div className="modal-overlay" onClick={() => setSelectedAppeal(null)}>
-            <div className="modal-content" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
-               <div className="modal-header">
-                  <h3 className="modal-header-title">
+         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedAppeal(null)}>
+            <div className="bg-surface border border-border rounded-xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+               <div className="px-6 py-4 border-b border-border bg-surface-muted flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                     <ShieldAlert size={20} className="text-primary" />
                      {selectedAppeal.status === 'PENDING' ? 'Xem xét & Đề xuất cho Admin' : 'Chi tiết khiếu nại'}
                   </h3>
-                  <button onClick={() => setSelectedAppeal(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                  <button onClick={() => setSelectedAppeal(null)} className="text-muted-foreground hover:text-foreground transition-colors">
                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                   </button>
                </div>
-               <div style={{ padding: 24 }}>
-                  <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-                     <div style={{ flex: 1, background: 'var(--bg-surface)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Sinh viên</div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{selectedAppeal.studentName}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{selectedAppeal.studentCode}</div>
+               
+               <div className="p-6 max-h-[75vh] overflow-y-auto">
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                     <div className="bg-surface-muted p-3 rounded-lg border border-border">
+                        <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Sinh viên</div>
+                        <div className="text-sm font-bold text-foreground">{selectedAppeal.studentName}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{selectedAppeal.studentCode}</div>
                      </div>
-                     <div style={{ flex: 1, background: 'var(--bg-surface)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Đối tượng bị khiếu nại</div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: selectedAppeal.appealType === 'advisor' ? '#7c3aed' : '#2563eb' }}>
+                     <div className="bg-surface-muted p-3 rounded-lg border border-border">
+                        <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Đối tượng bị khiếu nại</div>
+                        <div className="text-sm font-bold text-info-foreground mt-1">
                            {selectedAppeal.appealType === 'advisor' ? 'Điểm CVHT chấm' : 'Điểm BCS chấm'}
                         </div>
                      </div>
                   </div>
 
-                  <div style={{ marginBottom: 20 }}>
-                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Tiêu chí: <span style={{ color: 'var(--accent)' }}>[{selectedAppeal.criteriaCode}]</span></div>
-                     <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-surface)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div className="mb-6 space-y-3">
+                     <div className="text-sm font-bold text-foreground flex items-center gap-2">
+                        Tiêu chí: <span className="text-primary font-mono bg-primary-light px-1.5 py-0.5 rounded text-xs">[{selectedAppeal.criteriaCode}]</span>
+                     </div>
+                     <div className="text-sm text-foreground bg-surface-muted p-3 rounded-lg border border-border">
                         {selectedAppeal.criteriaContent}
                      </div>
-                     <div style={{ marginTop: 12 }}>
-                        {selectedAppeal.proofUrl ? (
-                           <a href={selectedAppeal.proofUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#2563eb', textDecoration: 'none', background: '#eff6ff', padding: '6px 12px', borderRadius: 6, border: '1px solid #bfdbfe' }}>
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                              Xem minh chứng
-                           </a>
-                        ) : (
-                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path><line x1="4" y1="4" x2="20" y2="20"></line></svg>
-                              Không có minh chứng đính kèm
-                           </span>
-                        )}
-                     </div>
+                     
+                     {selectedAppeal.proofUrl ? (
+                        <a href={selectedAppeal.proofUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm font-bold text-info-foreground bg-info-bg px-3 py-1.5 rounded-lg border border-info-border hover:bg-info-border transition-colors">
+                           <FileText size={16} /> Xem minh chứng
+                        </a>
+                     ) : (
+                        <span className="inline-flex items-center gap-2 text-sm font-bold text-muted-foreground bg-surface-muted px-3 py-1.5 rounded-lg border border-border">
+                           <FileText size={16} className="opacity-50" /> Không có minh chứng đính kèm
+                        </span>
+                     )}
                   </div>
 
                   {selectedAppeal.currentScores && (
-                     <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-                        <div style={{ flex: 1, textAlign: 'center', background: '#f8fafc', padding: '12px 8px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>SV tự chấm</div>
-                           <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{selectedAppeal.currentScores.STUDENT ?? '—'}</div>
+                     <div className="grid grid-cols-3 gap-4 mb-6">
+                        <div className="text-center bg-card p-3 rounded-lg border border-border shadow-sm">
+                           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SV tự chấm</div>
+                           <div className="text-xl font-black text-foreground mt-1">{selectedAppeal.currentScores.STUDENT ?? '—'}</div>
                         </div>
-                        <div style={{ flex: 1, textAlign: 'center', background: '#f8fafc', padding: '12px 8px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>BCS chấm</div>
-                           <div style={{ fontSize: 18, fontWeight: 700, color: selectedAppeal.appealType === 'class' ? '#dc2626' : 'var(--text-primary)' }}>{selectedAppeal.currentScores.CLASS_COMMITTEE ?? '—'}</div>
+                        <div className="text-center bg-card p-3 rounded-lg border border-border shadow-sm">
+                           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">BCS chấm</div>
+                           <div className={`text-xl font-black mt-1 ${selectedAppeal.appealType === 'class' ? 'text-danger' : 'text-foreground'}`}>
+                              {selectedAppeal.currentScores.CLASS_COMMITTEE ?? '—'}
+                           </div>
                         </div>
-                        <div style={{ flex: 1, textAlign: 'center', background: '#f8fafc', padding: '12px 8px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>CVHT chấm</div>
-                           <div style={{ fontSize: 18, fontWeight: 700, color: selectedAppeal.appealType === 'advisor' ? '#dc2626' : 'var(--text-primary)' }}>{selectedAppeal.currentScores.ADVISOR ?? '—'}</div>
+                        <div className="text-center bg-card p-3 rounded-lg border border-border shadow-sm">
+                           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">CVHT chấm</div>
+                           <div className={`text-xl font-black mt-1 ${selectedAppeal.appealType === 'advisor' ? 'text-danger' : 'text-foreground'}`}>
+                              {selectedAppeal.currentScores.ADVISOR ?? '—'}
+                           </div>
                         </div>
                      </div>
                   )}
 
-                  <div style={{ marginBottom: 24 }}>
-                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Lý do của sinh viên:</div>
-                     <div style={{ fontSize: 14, color: 'var(--text-primary)', background: '#fffbeb', padding: 12, borderRadius: 8, border: '1px solid #fde68a', fontStyle: 'italic' }}>
+                  <div className="mb-6">
+                     <div className="text-sm font-bold text-foreground mb-2">Lý do của sinh viên:</div>
+                     <div className="text-sm text-foreground bg-warning-bg p-4 rounded-lg border border-warning-border italic">
                         &quot;{selectedAppeal.reason}&quot;
                      </div>
                   </div>
 
                   {selectedAppeal.status === 'PENDING' ? (
-                     <>
-                        <div style={{ marginBottom: 20 }}>
-                           <label className="form-label">Quyết định *</label>
-                           <div style={{ display: 'flex', gap: 16 }}>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                                 <input type="radio" name="decision" checked={decision === 'ACCEPTED'} onChange={() => setDecision('ACCEPTED')} style={{ accentColor: '#059669', width: 16, height: 16 }} />
-                              <span style={{ fontSize: 14, fontWeight: 600, color: '#059669' }}>Đề xuất chấp nhận & Đổi điểm</span>
+                     <div className="space-y-6 pt-4 border-t border-border">
+                        <div className="space-y-3">
+                           <label className="text-sm font-bold text-foreground block">Quyết định <span className="text-danger">*</span></label>
+                           <div className="flex gap-6">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                 <input type="radio" name="decision" checked={decision === 'ACCEPTED'} onChange={() => setDecision('ACCEPTED')} className="w-4 h-4 text-success focus:ring-success accent-success" />
+                                 <span className="text-sm font-bold text-success">Đề xuất chấp nhận & Đổi điểm</span>
                               </label>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                                 <input type="radio" name="decision" checked={decision === 'REJECTED'} onChange={() => setDecision('REJECTED')} style={{ accentColor: '#dc2626', width: 16, height: 16 }} />
-                                 <span style={{ fontSize: 14, fontWeight: 600, color: '#dc2626' }}>Đề xuất từ chối (Giữ nguyên)</span>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                 <input type="radio" name="decision" checked={decision === 'REJECTED'} onChange={() => setDecision('REJECTED')} className="w-4 h-4 text-danger focus:ring-danger accent-danger" />
+                                 <span className="text-sm font-bold text-danger">Đề xuất từ chối (Giữ nguyên)</span>
                               </label>
                            </div>
                         </div>
 
                         {decision === 'ACCEPTED' && (
-                           <div style={{ marginBottom: 20 }}>
-                              <label className="form-label">Nhập điểm mới (cho {selectedAppeal.appealType === 'advisor' ? 'Cố vấn học tập' : 'Ban cán sự'}) *</label>
+                           <div className="space-y-1.5">
+                              <label className="text-sm font-bold text-foreground block">Nhập điểm mới (cho {selectedAppeal.appealType === 'advisor' ? 'CVHT' : 'BCS'}) <span className="text-danger">*</span></label>
                               <input 
                                  type="number" 
-                                 className="form-input" 
+                                 className="w-full h-10 px-3 text-sm border border-border rounded-lg bg-surface focus:border-primary focus:ring-1 focus:ring-ring outline-none transition-all" 
                                  value={newScore} 
                                  onChange={e => setNewScore(e.target.value !== '' ? Number(e.target.value) : '')}
                                  placeholder="Nhập số điểm..."
@@ -358,49 +362,43 @@ export default function DepartmentAppealsPage() {
                            </div>
                         )}
 
-                        <div style={{ marginBottom: 20 }}>
-                           <label className="form-label">Phản hồi cho sinh viên *</label>
+                        <div className="space-y-1.5">
+                           <label className="text-sm font-bold text-foreground block">Phản hồi cho sinh viên <span className="text-danger">*</span></label>
                            <textarea
-                              className="form-input"
+                              className="w-full p-3 text-sm border border-border rounded-xl bg-surface focus:border-primary focus:ring-1 focus:ring-ring outline-none transition-all placeholder:text-muted-foreground resize-y min-h-[100px]"
                               value={resolution}
                               onChange={e => setResolution(e.target.value)}
                               placeholder="Nhập nội dung phản hồi..."
-                              rows={3}
                            />
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
-                           <button className="btn-secondary" onClick={() => setSelectedAppeal(null)}>Hủy</button>
-                           <button 
-                              className="btn-primary" 
+                        <div className="flex justify-end gap-3 pt-2">
+                           <Button variant="outline" onClick={() => setSelectedAppeal(null)}>Hủy</Button>
+                           <Button 
+                              variant={decision === 'ACCEPTED' ? 'primary' : 'danger'}
                               onClick={handleResolve} 
+                              isLoading={submitting}
                               disabled={submitting}
-                              style={{ background: decision === 'ACCEPTED' ? '#059669' : '#dc2626', borderColor: decision === 'ACCEPTED' ? '#059669' : '#dc2626' }}
                            >
-                              {submitting ? 'Đang gửi...' : 'Đề xuất & Trình lên Admin'}
-                           </button>
+                              Đề xuất & Trình lên Admin
+                           </Button>
                         </div>
 
-                        <div style={{ marginTop: 12, padding: '10px 12px', background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a' }}>
-                           <span style={{ fontSize: 12, color: '#92400e' }}>⚠️ Lưu ý: Đề xuất của Khoa sẽ được gửi lên Admin trường để phê duyệt cuối cùng. Khoa không trực tiếp thay đổi điểm.</span>
+                        <div className="mt-3 p-3 bg-warning-bg rounded-lg border border-warning-border text-sm text-warning-foreground">
+                           ⚠️ <strong>Lưu ý:</strong> Đề xuất của Khoa sẽ được gửi lên Admin trường để phê duyệt cuối cùng. Khoa không trực tiếp thay đổi điểm.
                         </div>
-                     </>
+                     </div>
                   ) : (
-                     <div style={{ background: 'var(--bg-surface)', padding: 16, borderRadius: 8, border: '1px solid var(--border)' }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Kết quả xử lý:</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                           <span style={{
-                              fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 999,
-                              background: STATUS_MAP[selectedAppeal.status]?.bg, color: STATUS_MAP[selectedAppeal.status]?.color,
-                           }}>
-                              {STATUS_MAP[selectedAppeal.status]?.label}
-                           </span>
-                           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                     <div className="bg-surface-muted p-4 rounded-xl border border-border">
+                        <div className="text-sm font-bold text-foreground mb-3">Kết quả xử lý:</div>
+                        <div className="flex items-center gap-3 mb-3">
+                           <StatusBadge status={selectedAppeal.status} type="appeal" />
+                           <span className="text-xs text-muted-foreground">
                               bởi <strong>{selectedAppeal.resolvedBy}</strong> vào ngày {new Date(selectedAppeal.resolvedAt!).toLocaleDateString('vi-VN')}
                            </span>
                         </div>
-                        <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>
-                           <strong>Phản hồi:</strong> {selectedAppeal.resolution}
+                        <div className="text-sm text-foreground bg-card p-3 rounded-lg border border-border shadow-sm">
+                           <span className="font-bold">Phản hồi:</span> {selectedAppeal.resolution}
                         </div>
                      </div>
                   )}

@@ -28,12 +28,12 @@ const CLASSIFICATION_LABELS: Record<string, string> = {
 };
 
 const CLS_COLORS: Record<string, { bg: string; color: string }> = {
-  EXCELLENT: { bg: '#ecfdf5', color: '#059669' },
-  VERY_GOOD: { bg: '#fef2f2', color: '#991b1b' },
-  GOOD: { bg: '#fffbeb', color: '#d97706' },
-  AVERAGE: { bg: '#f3f4f6', color: '#6b7280' },
-  WEAK: { bg: '#fef2f2', color: '#dc2626' },
-  POOR: { bg: '#fef2f2', color: '#dc2626' },
+  EXCELLENT: { bg: 'var(--success-bg)', color: 'var(--success-foreground)' },
+  VERY_GOOD: { bg: 'var(--info-bg)', color: 'var(--info)' },
+  GOOD: { bg: 'var(--warning-bg)', color: 'var(--warning-foreground)' },
+  AVERAGE: { bg: 'var(--surface-muted)', color: 'var(--muted-foreground)' },
+  WEAK: { bg: 'var(--danger-bg)', color: 'var(--danger-foreground)' },
+  POOR: { bg: 'var(--danger-bg)', color: 'var(--danger-foreground)' },
 };
 
 export function AdvisorSummary() {
@@ -113,48 +113,48 @@ export function AdvisorSummary() {
       </div>
 
       {/* Table */}
-      <div className="dashboard-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="dashboard-table" style={{ minWidth: 900 }}>
+      <div className="bg-surface rounded-xl border border-border overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
-              <tr>
-                <th style={{ width: 50, textAlign: 'center' }}>STT</th>
-                <th style={{ width: 100 }}>MSSV</th>
-                <th>Họ và Tên</th>
-                <th style={{ width: 90 }}>Lớp</th>
-                <th style={{ width: 80, textAlign: 'center' }}>Điểm SV</th>
-                <th style={{ width: 80, textAlign: 'center' }}>Điểm BCS</th>
-                <th style={{ width: 80, textAlign: 'center' }}>Điểm CVHT</th>
-                <th style={{ width: 100, textAlign: 'center' }}>Xếp loại</th>
-                <th>Ghi chú</th>
+              <tr className="bg-surface-muted border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-bold">
+                <th className="px-4 py-3 text-center w-12">STT</th>
+                <th className="px-4 py-3 w-28">MSSV</th>
+                <th className="px-4 py-3">Họ và Tên</th>
+                <th className="px-4 py-3 w-24">Lớp</th>
+                <th className="px-4 py-3 text-center w-20">Điểm SV</th>
+                <th className="px-4 py-3 text-center w-24">Điểm BCS</th>
+                <th className="px-4 py-3 text-center w-24">Điểm CVHT</th>
+                <th className="px-4 py-3 text-center w-28">Xếp loại</th>
+                <th className="px-4 py-3">Ghi chú</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border">
               {students.length === 0 ? (
-                <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Chưa có dữ liệu sinh viên</td></tr>
+                <tr><td colSpan={9} className="text-center text-muted-foreground p-8">Chưa có dữ liệu sinh viên</td></tr>
               ) : students.map((student, index) => {
                 const clsLabel = student.classification ? CLASSIFICATION_LABELS[student.classification] || '' : '';
                 const clsColor = CLS_COLORS[student.classification || ''] || { bg: '#f3f4f6', color: '#6b7280' };
                 return (
-                  <tr key={`${student.id}-${index}`}>
-                    <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{index + 1}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{student.studentCode || '-'}</td>
-                    <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{student.name}</td>
-                    <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{student.className || '-'}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}>{student.studentTotal ?? '-'}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}>{student.classTotal ?? '-'}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--accent)' }}>{student.advisorTotal ?? '-'}</td>
-                    <td style={{ textAlign: 'center' }}>
+                  <tr key={`${student.id}-${index}`} className="hover:bg-surface-muted transition-colors">
+                    <td className="px-4 py-3 text-center text-muted-foreground text-xs">{index + 1}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{student.studentCode || '-'}</td>
+                    <td className="px-4 py-3 font-medium text-foreground">{student.name}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{student.className || '-'}</td>
+                    <td className="px-4 py-3 text-center font-bold text-foreground">{student.studentTotal ?? '-'}</td>
+                    <td className="px-4 py-3 text-center font-bold text-foreground">{student.classTotal ?? '-'}</td>
+                    <td className="px-4 py-3 text-center font-bold text-primary">{student.advisorTotal ?? '-'}</td>
+                    <td className="px-4 py-3 text-center">
                       {clsLabel ? (
                         <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: clsColor.bg, color: clsColor.color }}>{clsLabel}</span>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>-</span>
+                        <span className="text-muted-foreground text-xs">-</span>
                       )}
                     </td>
-                    <td>
+                    <td className="px-4 py-3">
                       <input type="text" placeholder="Nhập ghi chú..." value={notes[student.id] || ''}
                         onChange={(e) => setNotes((prev) => ({ ...prev, [student.id]: e.target.value }))}
-                        className="form-input" style={{ border: 'none', background: 'transparent', fontSize: 12, padding: '4px 6px' }} />
+                        className="w-full bg-transparent border-none text-xs px-2 py-1 focus:ring-1 focus:ring-primary rounded" />
                     </td>
                   </tr>
                 );

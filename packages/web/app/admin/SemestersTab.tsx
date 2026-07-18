@@ -144,13 +144,13 @@ export function SemestersTab() {
     }
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted-foreground)' }}>Đang tải...</div>;
 
   const columns = [
-    { header: 'STT', width: 50, render: (_s: Semester, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'STT', width: 50, render: (_s: Semester, i: number) => <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{i + 1}</span> },
     { header: 'Mã', width: 120, render: (s: Semester) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12 }}>{s.code}</span> },
     { header: 'Tên', render: (s: Semester) => <span style={{ fontWeight: 500 }}>{s.name}</span> },
-    { header: 'Năm học', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{s.academic_year}</span> },
+    { header: 'Năm học', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{s.academic_year}</span> },
     { header: 'Bắt đầu', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtDate(s.start_date)}</span> },
     { header: 'Kết thúc', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtDate(s.end_date)}</span> },
     {

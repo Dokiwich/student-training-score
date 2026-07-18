@@ -51,21 +51,21 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
       onClick={onClose}
     >
       <div 
-        className="bg-white rounded-[12px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] w-full max-w-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+        className="bg-surface rounded-[12px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] w-full max-w-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center px-6 py-5 border-b border-[#E5E7EB]">
+        <div className="flex justify-between items-center px-6 py-5 border-b border-border">
           <div>
-            <h3 className="text-[18px] font-[590] text-[#1F2937] leading-[1.2]">
+            <h3 className="text-[18px] font-[590] text-foreground leading-[1.2]">
               Tạo hoặc chỉnh sửa bộ tiêu chí
             </h3>
-            <p className="text-[14px] text-[#64748B] font-[400] mt-1">
+            <p className="text-[14px] text-muted-foreground font-[400] mt-1">
               Thiết lập thông tin và phương thức khởi tạo bộ tiêu chí.
             </p>
           </div>
           <button 
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F1F5F9] text-[#64748B] transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-hover text-muted-foreground transition-colors"
           >
             <X className="w-5 h-5" strokeWidth={1.5} />
           </button>
@@ -78,18 +78,18 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
               onClick={() => setMode('create')}
               className={`flex gap-3 p-4 rounded-[8px] cursor-pointer border-[1.5px] transition-all ${
                 mode === 'create' 
-                  ? 'border-[#B91C1C] bg-[#FEF2F2]' 
-                  : 'border-[#E5E7EB] hover:border-[#CBD5E1] bg-white'
+                  ? 'border-primary bg-danger/10' 
+                  : 'border-border hover:border-input bg-surface'
               }`}
             >
-              <div className={`mt-0.5 ${mode === 'create' ? 'text-[#B91C1C]' : 'text-[#94A3B8]'}`}>
+              <div className={`mt-0.5 ${mode === 'create' ? 'text-primary' : 'text-muted-foreground'}`}>
                 <FilePlus className="w-5 h-5" strokeWidth={1.5} />
               </div>
               <div className="flex flex-col gap-1">
-                <span className={`text-[15px] font-[510] ${mode === 'create' ? 'text-[#991B1B]' : 'text-[#1F2937]'}`}>
+                <span className={`text-[15px] font-[510] ${mode === 'create' ? 'text-danger' : 'text-foreground'}`}>
                   Tạo bộ tiêu chí mới
                 </span>
-                <span className="text-[13px] text-[#64748B] leading-[1.4]">
+                <span className="text-[13px] text-muted-foreground leading-[1.4]">
                   Bắt đầu với một bộ tiêu chí hoàn toàn mới.
                 </span>
               </div>
@@ -99,44 +99,44 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
               onClick={() => setMode('edit')}
               className={`flex gap-3 p-4 rounded-[8px] cursor-pointer border-[1.5px] transition-all ${
                 mode === 'edit' 
-                  ? 'border-[#B91C1C] bg-[#FEF2F2]' 
-                  : 'border-[#E5E7EB] hover:border-[#CBD5E1] bg-white'
+                  ? 'border-primary bg-danger/10' 
+                  : 'border-border hover:border-input bg-surface'
               }`}
             >
-              <div className={`mt-0.5 ${mode === 'edit' ? 'text-[#B91C1C]' : 'text-[#94A3B8]'}`}>
+              <div className={`mt-0.5 ${mode === 'edit' ? 'text-primary' : 'text-muted-foreground'}`}>
                 <Edit3 className="w-5 h-5" strokeWidth={1.5} />
               </div>
               <div className="flex flex-col gap-1">
-                <span className={`text-[15px] font-[510] ${mode === 'edit' ? 'text-[#991B1B]' : 'text-[#1F2937]'}`}>
+                <span className={`text-[15px] font-[510] ${mode === 'edit' ? 'text-danger' : 'text-foreground'}`}>
                   Chỉnh sửa bản có sẵn
                 </span>
-                <span className="text-[13px] text-[#64748B] leading-[1.4]">
+                <span className="text-[13px] text-muted-foreground leading-[1.4]">
                   Chọn một bộ tiêu chí đã có để xem và sửa đổi.
                 </span>
               </div>
             </div>
           </div>
 
-          <hr className="border-[#F1F5F9]" />
+          <hr className="border-border" />
 
           {/* Dynamic Form */}
           {mode === 'create' ? (
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-2">
-                <label className="text-[14px] font-[510] text-[#374151]">
-                  Tên bộ tiêu chí <span className="text-[#DC2626]">*</span>
+                <label className="text-[14px] font-[510] text-foreground">
+                  Tên bộ tiêu chí <span className="text-danger">*</span>
                 </label>
                 <input 
                   type="text" 
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="VD: Bộ tiêu chí đánh giá rèn luyện năm 2024"
-                  className="px-3 py-2.5 bg-white border border-[#D1D5DB] rounded-[6px] text-[15px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                  className="px-3 py-2.5 bg-surface border border-border rounded-[6px] text-[15px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
                 />
               </div>
               
               <div className="flex flex-col gap-2">
-                <label className="text-[14px] font-[510] text-[#374151]">
+                <label className="text-[14px] font-[510] text-foreground">
                   Mô tả
                 </label>
                 <textarea 
@@ -144,20 +144,20 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Nhập mô tả..."
                   rows={3}
-                  className="px-3 py-2.5 bg-white border border-[#D1D5DB] rounded-[6px] text-[15px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all resize-none"
+                  className="px-3 py-2.5 bg-surface border border-border rounded-[6px] text-[15px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all resize-none"
                 />
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-2">
-                <label className="text-[14px] font-[510] text-[#374151]">
-                  Chọn bộ tiêu chí <span className="text-[#DC2626]">*</span>
+                <label className="text-[14px] font-[510] text-foreground">
+                  Chọn bộ tiêu chí <span className="text-danger">*</span>
                 </label>
                 <select 
                   value={selectedVersionId}
                   onChange={(e) => setSelectedVersionId(e.target.value)}
-                  className="px-3 py-2.5 bg-white border border-[#D1D5DB] rounded-[6px] text-[15px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                  className="px-3 py-2.5 bg-surface border border-border rounded-[6px] text-[15px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
                 >
                   <option value="">-- Chọn bộ tiêu chí --</option>
                   {versions.map(v => (
@@ -169,14 +169,14 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
               </div>
 
               {selectedVersionId && (
-                <div className="p-4 bg-[#F8FAFC] border border-[#E5E7EB] rounded-[6px] flex flex-col gap-2">
-                  <p className="text-[13px] text-[#64748B]">
+                <div className="p-4 bg-surface-muted border border-border rounded-[6px] flex flex-col gap-2">
+                  <p className="text-[13px] text-muted-foreground">
                     Thông tin phiên bản:
                   </p>
-                  <p className="text-[14px] font-[510] text-[#1F2937]">
+                  <p className="text-[14px] font-[510] text-foreground">
                     {versions.find(x => x.id === selectedVersionId)?.name || 'Chưa đặt tên'}
                   </p>
-                  <p className="text-[13px] text-[#64748B]">
+                  <p className="text-[13px] text-muted-foreground">
                     Học kỳ áp dụng: {versions.find(x => x.id === selectedVersionId)?.semesters?.code || 'Không có'}
                   </p>
                 </div>
@@ -185,17 +185,17 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
           )}
         </div>
 
-        <div className="bg-[#F8FAFC] px-6 py-4 border-t border-[#E5E7EB] flex justify-end gap-3">
+        <div className="bg-surface-muted px-6 py-4 border-t border-border flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-5 py-2.5 bg-white border border-[#E5E7EB] text-[#475569] hover:bg-[#F8FAFC] rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-[#F1F5F9] outline-none"
+            className="px-5 py-2.5 bg-surface border border-border text-foreground hover:bg-surface-hover rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-border outline-none"
           >
             Hủy
           </button>
           <button
             onClick={handleSubmit}
             disabled={isApplying || (mode === 'create' ? !name.trim() : !selectedVersionId)}
-            className="flex items-center gap-2 px-6 py-2.5 bg-[#B91C1C] hover:bg-[#991B1B] text-white rounded-[6px] text-[14px] font-[510] transition-colors border border-transparent focus:ring-[3px] focus:ring-[#FEF2F2] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground rounded-[6px] text-[14px] font-[510] transition-colors border border-transparent focus:ring-[3px] focus:ring-primary/20 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isApplying && <Loader2 className="w-4 h-4 animate-spin" />}
             Tiếp tục

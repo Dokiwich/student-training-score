@@ -49,8 +49,8 @@ export function CriteriaWorkspace({ version, onClose }: CriteriaWorkspaceProps) 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] gap-3">
-        <Loader2 className="w-8 h-8 text-[#d0d6e0] animate-spin" />
-        <span className="text-[#62666d] text-[15px] font-[510]">Đang tải dữ liệu không gian làm việc...</span>
+        <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+        <span className="text-muted-foreground text-[15px] font-[510]">Đang tải dữ liệu không gian làm việc...</span>
       </div>
     );
   }
@@ -67,35 +67,35 @@ export function CriteriaWorkspace({ version, onClose }: CriteriaWorkspaceProps) 
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] max-h-[1000px] bg-white border border-[#E5E7EB] rounded-[12px] overflow-hidden shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
+    <div className="flex flex-col h-[calc(100vh-80px)] max-h-[1000px] bg-surface border border-border rounded-[12px] overflow-hidden shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
       {/* Workspace Header */}
-      <div className="flex justify-between items-center px-6 py-4 border-b border-[#E5E7EB] bg-[#F8FAFC]">
+      <div className="flex justify-between items-center px-6 py-4 border-b border-border bg-surface-muted">
         <div className="flex items-center gap-4">
           <button 
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-[6px] hover:bg-[#E2E8F0] text-[#64748B] transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-[6px] hover:bg-surface-hover text-muted-foreground transition-colors"
           >
             <ArrowLeft className="w-5 h-5" strokeWidth={1.5} />
           </button>
           
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <h2 className="text-[18px] font-[590] text-[#1F2937] leading-[1.2]">
+              <h2 className="text-[18px] font-[590] text-foreground leading-[1.2]">
                 {version.name || version.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
               </h2>
               {version.is_active === 1 ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#ECFDF5] text-[#10B981] border border-[#A7F3D0] text-[11px] font-[590]">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-success/10 text-success border border-success/30 text-[11px] font-[590]">
                   <CheckCircle2 className="w-3 h-3" strokeWidth={2.5} />
                   ĐANG ÁP DỤNG
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#F1F5F9] text-[#64748B] border border-[#E2E8F0] text-[11px] font-[590]">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-surface-muted text-muted-foreground border border-border text-[11px] font-[590]">
                   <Lock className="w-3 h-3" strokeWidth={2.5} />
                   BẢN NHÁP
                 </span>
               )}
             </div>
-            <p className="text-[13px] text-[#64748B] font-[400] mt-0.5">
+            <p className="text-[13px] text-muted-foreground font-[400] mt-0.5">
               Học kỳ áp dụng: {version.semesters?.name || 'Không có'} — {categories.length} nhóm, {criteria.length} tiêu chí
             </p>
           </div>
@@ -104,21 +104,21 @@ export function CriteriaWorkspace({ version, onClose }: CriteriaWorkspaceProps) 
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setPreviewMode(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E5E7EB] text-[#475569] hover:bg-[#F8FAFC] rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-[#F1F5F9] outline-none"
+            className="flex items-center gap-2 px-4 py-2 bg-surface border border-border text-foreground hover:bg-surface-muted rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-border outline-none"
           >
             <Eye className="w-4 h-4" strokeWidth={1.5} />
             Xem trước giao diện SV
           </button>
-          <div className="w-[1px] h-6 bg-[#E2E8F0]"></div>
+          <div className="w-[1px] h-6 bg-border"></div>
           <button 
             onClick={handleCreateNewCategory}
-            className="px-4 py-2 bg-white border border-[#E5E7EB] text-[#475569] hover:bg-[#F8FAFC] rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-[#F1F5F9] outline-none"
+            className="px-4 py-2 bg-surface border border-border text-foreground hover:bg-surface-muted rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-border outline-none"
           >
             Thêm nhóm (Category)
           </button>
           <button 
             onClick={handleCreateNewCriterion}
-            className="px-4 py-2 bg-[#B91C1C] hover:bg-[#991B1B] text-white rounded-[6px] text-[14px] font-[510] transition-colors border border-transparent focus:ring-[3px] focus:ring-[#FEF2F2] outline-none"
+            className="px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground rounded-[6px] text-[14px] font-[510] transition-colors border border-transparent focus:ring-[3px] focus:ring-primary/20 outline-none"
           >
             Thêm tiêu chí
           </button>
@@ -127,7 +127,7 @@ export function CriteriaWorkspace({ version, onClose }: CriteriaWorkspaceProps) 
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left Pane: Tree (60%) */}
-        <div className="w-[60%] flex flex-col border-r border-[#E5E7EB] bg-[#F8FAFC] overflow-hidden">
+        <div className="w-[60%] flex flex-col border-r border-border bg-surface-muted overflow-hidden">
           <div className="flex-1 overflow-auto p-4">
             <CriteriaTree 
               categories={categories} 
@@ -139,7 +139,7 @@ export function CriteriaWorkspace({ version, onClose }: CriteriaWorkspaceProps) 
         </div>
 
         {/* Right Pane: Details (40%) */}
-        <div className="w-[40%] bg-white flex flex-col overflow-auto relative">
+        <div className="w-[40%] bg-surface flex flex-col overflow-auto relative">
           <CriteriaDetailPanel 
             versionId={version.id}
             selectedItem={selectedItem}

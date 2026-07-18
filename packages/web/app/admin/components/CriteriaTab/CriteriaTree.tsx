@@ -27,7 +27,7 @@ export function CriteriaTree({ categories, criteria, selectedItem, onSelect }: C
       ))}
       
       {sortedCategories.length === 0 && (
-        <div className="text-center p-8 text-[#94A3B8] text-[14px]">
+        <div className="text-center p-8 text-muted-foreground text-[14px]">
           Chưa có cấu trúc tiêu chí. Hãy bắt đầu bằng cách thêm Nhóm.
         </div>
       )}
@@ -59,31 +59,31 @@ function CategoryNode({ category, criteria, criteriaIds, selectedItem, onSelect 
       {/* Category Row */}
       <div 
         className={`flex items-center gap-2 px-2 py-1.5 rounded-[6px] cursor-pointer group transition-colors select-none ${
-          isSelected ? 'bg-[#FEF2F2] text-[#B91C1C]' : 'hover:bg-[#F1F5F9] text-[#1F2937]'
+          isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-surface-muted text-foreground'
         }`}
         onClick={() => onSelect({ type: 'category', id: category.id })}
       >
         <button 
           onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
-          className={`p-0.5 rounded-[4px] text-[#8a8f98] hover:bg-[#E2E8F0] ${isSelected ? 'hover:bg-[#FECACA]' : ''}`}
+          className={`p-0.5 rounded-[4px] text-muted-foreground hover:bg-surface-hover ${isSelected ? 'hover:bg-primary/20' : ''}`}
         >
           {expanded ? <ChevronDown className="w-4 h-4" strokeWidth={1.5} /> : <ChevronRight className="w-4 h-4" strokeWidth={1.5} />}
         </button>
         
-        <Folder className={`w-4 h-4 ${isSelected ? 'text-[#B91C1C]' : 'text-[#8a8f98]'}`} strokeWidth={1.5} />
+        <Folder className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} strokeWidth={1.5} />
         
         <span className="text-[14px] font-[590] truncate flex-1 leading-none pt-0.5">
           {category.name}
         </span>
         
-        <span className={`text-[12px] font-[510] ${isSelected ? 'text-[#B91C1C]/70' : 'text-[#64748B]'}`}>
+        <span className={`text-[12px] font-[510] ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
           {category.max_score}đ
         </span>
       </div>
 
       {/* Children */}
       {expanded && (
-        <div className="flex flex-col ml-5 pl-2 border-l border-[#E5E7EB] mt-1 mb-2 gap-0.5">
+        <div className="flex flex-col ml-5 pl-2 border-l border-border mt-1 mb-2 gap-0.5">
           {rootCriteria.length > 0 ? (
             rootCriteria.map(c => (
               <CriterionNode 
@@ -97,7 +97,7 @@ function CategoryNode({ category, criteria, criteriaIds, selectedItem, onSelect 
               />
             ))
           ) : (
-            <div className="text-[13px] text-[#94A3B8] italic pl-6 py-1">Trống</div>
+            <div className="text-[13px] text-muted-foreground italic pl-6 py-1">Trống</div>
           )}
         </div>
       )}
@@ -130,41 +130,41 @@ function CriterionNode({ criterion, allCriteria, criteriaIds, selectedItem, onSe
     <div className="flex flex-col">
       <div 
         className={`flex items-start gap-2 px-2 py-1.5 rounded-[6px] cursor-pointer group transition-colors select-none ${
-          isSelected ? 'bg-[#FEF2F2] text-[#B91C1C]' : 'hover:bg-[#F1F5F9] text-[#374151]'
-        } ${isOrphan ? 'ring-1 ring-[#F59E0B]/40' : ''}`}
+          isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-surface-muted text-foreground'
+        } ${isOrphan ? 'ring-1 ring-warning/40' : ''}`}
         onClick={() => onSelect({ type: 'criterion', id: criterion.id })}
       >
         <div className="flex items-center mt-0.5 w-4 h-4 flex-shrink-0">
           {hasChildren ? (
             <button 
               onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
-              className={`p-0.5 -ml-0.5 rounded-[4px] text-[#8a8f98] hover:bg-[#E2E8F0] ${isSelected ? 'hover:bg-[#FECACA]' : ''}`}
+              className={`p-0.5 -ml-0.5 rounded-[4px] text-muted-foreground hover:bg-surface-hover ${isSelected ? 'hover:bg-primary/20' : ''}`}
             >
               {expanded ? <ChevronDown className="w-4 h-4" strokeWidth={1.5} /> : <ChevronRight className="w-4 h-4" strokeWidth={1.5} />}
             </button>
           ) : (
             level > 1 ? (
-              <CornerDownRight className={`w-3.5 h-3.5 ml-0.5 ${isSelected ? 'text-[#B91C1C]/50' : 'text-[#CBD5E1]'}`} strokeWidth={1.5} />
+              <CornerDownRight className={`w-3.5 h-3.5 ml-0.5 ${isSelected ? 'text-primary/50' : 'text-muted-foreground/30'}`} strokeWidth={1.5} />
             ) : (
-              <FileText className={`w-3.5 h-3.5 ml-0.5 ${isSelected ? 'text-[#B91C1C]/50' : 'text-[#CBD5E1]'}`} strokeWidth={1.5} />
+              <FileText className={`w-3.5 h-3.5 ml-0.5 ${isSelected ? 'text-primary/50' : 'text-muted-foreground/30'}`} strokeWidth={1.5} />
             )
           )}
         </div>
         
         <div className="flex flex-col flex-1 min-w-0 pt-0.5">
           <div className="flex justify-between items-baseline gap-2 w-full">
-            <span className={`text-[12px] font-[590] flex-shrink-0 ${isSelected ? 'text-[#B91C1C]' : 'text-[#64748B]'}`}>
+            <span className={`text-[12px] font-[590] flex-shrink-0 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
               {criterion.code}
             </span>
-            <span className={`text-[12px] font-[590] flex-shrink-0 ${isSelected ? 'text-[#B91C1C]' : 'text-[#64748B]'}`}>
+            <span className={`text-[12px] font-[590] flex-shrink-0 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
               {hasChildren ? '' : `${criterion.point}đ`}
             </span>
           </div>
-          <span className={`text-[13px] font-[400] leading-[1.4] break-words pr-2 mt-0.5 ${isSelected ? 'text-[#7F1D1D]' : 'text-[#1F2937]'}`}>
+          <span className={`text-[13px] font-[400] leading-[1.4] break-words pr-2 mt-0.5 ${isSelected ? 'text-primary font-medium' : 'text-foreground'}`}>
             {criterion.content}
           </span>
           {isOrphan && (
-            <span className="flex items-center gap-1 mt-1 text-[11px] text-[#B45309] font-[510]">
+            <span className="flex items-center gap-1 mt-1 text-[11px] text-warning font-[510]">
               <AlertTriangle className="w-3 h-3" strokeWidth={2} />
               Tiêu chí mồ côi (parent_id: {criterion.parent_id} không tồn tại)
             </span>
@@ -173,7 +173,7 @@ function CriterionNode({ criterion, allCriteria, criteriaIds, selectedItem, onSe
       </div>
 
       {hasChildren && expanded && (
-        <div className="flex flex-col ml-4 pl-2 border-l border-[#E5E7EB] mt-0.5 gap-0.5">
+        <div className="flex flex-col ml-4 pl-2 border-l border-border mt-0.5 gap-0.5">
           {children.map(c => (
             <CriterionNode 
               key={c.id} 

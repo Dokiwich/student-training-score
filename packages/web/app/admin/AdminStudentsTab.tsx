@@ -100,7 +100,7 @@ export function AdminStudentsTab({ classId, classNameStr, onBack }: AdminStudent
 
   const columns = [
     { header: 'MSSV', width: 100, render: (s: any) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{s.studentCode}</span> },
-    { header: 'Họ tên', render: (s: any) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</span> },
+    { header: 'Họ tên', render: (s: any) => <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{s.name}</span> },
     { header: 'Trạng thái', width: 140, render: (s: any) => {
         const st = s.status;
         let bg = '#f3f4f6', color = '#6b7280', label = st;
@@ -138,7 +138,7 @@ export function AdminStudentsTab({ classId, classNameStr, onBack }: AdminStudent
         </div>
       )}
       <div className="dashboard-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--text-primary)', flex: 1 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--foreground)', flex: 1 }}>
           {classNameStr ? `Danh sách sinh viên - Lớp ${classNameStr}` : 'Danh sách sinh viên (Toàn trường)'}
         </h2>
         
@@ -170,8 +170,8 @@ export function AdminStudentsTab({ classId, classNameStr, onBack }: AdminStudent
           <div style={{ backgroundColor: '#fff', borderRadius: 16, width: '90vw', maxWidth: 1000, height: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', animation: 'slideIn 0.3s ease-out' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderRadius: '16px 16px 0 0' }}>
               <div>
-                <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px 0' }}>Phiếu Đánh Giá Rèn Luyện</h2>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--foreground)', margin: '0 0 4px 0' }}>Phiếu Đánh Giá Rèn Luyện</h2>
+                <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
                   Sinh viên: <strong>{selectedStudentForEdit.name}</strong> ({selectedStudentForEdit.studentCode}) — Lớp: <strong>{selectedStudentForEdit.className}</strong>
                 </div>
               </div>

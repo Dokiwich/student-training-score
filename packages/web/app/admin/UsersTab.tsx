@@ -325,10 +325,10 @@ export function UsersTab() {
 
   const filtered = users.filter(u => !search || u.full_name.toLowerCase().includes(search.toLowerCase()) || (u.student_id || '').includes(search) || u.email.includes(search));
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted-foreground)' }}>Đang tải...</div>;
 
   const columns = [
-    { header: 'STT', width: 50, render: (_u: UserItem, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'STT', width: 50, render: (_u: UserItem, i: number) => <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{i + 1}</span> },
     { header: 'MSSV', width: 100, render: (u: UserItem) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{u.student_id || '-'}</span> },
     { header: 'Họ tên', render: (u: UserItem) => <span style={{ fontWeight: 500 }}>{u.full_name}</span> },
     { header: 'Email', render: (u: UserItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.email}</span> },
@@ -421,7 +421,7 @@ export function UsersTab() {
                 </select>
               </div>
               <div>
-                <label className="form-label">Lớp {editDeptId && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(lọc theo khoa)</span>}</label>
+                <label className="form-label">Lớp {editDeptId && <span style={{ fontSize: 11, color: 'var(--muted-foreground)', fontWeight: 400 }}>(lọc theo khoa)</span>}</label>
                 <select value={editClassId} onChange={e => handleEditClassChange(e.target.value)} className="form-select">
                   <option value="">-- Không chọn --</option>
                   {filteredEditClasses.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
@@ -475,7 +475,7 @@ export function UsersTab() {
                 </select>
               </div>
               <div style={{ marginBottom: 16 }}>
-                <label className="form-label">Lớp (Tùy chọn) {newDeptId && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(lọc theo khoa)</span>}</label>
+                <label className="form-label">Lớp (Tùy chọn) {newDeptId && <span style={{ fontSize: 11, color: 'var(--muted-foreground)', fontWeight: 400 }}>(lọc theo khoa)</span>}</label>
                 <select value={newClassId} onChange={e => handleNewClassChange(e.target.value)} className="form-select">
                   <option value="">-- Không chọn --</option>
                   {filteredNewClasses.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
