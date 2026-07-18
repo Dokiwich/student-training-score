@@ -964,7 +964,161 @@ export class ScoringService {
   // 5. CHẤM ĐIỂM THEO ROLE (Tổng quát cho cả 3 vai trò)
   //    ✅ MỚI: Validate quyền theo Role + Status
   // =============================================
+  
+  // =============================================
+  // GET SCORING PROGRESS (TIMELINE)
+  // =============================================
+  async getScoringProgress(studentId: string, actorId: string, sheetId?: string, semesterId?: string) {
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId && !sheetId) {
+      const activeSemester = await this.getActiveSemester();
+      if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ hoạt động');
+      targetSemesterId = activeSemester.id;
+    }
+
+    let form;
+    if (sheetId) {
+      form = await prisma.scoring_sheets.findUnique({
+        where: { id: sheetId },
+        include: {
+          semester_enrollments: { include: { classes: true, semesters: true, users: true } },
+        }
+      });
+    } else {
+      form = await prisma.scoring_sheets.findFirst({
+        where: {
+          semester_enrollments: {
+            user_id: studentId,
+            semester_id: targetSemesterId
+          }
+        },
+        include: {
+          semester_enrollments: { include: { classes: true, semesters: true, users: true } },
+        }
+      });
+    }
+
+    if (!form) {
+      return { 
+        statusInfo: { dbStatus: 'NO_SHEET', statusLabel: 'Chưa khởi tạo', isLocked: false, isCompleted: false }, 
+        progress: { currentStageIndex: 1, totalStages: 4, isReturned: false }, 
+        scores: { studentScore: 0, classCommitteeScore: 0, advisorScore: 0, finalScore: 0 }, 
+        stages: [] 
+      };
+    }
+    
+    // Auth check
+    await this.verifyReadPermission(actorId, form.semester_enrollments.user_id, form.semester_enrollments.semester_id);
+
+    const semester = form.semester_enrollments.semesters;
+
+    const [reviewActions, scoreDetails, categories, allCriteria] = await Promise.all([
+      prisma.review_actions.findMany({
+        where: { scoring_sheet_id: form.id },
+        include: { users: { select: { full_name: true } } },
+        orderBy: { created_at: 'asc' }
+      }),
+      prisma.score_details.findMany({
+        where: { scoring_sheet_id: form.id },
+        include: { score_entries: true }
+      }),
+      prisma.criteria_categories.findMany({ select: { id: true, max_score: true } }),
+      prisma.criteria.findMany({ where: { is_active: 1 } })
+    ]);
+
+    const totals = this.computeTotalsPure(scoreDetails as any[], categories, allCriteria);
+
+    const DB_STATUS_MAP: Record<string, any> = {
+      DRAFT: { label: 'Bản nháp', stage: 1, handler: 'STUDENT', isReturned: false },
+      STUDENT_SUBMITTED: { label: 'Đã nộp cho BCS', stage: 2, handler: 'CLASS_COMMITTEE', isReturned: false },
+      CLASS_REVIEWING: { label: 'BCS đang xét duyệt', stage: 2, handler: 'CLASS_COMMITTEE', isReturned: false },
+      CLASS_REVIEWED: { label: 'BCS đã duyệt', stage: 3, handler: 'ADVISOR', isReturned: false },
+      CLASS_REJECTED: { label: 'Bị BCS trả lại', stage: 1, handler: 'STUDENT', isReturned: true, returnedTo: 1 },
+      ADVISOR_REVIEWING: { label: 'CVHT đang xét duyệt', stage: 3, handler: 'ADVISOR', isReturned: false },
+      ADVISOR_APPROVED: { label: 'CVHT đã duyệt', stage: 4, handler: 'SCHOOL', isReturned: false },
+      ADVISOR_REJECTED: { label: 'Bị CVHT trả lại', stage: 2, handler: 'CLASS_COMMITTEE', isReturned: true, returnedTo: 2 },
+      SCHOOL_REVIEWING: { label: 'Khoa đang xét duyệt', stage: 4, handler: 'SCHOOL', isReturned: false },
+      SCHOOL_APPROVED: { label: 'Khoa đã duyệt', stage: 4, handler: 'SCHOOL', isReturned: false },
+      SCHOOL_REJECTED: { label: 'Bị Khoa trả lại', stage: 3, handler: 'ADVISOR', isReturned: true, returnedTo: 3 },
+      FINALIZED: { label: 'Hoàn tất', stage: 4, handler: null, isReturned: false, isCompleted: true },
+      APPEALING: { label: 'Đang khiếu nại', stage: 4, handler: 'SCHOOL', isReturned: false }
+    };
+
+    const statusInfo = DB_STATUS_MAP[form.status] || { label: form.status, stage: 1, handler: null };
+
+    const formatAction = (a: any) => ({
+      action: a.action,
+      time: a.created_at,
+      actorName: a.users?.full_name || 'Hệ thống',
+      comment: a.comment
+    });
+
+    const stages = [
+      {
+        stageIndex: 1,
+        roleLabel: 'Sinh viên',
+        deadline: semester?.student_deadline,
+        actions: reviewActions.filter(a => a.from_status === 'DRAFT' || a.action === 'SUBMIT' || a.action === 'RESUBMIT').map(formatAction)
+      },
+      {
+        stageIndex: 2,
+        roleLabel: 'Ban cán sự lớp',
+        deadline: semester?.class_committee_deadline,
+        actions: reviewActions.filter(a => a.from_status.startsWith('CLASS_') || a.from_status === 'STUDENT_SUBMITTED').map(formatAction)
+      },
+      {
+        stageIndex: 3,
+        roleLabel: 'Cố vấn học tập',
+        deadline: semester?.advisor_deadline,
+        actions: reviewActions.filter(a => a.from_status.startsWith('ADVISOR_') || a.from_status === 'CLASS_REVIEWED').map(formatAction)
+      },
+      {
+        stageIndex: 4,
+        roleLabel: 'Khoa',
+        deadline: semester?.school_deadline,
+        actions: reviewActions.filter(a => a.from_status.startsWith('SCHOOL_') || a.from_status === 'ADVISOR_APPROVED' || a.action === 'FINALIZE').map(formatAction)
+      }
+    ];
+
+    const roleMap: Record<string, string> = {
+       STUDENT: 'Sinh viên',
+       CLASS_COMMITTEE: 'Ban cán sự lớp',
+       ADVISOR: 'Cố vấn học tập',
+       SCHOOL: 'Khoa'
+    };
+
+    return {
+      sheetId: form.id,
+      semesterInfo: { id: semester?.id, name: semester?.name, academicYear: semester?.academic_year },
+      statusInfo: {
+        dbStatus: form.status,
+        statusLabel: statusInfo.label,
+        isLocked: ['FINALIZED', 'APPEALING'].includes(form.status),
+        isCompleted: form.status === 'FINALIZED'
+      },
+      progress: {
+        currentStageIndex: statusInfo.stage,
+        totalStages: 4,
+        isReturned: statusInfo.isReturned,
+        returnedToStage: statusInfo.returnedTo || null,
+        currentHandler: {
+          role: statusInfo.handler,
+          roleLabel: statusInfo.handler ? roleMap[statusInfo.handler] : null,
+          organizationName: form.semester_enrollments.classes?.name
+        }
+      },
+      scores: {
+        studentScore: totals.studentTotal,
+        classCommitteeScore: totals.classTotal,
+        advisorScore: totals.advisorTotal,
+        finalScore: totals.advisorTotal 
+      },
+      stages
+    };
+  }
+
   async submitCriteria(
+
     formId: string,
     criteriaId: number,
     score: number,

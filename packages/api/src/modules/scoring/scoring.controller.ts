@@ -18,6 +18,17 @@ export class ScoringController {
     return await this.scoringService.getAllCriteria(semesterId);
   }
 
+  @Get('progress')
+  async getScoringProgress(
+    @Query('studentId') studentId: string, 
+    @Req() req: any,
+    @Query('sheetId') sheetId?: string,
+    @Query('semesterId') semesterId?: string
+  ) {
+    const targetStudentId = studentId || req.user.id;
+    return this.scoringService.getScoringProgress(targetStudentId, req.user.id, sheetId, semesterId);
+  }
+
   @Get(':formId/scores')
   async getFormScores(
     @Param('formId') formId: string, 

@@ -5,8 +5,9 @@ import { DashboardLayout } from '../../components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Button } from '../../components/ui/Button';
-import { ClipboardCheck, Clock, FileText, AlertCircle, Activity } from 'lucide-react';
+import { ClipboardCheck, Clock, FileText, Activity } from 'lucide-react';
 import Link from 'next/link';
+import { ProgressMiniCard } from './ProgressMiniCard';
 
 export default async function StudentDashboardPage() {
   const session = await getServerSession(authOptions);
@@ -35,6 +36,20 @@ export default async function StudentDashboardPage() {
           }
         }
       });
+    }
+  }
+
+  let progressData = null;
+  if (scoringSheet && session) {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+      const res = await fetch(`${apiUrl}/scoring/progress?sheetId=${scoringSheet.id}`, {
+        headers: { Authorization: `Bearer ${(session as any).customJwt}` },
+        cache: 'no-store'
+      });
+      if (res.ok) progressData = await res.json();
+    } catch (e) {
+      console.error("Lỗi SSR fetch progress:", e);
     }
   }
 
@@ -182,61 +197,9 @@ export default async function StudentDashboardPage() {
               </CardContent>
             </Card>
           </div>
-
-          <div className="lg:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle>Tiến độ xét duyệt</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="relative pl-6 space-y-6 before:absolute before:inset-0 before:ml-2.5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-border before:mt-2 before:mb-2 ml-1">
-                  
-                  {/* Step 1 */}
-                  <div className="relative flex items-center justify-between">
-                    <div className={`absolute left-[-26px] h-4 w-4 rounded-full ${sheetStatus !== 'NO_SHEET' ? 'bg-primary' : 'bg-muted'} ring-4 ring-surface`} />
-                    <div>
-                      <h4 className="text-sm font-medium text-foreground">Sinh viên tự chấm</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">{sheetStatus === 'NO_SHEET' ? 'Chưa bắt đầu' : 'Đã nộp'}</p>
-                    </div>
-                  </div>
-
-                  {/* Step 2 */}
-                  <div className="relative flex items-center justify-between">
-                    <div className={`absolute left-[-26px] h-4 w-4 rounded-full ${['CLASS_REVIEWING', 'ADVISOR_REVIEWING', 'SCHOOL_REVIEWING', 'APPROVED', 'FINALIZED'].includes(sheetStatus) ? 'bg-primary' : 'bg-muted'} ring-4 ring-surface`} />
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground">Lớp trưởng xét duyệt</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                         {['CLASS_REVIEWING', 'ADVISOR_REVIEWING', 'SCHOOL_REVIEWING', 'APPROVED', 'FINALIZED'].includes(sheetStatus) ? 'Hoàn thành' : 'Chưa xét'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Step 3 */}
-                  <div className="relative flex items-center justify-between">
-                     <div className={`absolute left-[-26px] h-4 w-4 rounded-full ${['ADVISOR_REVIEWING', 'SCHOOL_REVIEWING', 'APPROVED', 'FINALIZED'].includes(sheetStatus) ? 'bg-primary' : 'bg-muted'} ring-4 ring-surface`} />
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground">Cố vấn học tập xét</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {['ADVISOR_REVIEWING', 'SCHOOL_REVIEWING', 'APPROVED', 'FINALIZED'].includes(sheetStatus) ? 'Hoàn thành' : 'Chưa tới hạn'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* Step 4 */}
-                  <div className="relative flex items-center justify-between">
-                    <div className={`absolute left-[-26px] h-4 w-4 rounded-full ${['APPROVED', 'FINALIZED'].includes(sheetStatus) ? 'bg-primary' : 'bg-muted'} ring-4 ring-surface`} />
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground">Khoa duyệt (Final)</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {['APPROVED', 'FINALIZED'].includes(sheetStatus) ? 'Hoàn thành' : 'Chưa tới hạn'}
-                      </p>
-                    </div>
-                  </div>
-
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        <div className="lg:col-span-1 space-y-6">
+          <ProgressMiniCard initialData={progressData} />
+        </div>
         </div>
       </div>
     </DashboardLayout>
