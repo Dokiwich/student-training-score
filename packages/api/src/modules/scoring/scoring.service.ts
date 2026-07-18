@@ -1061,6 +1061,7 @@ export class ScoringService {
       where: { score_detail_id: { in: detailIds } },
     });
     const entryIds = scoreEntries.map(e => e.id);
+    const entryToDetailMap = new Map(scoreEntries.map(e => [e.id, e.score_detail_id]));
 
     const [auditLogs, adjustLogs] = await Promise.all([
       prisma.audit_logs.findMany({
@@ -1117,13 +1118,25 @@ export class ScoringService {
       return null;
     };
 
+    const normalizeScoreValue = (value: unknown): number | null => {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      const numericValue = Number(value);
+      return Number.isFinite(numericValue) ? numericValue : null;
+    };
+
+    const matchedAdjustmentIds = new Set<string>();
+
     const findMatchingAdjustment = (detailId: string, actorId: string, oldScore: number | null, newScore: number | null, logTime: number) => {
        return adjustLogs.find(adj => {
+           if (matchedAdjustmentIds.has(adj.id)) return false;
+
            const timeDiff = Math.abs(adj.created_at.getTime() - logTime);
            return adj.score_detail_id === detailId 
                && adj.adjusted_by_id === actorId
-               && Number(adj.old_score) === oldScore
-               && Number(adj.new_score) === newScore
+               && normalizeScoreValue(adj.old_score) === oldScore
+               && normalizeScoreValue(adj.new_score) === newScore
                && timeDiff <= 5000; // within 5 seconds
        });
     };
@@ -1142,8 +1155,8 @@ export class ScoringService {
         createdAt: adj.created_at,
         previousStatus: null,
         newStatus: null,
-        previousScore: Number(adj.old_score),
-        newScore: Number(adj.new_score),
+        previousScore: normalizeScoreValue(adj.old_score),
+        newScore: normalizeScoreValue(adj.new_score),
         comment: null,
         reason: adj.reason,
         criterionId: adj.score_details.criteria.id,
@@ -1158,16 +1171,31 @@ export class ScoringService {
       const newVal: any = log.new_value || {};
 
       if (log.action === 'SCORE_CRITERIA' || log.action === 'DELETE_CRITERIA_SCORE') {
-         if (log.entity_type === 'score_details') {
-            const detail = detailMap.get(log.entity_id);
+         let detailId = log.entity_type === 'score_details' ? log.entity_id : null;
+         
+         if (log.entity_type === 'score_entries') {
+            const critId = oldVal.criteria_id || newVal.criteria_id;
+            if (critId) {
+                const foundDetail = Array.from(detailMap.values()).find(d => d.criteria_id === critId);
+                if (foundDetail) detailId = foundDetail.id;
+            } else {
+                const mappedDetailId = entryToDetailMap.get(log.entity_id);
+                if (mappedDetailId) detailId = mappedDetailId;
+            }
+         }
+
+         if (detailId) {
+            const detail = detailMap.get(detailId);
             if (detail) {
-                const oldScore = oldVal.old_score != null ? Number(oldVal.old_score) : null;
-                const newScore = newVal.new_score != null ? Number(newVal.new_score) : null;
+                const oldScore = normalizeScoreValue(oldVal.old_score);
+                const newScore = normalizeScoreValue(newVal.new_score);
                 
                 // Check if this audit log has a matching score adjustment log
-                const matchingAdj = findMatchingAdjustment(log.entity_id, log.actor_id, oldScore, newScore, log.created_at.getTime());
+                const matchingAdj = findMatchingAdjustment(detailId, log.actor_id, oldScore, newScore, log.created_at.getTime());
                 
-                if (!matchingAdj) {
+                if (matchingAdj) {
+                    matchedAdjustmentIds.add(matchingAdj.id);
+                } else {
                     const actorRole = newVal.role || inferActorRole(log.actor_id);
                     events.push({
                       id: `audit-${log.id}`,
