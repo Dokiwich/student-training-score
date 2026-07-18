@@ -542,7 +542,6 @@ export class ScoringService {
 
     await this.verifyReadPermission(actorId, studentId, targetSemesterId);
 
-    // ✅ FIX: Dùng helper chung thay vì copy-paste logic tạo phiếu
     const sheet = await this.getOrCreateDraftSheet(studentId, targetSemesterId);
     const form = {
       id: sheet.id,
@@ -553,8 +552,9 @@ export class ScoringService {
       advisor_approved_at: sheet.advisor_approved_at,
     };
 
-    // ✅ PONYTAIL: Gộp 4 truy vấn tuần tự thành 1 Promise.all với 2 truy vấn song song có include
-    const [scores, enrollmentData] = await Promise.all([
+    // ponytail: score_details (phiếu chi tiết) chạy song song với enrollment + categories + allCriteria
+    // Loại bỏ truy vấn trùng lặp score_details trong calculateTotals bằng cách tính totals từ data đã fetch
+    const [scores, enrollmentData, categories, allCriteria] = await Promise.all([
       prisma.score_details.findMany({
         where: { scoring_sheet_id: form.id },
         include: { criteria: true, score_entries: true },
@@ -567,10 +567,15 @@ export class ScoringService {
           classes: { include: { departments: true } },
           semesters: true
         }
-      })
+      }),
+      prisma.criteria_categories.findMany({
+        select: { id: true, max_score: true },
+      }),
+      prisma.criteria.findMany({
+        where: { is_active: 1 },
+      }),
     ]);
 
-    // ✅ Map status chi tiết → status đơn giản cho Frontend
     const workflowStepMap: Record<string, string> = {
       DRAFT: 'DRAFT',
       STUDENT_SUBMITTED: 'SUBMITTED',
@@ -587,8 +592,8 @@ export class ScoringService {
 
     const formStatus = workflowStepMap[form.status] || 'DRAFT';
 
-    // ✅ 3NF: Compute totals at runtime
-    const totals = await this.calculateTotals(form.id);
+    // ponytail: tính totals từ data đã có, không gọi calculateTotals (tránh re-query score_details)
+    const totals = this.computeTotalsPure(scores as any[], categories, allCriteria);
 
     const studentInfo = {
       name: enrollmentData?.users?.full_name || '',

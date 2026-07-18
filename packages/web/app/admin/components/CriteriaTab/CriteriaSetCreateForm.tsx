@@ -15,6 +15,8 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
   const [description, setDescription] = useState('');
   const [isApplying, setIsApplying] = useState(false);
 
+  const [cloneFromId, setCloneFromId] = useState('');
+
   const handleSubmit = async () => {
     if (mode === 'edit') {
       if (!selectedVersionId) return alert('Vui lòng chọn một phiên bản để tiếp tục!');
@@ -24,13 +26,13 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
     }
 
     if (!name.trim()) return alert('Vui lòng nhập tên bộ tiêu chí!');
-    
+
     setIsApplying(true);
     try {
       const res = await fetch('/api/admin/criteria-versions', {
-        method: 'POST', 
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), description: description.trim() })
+        body: JSON.stringify({ name: name.trim(), description: description.trim(), cloneFromId: cloneFromId || undefined })
       });
       const resData = await res.json();
       if (res.ok) {
@@ -38,16 +40,16 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
       } else {
         alert(resData.message || 'Có lỗi xảy ra');
       }
-    } catch { 
-      alert('Lỗi kết nối'); 
-    } finally { 
-      setIsApplying(false); 
+    } catch {
+      alert('Lỗi kết nối');
+    } finally {
+      setIsApplying(false);
     }
   };
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200"
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-150 flex items-center justify-center p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div 
@@ -63,7 +65,7 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
               Thiết lập thông tin và phương thức khởi tạo bộ tiêu chí.
             </p>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-hover text-muted-foreground transition-colors"
           >
@@ -74,7 +76,7 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
         <div className="p-6 flex flex-col gap-6">
           {/* Method Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div 
+            <div
               onClick={() => setMode('create')}
               className={`flex gap-3 p-4 rounded-[8px] cursor-pointer border-[1.5px] transition-all ${
                 mode === 'create' 
@@ -95,7 +97,7 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
               </div>
             </div>
 
-            <div 
+            <div
               onClick={() => setMode('edit')}
               className={`flex gap-3 p-4 rounded-[8px] cursor-pointer border-[1.5px] transition-all ${
                 mode === 'edit' 
@@ -126,26 +128,47 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
                 <label className="text-[14px] font-[510] text-foreground">
                   Tên bộ tiêu chí <span className="text-danger">*</span>
                 </label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="VD: Bộ tiêu chí đánh giá rèn luyện năm 2024"
                   className="px-3 py-2.5 bg-surface border border-border rounded-[6px] text-[15px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
                 />
               </div>
-              
+
               <div className="flex flex-col gap-2">
                 <label className="text-[14px] font-[510] text-foreground">
                   Mô tả
                 </label>
-                <textarea 
+                <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Nhập mô tả..."
                   rows={3}
                   className="px-3 py-2.5 bg-surface border border-border rounded-[6px] text-[15px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all resize-none"
                 />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[14px] font-[510] text-[#374151]">
+                  Sao chép từ (Tùy chọn)
+                </label>
+                <select
+                  value={cloneFromId}
+                  onChange={(e) => setCloneFromId(e.target.value)}
+                  className="px-3 py-2.5 bg-white border border-[#D1D5DB] rounded-[6px] text-[15px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                >
+                  <option value="">-- Bắt đầu từ mẫu trống --</option>
+                  {versions.map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.name || v.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[12px] text-[#64748B]">
+                  Hệ thống sẽ sao chép toàn bộ danh mục và tiêu chí từ phiên bản đã chọn sang phiên bản mới này.
+                </span>
               </div>
             </div>
           ) : (
@@ -154,7 +177,7 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
                 <label className="text-[14px] font-[510] text-foreground">
                   Chọn bộ tiêu chí <span className="text-danger">*</span>
                 </label>
-                <select 
+                <select
                   value={selectedVersionId}
                   onChange={(e) => setSelectedVersionId(e.target.value)}
                   className="px-3 py-2.5 bg-surface border border-border rounded-[6px] text-[15px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"

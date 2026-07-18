@@ -43,7 +43,7 @@ function AdminPageInner() {
       <Loader2 className="w-8 h-8 text-[#d0d6e0] animate-spin" />
     </div>
   );
-  
+
   if (!isAdmin) return (
     <div className="flex items-center justify-center h-screen bg-[#F8FAFC] p-4">
       <div className="p-8 text-center text-[#DC2626] font-[700] bg-surface rounded-[16px] border border-[#FECACA] shadow-sm">
