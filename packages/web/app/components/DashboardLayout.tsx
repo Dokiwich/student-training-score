@@ -178,13 +178,16 @@ function useNotifications(intervalMs = 60000) {
   const isFetchingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
+  const lastFetchedAtRef = useRef<number>(0);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      isFetchingRef.current = false;
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
     };
   }, []);
@@ -210,15 +213,16 @@ function useNotifications(intervalMs = 60000) {
         const json = await res.json();
         setNotifications(json.data || []);
         setUnreadCount(json.unreadCount || 0);
+        lastFetchedAtRef.current = Date.now();
       }
     } catch (err: any) { 
       if (err.name !== 'AbortError') {
         // silent fail for non-abort errors
       }
     } finally {
+      isFetchingRef.current = false;
       if (mountedRef.current) {
         setLoading(false);
-        isFetchingRef.current = false;
       }
     }
   }, [session]);
@@ -247,11 +251,17 @@ function useNotifications(intervalMs = 60000) {
 
   useEffect(() => {
     if (!session?.user) return;
-    fetchNotifications();
+    
+    // Initial fetch if it's been a while or first time
+    if (Date.now() - lastFetchedAtRef.current > 10000) {
+      fetchNotifications();
+    }
     
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        fetchNotifications();
+        if (Date.now() - lastFetchedAtRef.current > 15000) {
+          fetchNotifications();
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);

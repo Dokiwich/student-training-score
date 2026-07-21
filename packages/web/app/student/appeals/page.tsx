@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '../../components/DashboardLayout';
+import { fetchWithCache } from '../../lib/request-cache';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -85,27 +86,31 @@ export default function StudentAppealsPage() {
     setSelectedCriteriaIds(next);
   };
 
-  const fetchAppeals = useCallback(async (signal?: AbortSignal) => {
+  const fetchAppeals = useCallback(async (mountedObj: { current: boolean } = { current: true }) => {
     setLoading(true);
     try {
-      const r = await fetch('/api/appeals', { signal });
-      if (r.ok) {
-        const j = await r.json();
-        setAppeals(j.data || []);
+      const userId = (session?.user as any)?.id;
+      if (!userId) return;
+      const json = await fetchWithCache<any>('/api/appeals', userId);
+      if (mountedObj.current) {
+        setAppeals(json.data || []);
       }
     } catch (err: any) { 
-      if (err.name !== 'AbortError') console.error(err);
+      if (mountedObj.current) console.error(err);
     }
-    finally { setLoading(false); }
-  }, []);
+    finally { 
+      if (mountedObj.current) setLoading(false); 
+    }
+  }, [session]);
 
   // Fetch sheets for the form dropdown
-  const fetchSheets = useCallback(async (signal?: AbortSignal) => {
+  const fetchSheets = useCallback(async (mountedObj: { current: boolean } = { current: true }) => {
     try {
-      const r = await fetch('/api/scoring-history', { signal });
-      if (r.ok) {
-        const j = await r.json();
-        const opts: SheetOption[] = (j.data || [])
+      const userId = (session?.user as any)?.id;
+      if (!userId) return;
+      const json = await fetchWithCache<any>('/api/scoring-history', userId);
+      if (mountedObj.current) {
+        const opts: SheetOption[] = (json.data || [])
           .filter((d: any) => d.hasSheet && (d.status === 'ADVISOR_APPROVED' || d.status === 'FINALIZED'))
           .map((d: any) => ({
             sheetId: d.sheetId,
@@ -119,9 +124,9 @@ export default function StudentAppealsPage() {
         }
       }
     } catch (err: any) { 
-      if (err.name !== 'AbortError') console.error(err);
+      if (mountedObj.current) console.error(err);
     }
-  }, []);
+  }, [session]);
 
   // Fetch criteria for selected sheet
   const fetchCriteria = useCallback(async (sheetId: string) => {
@@ -140,12 +145,12 @@ export default function StudentAppealsPage() {
   }, []);
 
   useEffect(() => {
-    const abortController = new AbortController();
+    const mountedObj = { current: true };
     if (session?.user) {
-      fetchAppeals(abortController.signal);
-      fetchSheets(abortController.signal);
+      fetchAppeals(mountedObj);
+      fetchSheets(mountedObj);
     }
-    return () => abortController.abort();
+    return () => { mountedObj.current = false; };
   }, [session, fetchAppeals, fetchSheets]);
 
   // Reload criteria when sheet changes

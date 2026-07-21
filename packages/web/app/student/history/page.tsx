@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { ScoringForm } from '../../components/ScoringForm';
+import { fetchWithCache } from '../../lib/request-cache';
 
 interface Note {
   id: string;
@@ -72,27 +73,29 @@ export default function StudentHistoryPage() {
   useEffect(() => {
     if (!studentId) return;
 
-    const abortController = new AbortController();
+    let mounted = true;
 
     const fetchHistory = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/scoring-history`, { signal: abortController.signal });
-        if (!res.ok) throw new Error('Không thể tải lịch sử');
-        const json = await res.json();
-        setRecords(json.data || []);
+        const json = await fetchWithCache<any>(`/api/scoring-history`, studentId);
+        if (mounted) {
+          setRecords(json.data || []);
+        }
       } catch (err: any) {
-        if (err.name !== 'AbortError') {
+        if (mounted) {
           setError(err.message);
         }
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchHistory();
-    return () => abortController.abort();
+    return () => { mounted = false; };
   }, [studentId]);
 
   return (

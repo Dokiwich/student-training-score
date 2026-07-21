@@ -31,32 +31,34 @@ const SemesterContext = createContext<SemesterContextValue>({
   loading: true,
 });
 
-// Module-level cache to share across unmounts/remounts within the same session
+// Phương án B - Active semester hoàn toàn global
+// Lý do: /api/semester/active là public endpoint, không phụ thuộc user/role/department (trả về học kỳ có is_active = 1).
+// Do đó, cache toàn cục (globalSemesterCache) an toàn và không rò rỉ dữ liệu tài khoản chéo.
 let globalSemesterCache: SemesterInfo | null = null;
 let globalCacheTime: number = 0;
 const CACHE_TTL = 60000; // 60 seconds
 
 export function SemesterProvider({ children }: { children: React.ReactNode }) {
-  const { data: session } = useSession();
-  const userId = (session?.user as any)?.id;
-  const [semester, setSemester] = useState<SemesterInfo | null>(globalSemesterCache);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(globalCacheTime ? new Date(globalCacheTime) : null);
-  const [loading, setLoading] = useState<boolean>(!globalSemesterCache);
+  const { status } = useSession();
+  const [semester, setSemester] = useState<SemesterInfo | null>(
+    status === 'authenticated' ? globalSemesterCache : null
+  );
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(
+    status === 'authenticated' && globalCacheTime ? new Date(globalCacheTime) : null
+  );
+  const [loading, setLoading] = useState<boolean>(true);
   const isFetchingRef = useRef(false);
 
-  // Clear cache if user changes (e.g., logout/login)
-  const prevUserId = useRef(userId);
-  useEffect(() => {
-    if (prevUserId.current !== userId) {
-      globalSemesterCache = null;
-      globalCacheTime = 0;
+  const fetchSemester = useCallback(async (force = false) => {
+    if (status === 'loading') return;
+    
+    if (status !== 'authenticated') {
       setSemester(null);
       setLastUpdated(null);
-      prevUserId.current = userId;
+      setLoading(false);
+      return;
     }
-  }, [userId]);
 
-  const fetchSemester = useCallback(async (force = false) => {
     const now = Date.now();
     
     // Use cache if valid and not forcing
@@ -93,7 +95,7 @@ export function SemesterProvider({ children }: { children: React.ReactNode }) {
       isFetchingRef.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [status]);
 
   useEffect(() => {
     fetchSemester();
