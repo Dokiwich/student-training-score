@@ -1303,42 +1303,44 @@ export class ScoringService {
   // =============================================
   
   private mapBulkActionError(err: any): { code: string; message: string } {
-    if (err.name === 'BadRequestException' || err.status === 400) {
-      const msg = err.message || '';
-      const response = err.response || {};
-      const resMsg = response.message || msg;
+    const response = err.response || {};
+    const resMsg: string = (typeof response.message === 'string' ? response.message : err.message) || '';
 
-      if (msg === 'STALE_STATUS' || resMsg === 'STALE_STATUS') {
-        return { code: 'STALE_STATUS', message: 'Trạng thái phiếu đã thay đổi, vui lòng tải lại trang.' };
-      }
-      if (resMsg.includes && (resMsg.includes('quá thời hạn') || resMsg.includes('hết hạn'))) {
-        return { code: 'DEADLINE_EXPIRED', message: resMsg };
-      }
-      if (resMsg.includes && resMsg.includes('Không tìm thấy')) {
-        return { code: 'NOT_FOUND', message: resMsg };
-      }
-      if (resMsg.includes && resMsg.includes('quyền')) {
-        return { code: 'FORBIDDEN', message: resMsg };
-      }
-      if (resMsg.includes && (resMsg.includes('trạng thái') || resMsg.includes('chỉ được'))) {
-         return { code: 'INVALID_STATUS', message: resMsg };
-      }
-      if (response.errors && Array.isArray(response.errors)) {
-         return { code: 'VALIDATION_FAILED', message: response.errors[0] };
-      }
-
-      return { code: 'VALIDATION_FAILED', message: resMsg };
-    }
-    
     if (err.name === 'ForbiddenException' || err.status === 403) {
-      return { code: 'FORBIDDEN', message: 'Không có quyền thao tác trên phiếu này.' };
+      return { code: 'FORBIDDEN', message: 'Bạn không có quyền xử lý phiếu này.' };
     }
 
     if (err.name === 'NotFoundException' || err.status === 404) {
       return { code: 'NOT_FOUND', message: 'Không tìm thấy phiếu.' };
     }
 
+    if (err.name === 'BadRequestException' || err.status === 400) {
+      if (resMsg === 'STALE_STATUS') {
+        return { code: 'STALE_STATUS', message: 'Trạng thái phiếu đã thay đổi, vui lòng tải lại trang.' };
+      }
+      if (resMsg.includes('quá thời hạn') || resMsg.includes('hết hạn')) {
+        return { code: 'DEADLINE_EXPIRED', message: resMsg };
+      }
+      if (resMsg.includes('Không tìm thấy')) {
+        return { code: 'NOT_FOUND', message: 'Không tìm thấy phiếu.' };
+      }
+      if (resMsg.includes('quyền')) {
+        return { code: 'FORBIDDEN', message: 'Bạn không có quyền xử lý phiếu này.' };
+      }
+      if (resMsg.includes('trạng thái') || resMsg.includes('chỉ được')) {
+        return { code: 'INVALID_STATUS', message: resMsg };
+      }
+      if (response.errors && Array.isArray(response.errors)) {
+        return { code: 'VALIDATION_FAILED', message: response.errors[0] };
+      }
+      return { code: 'VALIDATION_FAILED', message: resMsg };
+    }
+
     return { code: 'UNKNOWN_ERROR', message: 'Lỗi không xác định khi xử lý phiếu.' };
+  }
+
+  private isAuthorizationError(code: string): boolean {
+    return code === 'FORBIDDEN' || code === 'NOT_FOUND';
   }
 
   private async mapWithConcurrency<T, R>(
@@ -1365,6 +1367,10 @@ export class ScoringService {
     if (!Array.isArray(formIds) || formIds.length === 0) {
       throw new BadRequestException('Danh sách phiếu không hợp lệ hoặc trống.');
     }
+
+    if (formIds.length > 50) {
+      throw new BadRequestException('Chỉ hỗ trợ tối đa 50 phiếu mỗi lần.');
+    }
     
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const invalidFormat = formIds.some(id => typeof id !== 'string' || !uuidRegex.test(id.trim()));
@@ -1373,10 +1379,6 @@ export class ScoringService {
     }
     
     const uniqueIds = [...new Set(formIds.map(id => id.trim()))];
-    if (uniqueIds.length > 50) {
-      throw new BadRequestException('Chỉ hỗ trợ tối đa 50 phiếu mỗi lần thực thi.');
-    }
-    
     return uniqueIds;
   }
 
@@ -1410,26 +1412,28 @@ export class ScoringService {
     let failed = 0;
 
     const metaMap = await this.getFormsMetadata(uniqueIds);
+    const nullMeta = { studentId: null, studentCode: null, studentName: null, previousStatus: null };
 
     const results = await this.mapWithConcurrency(uniqueIds, 5, async (formId) => {
-      const meta = metaMap.get(formId) || { studentId: null, studentCode: null, studentName: null, previousStatus: null };
+      const meta = metaMap.get(formId) || nullMeta;
       try {
         const { warnings, transition } = await this.approveSingleFormInternal(formId, role, actorId);
         succeeded++;
         return {
           formId,
           ...meta,
-          success: true,
+          success: true as const,
           newStatus: transition.nextStatus,
           warnings: warnings && warnings.length > 0 ? warnings : undefined
         };
       } catch (err: any) {
         failed++;
         const mappedError = this.mapBulkActionError(err);
+        const safeMeta = this.isAuthorizationError(mappedError.code) ? nullMeta : meta;
         return {
           formId,
-          ...meta,
-          success: false,
+          ...safeMeta,
+          success: false as const,
           code: mappedError.code,
           message: mappedError.message
         };
@@ -1462,26 +1466,28 @@ export class ScoringService {
     let failed = 0;
 
     const metaMap = await this.getFormsMetadata(uniqueIds);
+    const nullMeta = { studentId: null, studentCode: null, studentName: null, previousStatus: null };
 
     const results = await this.mapWithConcurrency(uniqueIds, 5, async (formId) => {
-      const meta = metaMap.get(formId) || { studentId: null, studentCode: null, studentName: null, previousStatus: null };
+      const meta = metaMap.get(formId) || nullMeta;
       try {
         const { warnings } = await this.rejectSingleFormInternal(formId, role, actorId, cleanReason);
         succeeded++;
         return {
           formId,
           ...meta,
-          success: true,
+          success: true as const,
           newStatus: role === 'CLASS_COMMITTEE' ? 'CLASS_REJECTED' : 'ADVISOR_REJECTED',
           warnings: warnings && warnings.length > 0 ? warnings : undefined
         };
       } catch (err: any) {
         failed++;
         const mappedError = this.mapBulkActionError(err);
+        const safeMeta = this.isAuthorizationError(mappedError.code) ? nullMeta : meta;
         return {
           formId,
-          ...meta,
-          success: false,
+          ...safeMeta,
+          success: false as const,
           code: mappedError.code,
           message: mappedError.message
         };

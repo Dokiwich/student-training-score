@@ -11,7 +11,7 @@ import { EmptyState } from './ui/EmptyState';
 import { BulkActionModal } from './BulkActionModal';
 import { BulkResultDialog } from './BulkResultDialog';
 
-import { Search, Users, CheckCircle, Clock, FileWarning, X } from 'lucide-react';
+import { Search, Users, CheckCircle, Clock, FileWarning, X, RefreshCw } from 'lucide-react';
 
 const API_BASE = '/proxy-api';
 
@@ -35,7 +35,38 @@ interface ScoringDashboardProps {
   defaultTab?: 'all' | 'pending' | 'unscored' | 'scored';
 }
 
+// ── Bulk types ──────────────────────────────────────────────────
+type BulkActionWarning = {
+  code: 'NOTIFICATION_FAILED' | string;
+  message: string;
+};
 
+type BulkActionResultItem = {
+  formId: string;
+  studentId: string | null;
+  studentCode: string | null;
+  studentName: string | null;
+  previousStatus: string | null;
+  newStatus?: string;
+  success: boolean;
+  code?: string;
+  message?: string;
+  warnings?: BulkActionWarning[];
+};
+
+type BulkActionResponse = {
+  summary: {
+    requested: number;
+    unique: number;
+    succeeded: number;
+    failed: number;
+  };
+  results: BulkActionResultItem[];
+};
+
+type BulkRecoveryState = 'idle' | 'checking' | 'failed';
+
+// ── Eligibility helpers ─────────────────────────────────────────
 const canBulkApprove = (student: StudentRow, role: 'CLASS_COMMITTEE' | 'ADVISOR') => {
   if (!student.formId) return false;
   if (role === 'CLASS_COMMITTEE' && student.status === 'STUDENT_SUBMITTED') return true;
@@ -84,6 +115,8 @@ function useCountUp(end: number, duration: number = 1000) {
   return count;
 }
 
+const BULK_TIMEOUT_MS = 45_000;
+
 export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }: ScoringDashboardProps) {
   const { data: session } = useSession();
   const [students, setStudents] = useState<StudentRow[]>([]);
@@ -104,28 +137,36 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
   const router = useRouter();
   const pathname = usePathname();
 
-  
-
+  // Bulk state
   const bulkActionInProgressRef = useRef(false);
-  const [isRecoveringUnknownOutcome, setIsRecoveringUnknownOutcome] = useState(false);
-  
-  // Bulk selection state
+  const bulkTimeoutRef = useRef<number | null>(null);
+  const [bulkRecoveryState, setBulkRecoveryState] = useState<BulkRecoveryState>('idle');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkActionType, setBulkActionType] = useState<'APPROVE' | 'REJECT'>('APPROVE');
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
-  const [bulkResult, setBulkResult] = useState<any>(null);
+  const [bulkResult, setBulkResult] = useState<BulkActionResponse | null>(null);
   const [isResultDialogOpen, setIsResultDialogOpen] = useState(false);
+  const [bulkRecoveryMessage, setBulkRecoveryMessage] = useState<string | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (bulkTimeoutRef.current !== null) {
+        window.clearTimeout(bulkTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Clear selection on tab or search change
   useEffect(() => {
     setSelectedIds([]);
   }, [activeTab, search]);
 
-  const fetchStudents = async () => {
-    if (!session?.user) return;
+  const fetchStudents = useCallback(async (): Promise<boolean> => {
+    if (!session?.user) return false;
     const customJwt = (session as any)?.customJwt;
-    if (!customJwt) return;
+    if (!customJwt) return false;
     setIsLoading(true);
     setFetchError(null);
     try {
@@ -137,24 +178,29 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
       if (res.ok) {
         const json = await res.json();
         setStudents(json.data || []);
+        return true;
       } else {
         if (res.status === 401) {
           setFetchError('Phiên đăng nhập hết hạn. Đang tải lại...');
           const { signOut } = await import('next-auth/react');
           setTimeout(() => { signOut({ callbackUrl: '/login' }); }, 1500);
-          return;
+          return false;
         }
         const errText = await res.text().catch(() => '');
         setFetchError(`Lỗi ${res.status}: ${errText}`);
+        return false;
       }
+    } catch {
+      setFetchError('Không thể kết nối đến máy chủ.');
+      return false;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [session]);
 
   useEffect(() => {
     fetchStudents();
-  }, [session]);
+  }, [fetchStudents]);
 
   const handleCloseDrawer = useCallback(() => {
     setClosingDrawer(true);
@@ -255,8 +301,7 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
     { id: 'pending', label: 'Chưa nộp phiếu', count: stats.pendingCount, icon: FileWarning },
   ] as const;
 
-  
-
+  // ── Bulk action handler ───────────────────────────────────────
   const handleBulkAction = async (reason?: string) => {
     if (bulkActionInProgressRef.current) return;
     if (selectedIds.length === 0) return;
@@ -270,23 +315,27 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
       .map(s => s.formId)
       .filter((id): id is string => Boolean(id));
 
-    if (formIdsToProcess.length === 0) {
-        return;
-    }
+    if (formIdsToProcess.length === 0) return;
 
     const customJwt = (session as any)?.customJwt;
     if (!customJwt) return;
 
     setIsBulkSubmitting(true);
     bulkActionInProgressRef.current = true;
+    setBulkRecoveryState('idle');
+    setBulkRecoveryMessage(null);
     
     const rolePrefix = role === 'CLASS_COMMITTEE' ? 'class-committee' : 'advisor';
     const actionPath = bulkActionType === 'APPROVE' ? 'bulk-approve' : 'bulk-reject';
     const url = `${API_BASE}/scoring/${rolePrefix}/${actionPath}`;
 
-    let refreshNeeded = true;
+    const controller = new AbortController();
+    bulkTimeoutRef.current = window.setTimeout(() => controller.abort(), BULK_TIMEOUT_MS);
+
     try {
-      const payload = bulkActionType === 'APPROVE' ? { formIds: formIdsToProcess } : { formIds: formIdsToProcess, reason };
+      const payload = bulkActionType === 'APPROVE'
+        ? { formIds: formIdsToProcess }
+        : { formIds: formIdsToProcess, reason };
       
       const res = await fetch(url, {
         method: 'POST',
@@ -295,40 +344,82 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
           'Authorization': `Bearer ${customJwt}`,
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
 
+      window.clearTimeout(bulkTimeoutRef.current!);
+      bulkTimeoutRef.current = null;
+
       if (!res.ok) {
-        if (res.status === 400 || res.status === 401 || res.status === 403 || res.status === 500) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || `Lỗi xử lý yêu cầu (${res.status})`);
-        }
-        setIsRecoveringUnknownOutcome(true);
-        throw new Error('Mất kết nối mạng. Đang kiểm tra lại trạng thái danh sách...');
+        // HTTP error with clear response — NOT unknown outcome
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.message || `Lỗi xử lý yêu cầu (${res.status})`;
+        setBulkRecoveryMessage(errMsg);
+        setIsBulkModalOpen(false);
+        // Still refresh to get latest state
+        await fetchStudents();
+        return;
       }
 
-      const data = await res.json();
+      const data: BulkActionResponse = await res.json();
       setBulkResult(data);
       setIsBulkModalOpen(false);
       setIsResultDialogOpen(true);
 
+      // Deselect succeeded items
       if (data.results) {
-        const successFormIds = data.results.filter((r: any) => r.success).map((r: any) => r.formId);
-        const successStudentIds = students
-          .filter(s => s.formId && successFormIds.includes(s.formId))
-          .map(s => s.id);
-          
-        setSelectedIds(prev => prev.filter(id => !successStudentIds.includes(id)));
+        const successFormIds = new Set(data.results.filter(r => r.success).map(r => r.formId));
+        const successStudentIds = new Set(
+          students
+            .filter(s => s.formId && successFormIds.has(s.formId))
+            .map(s => s.id)
+        );
+        setSelectedIds(prev => prev.filter(id => !successStudentIds.has(id)));
       }
+
+      // Refresh list (don't block result dialog on refresh failure)
+      fetchStudents();
       
     } catch (err: any) {
-      alert(err.message || 'Lỗi không xác định.');
+      window.clearTimeout(bulkTimeoutRef.current!);
+      bulkTimeoutRef.current = null;
+
+      // Network error / AbortError → unknown outcome
+      const isAbort = err.name === 'AbortError';
+      const message = isAbort
+        ? 'Yêu cầu đã quá thời gian chờ. Đang kiểm tra lại trạng thái...'
+        : 'Mất kết nối mạng. Đang kiểm tra lại trạng thái...';
+
+      setBulkRecoveryState('checking');
+      setBulkRecoveryMessage(message);
+      setIsBulkModalOpen(false);
+
+      const refreshOk = await fetchStudents();
+      if (refreshOk) {
+        setBulkRecoveryState('idle');
+        setSelectedIds([]);
+        setBulkRecoveryMessage('Không nhận được kết quả từ máy chủ. Danh sách đã được tải lại để kiểm tra trạng thái.');
+      } else {
+        setBulkRecoveryState('failed');
+        setBulkRecoveryMessage('Chưa thể xác nhận kết quả xử lý. Hãy tải lại dữ liệu trước khi thử lại.');
+      }
     } finally {
       setIsBulkSubmitting(false);
       bulkActionInProgressRef.current = false;
-      if (refreshNeeded) {
-        await fetchStudents();
-        setIsRecoveringUnknownOutcome(false);
-      }
+    }
+  };
+
+  const handleRetryRefresh = async () => {
+    setBulkRecoveryState('checking');
+    setBulkRecoveryMessage('Đang tải lại dữ liệu...');
+    const ok = await fetchStudents();
+    if (ok) {
+      setBulkRecoveryState('idle');
+      setSelectedIds([]);
+      setBulkRecoveryMessage(null);
+    } else {
+      setBulkRecoveryState('failed');
+      setBulkRecoveryMessage('Chưa thể xác nhận kết quả xử lý. Hãy tải lại dữ liệu trước khi thử lại.');
     }
   };
 
@@ -342,12 +433,17 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
     return {
       validCount: eligibleStudents.length,
       invalidCount: ineligibleStudents.length,
-      ineligibleStudents,
+      ineligibleStudents: ineligibleStudents.map(s => ({
+        id: s.id,
+        name: s.name,
+        studentCode: s.studentCode,
+      })),
       invalidReason: bulkActionType === 'APPROVE' ? 'Trạng thái hiện tại của phiếu không cho phép duyệt tiếp.' : 'Trạng thái hiện tại của phiếu không thể trả lại.'
     };
   };
 
   const validationStats = getBulkValidationStats();
+  const isBulkDisabled = bulkRecoveryState !== 'idle';
 
 
 return (
@@ -414,6 +510,39 @@ return (
           </div>
         </div>
 
+        {/* Recovery banner */}
+        {bulkRecoveryMessage && (
+          <div className={`mx-6 md:mx-8 mb-4 p-3 rounded-lg border text-sm flex items-center justify-between gap-3 ${
+            bulkRecoveryState === 'failed'
+              ? 'bg-warning-bg border-warning-border text-warning-foreground'
+              : bulkRecoveryState === 'checking'
+                ? 'bg-surface-muted border-border text-muted-foreground'
+                : 'bg-surface border-border text-foreground'
+          }`}>
+            <span>{bulkRecoveryMessage}</span>
+            <div className="flex gap-2 shrink-0">
+              {bulkRecoveryState === 'failed' && (
+                <button
+                  onClick={handleRetryRefresh}
+                  className="px-3 py-1 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-1"
+                >
+                  <RefreshCw size={12} />
+                  Tải lại dữ liệu
+                </button>
+              )}
+              {bulkRecoveryState === 'idle' && (
+                <button
+                  onClick={() => setBulkRecoveryMessage(null)}
+                  className="text-muted-foreground hover:text-foreground"
+                  aria-label="Đóng thông báo"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Content Section */}
         <div className="flex-1 overflow-y-auto px-6 md:px-8 pb-8">
           {isLoading ? (
@@ -445,6 +574,7 @@ return (
                               type="checkbox"
                               className="w-4 h-4 rounded border-border text-primary focus:ring-primary/20 cursor-pointer"
                               title="Chọn tất cả kết quả đang hiển thị hợp lệ"
+                              disabled={isBulkDisabled}
                               checked={filtered.length > 0 && selectedIds.length > 0 && selectedIds.length === filtered.filter(s => canBulkApprove(s, role) || canBulkReject(s, role)).length}
                               ref={input => {
                                 if (input) {
@@ -566,13 +696,15 @@ return (
           <div className="flex gap-3">
             <button 
               onClick={() => { setBulkActionType('REJECT'); setIsBulkModalOpen(true); }}
-              className="px-4 py-2 bg-surface-muted text-warning-foreground font-bold border border-warning-border hover:bg-warning-bg hover:border-warning-border rounded-lg transition-colors"
+              disabled={isBulkDisabled}
+              className="px-4 py-2 bg-surface-muted text-warning-foreground font-bold border border-warning-border hover:bg-warning-bg hover:border-warning-border rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Trả lại phiếu
             </button>
             <button 
               onClick={() => { setBulkActionType('APPROVE'); setIsBulkModalOpen(true); }}
-              className="px-4 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 transition-colors"
+              disabled={isBulkDisabled}
+              className="px-4 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Duyệt phiếu
             </button>
@@ -598,7 +730,6 @@ return (
           onClose={() => setIsResultDialogOpen(false)}
           summary={bulkResult.summary}
           results={bulkResult.results}
-          warnings={bulkResult.warnings}
         />
       )}
     </div>

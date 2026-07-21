@@ -2,6 +2,12 @@ import React, { useState } from 'react';
 import { X, AlertCircle } from 'lucide-react';
 import { Card } from './ui/Card';
 
+interface IneligibleStudent {
+  id: string;
+  name: string;
+  studentCode: string | null;
+}
+
 interface BulkActionModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -11,7 +17,7 @@ interface BulkActionModalProps {
   invalidCount: number;
   invalidReason: string;
   isSubmitting: boolean;
-  ineligibleStudents?: any[];
+  ineligibleStudents?: IneligibleStudent[];
 }
 
 export function BulkActionModal({
@@ -52,7 +58,8 @@ export function BulkActionModal({
           <button
             onClick={onClose}
             disabled={isSubmitting}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+            aria-label="Đóng"
           >
             <X size={20} />
           </button>
@@ -77,8 +84,8 @@ export function BulkActionModal({
                   <div className="mt-2 pl-6">
                     <p className="font-semibold text-xs mb-1">Danh sách chi tiết:</p>
                     <ul className="list-disc pl-5 mt-1 space-y-1 text-xs opacity-90 max-h-24 overflow-y-auto">
-                      {ineligibleStudents.slice(0, 5).map((s: any) => (
-                        <li key={s.id}>{s.name} ({s.code})</li>
+                      {ineligibleStudents.slice(0, 5).map((s) => (
+                        <li key={s.id}>{s.name} ({s.studentCode || 'Chưa có MSSV'})</li>
                       ))}
                       {ineligibleStudents.length > 5 && (
                         <li>... và {ineligibleStudents.length - 5} phiếu khác.</li>
@@ -93,17 +100,17 @@ export function BulkActionModal({
           {actionType === 'REJECT' && (
             <div className="mt-4">
               <label className="block text-sm font-semibold mb-2 text-foreground">
-                Lý do trả lại (áp dụng chung) <span className="text-red-500">*</span>
+                Lý do trả lại (áp dụng chung) <span className="text-warning-foreground">*</span>
               </label>
               <textarea
                 value={reason}
                 onChange={(e) => { setReason(e.target.value); setError(''); }}
                 placeholder="Nhập lý do trả lại phiếu..."
-                className="w-full p-3 border border-border rounded-lg bg-background resize-none focus:ring-2 focus:ring-primary/20 outline-none"
+                className="w-full p-3 border border-border rounded-lg bg-background text-foreground resize-none focus:ring-2 focus:ring-primary/20 outline-none"
                 rows={4}
                 disabled={isSubmitting}
               />
-              {error && <p className="text-sm text-red-500 mt-1">{error}</p>}
+              {error && <p className="text-sm text-warning-foreground mt-1">{error}</p>}
             </div>
           )}
         </div>
@@ -118,9 +125,9 @@ export function BulkActionModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || validCount === 0}
+            disabled={isSubmitting || validCount === 0 || (actionType === 'REJECT' && reason.trim().length < 5)}
             className={`px-4 py-2 rounded-lg font-bold text-white transition-colors disabled:opacity-50 flex items-center gap-2 ${
-              actionType === 'APPROVE' ? 'bg-primary hover:bg-primary/90' : 'bg-red-600 hover:bg-red-700'
+              actionType === 'APPROVE' ? 'bg-primary hover:bg-primary/90' : 'bg-warning-foreground hover:opacity-90'
             }`}
           >
             {isSubmitting ? (
@@ -129,7 +136,7 @@ export function BulkActionModal({
                 Đang xử lý...
               </>
             ) : (
-              actionType === 'APPROVE' ? 'Duyệt phiếu' : 'Trả lại phiếu'
+              actionType === 'APPROVE' ? `Duyệt ${validCount} phiếu` : `Trả lại ${validCount} phiếu`
             )}
           </button>
         </div>
