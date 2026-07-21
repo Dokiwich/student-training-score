@@ -105,4 +105,39 @@ export class ScoringController {
     const activeRole = role || 'STUDENT';
     return this.scoringService.rejectForm(formId, activeRole, studentId, req.user.id, semesterId, reason);
   }
+
+  @Post('class-committee/bulk-approve')
+  async classCommitteeBulkApprove(
+    @Body('formIds') formIds: string[],
+    @Req() req: any
+  ) {
+    return this.scoringService.bulkApprove(formIds, 'CLASS_COMMITTEE', req.user.id);
+  }
+
+  @Post('class-committee/bulk-reject')
+  async classCommitteeBulkReject(
+    @Body('formIds') formIds: string[],
+    @Body('reason') reason: string,
+    @Req() req: any
+  ) {
+    return this.scoringService.bulkReject(formIds, 'CLASS_COMMITTEE', req.user.id, reason);
+  }
+
+  @Post('advisor/bulk-approve')
+  async advisorBulkApprove(
+    @Body('formIds') formIds: string[],
+    @Req() req: any
+  ) {
+    return this.scoringService.bulkApprove(formIds, 'ADVISOR', req.user.id);
+  }
+
+  @Post('advisor/bulk-reject')
+  async advisorBulkReject(
+    @Body('formIds') formIds: string[],
+    @Body('reason') reason: string,
+    @Req() req: any
+  ) {
+    return this.scoringService.bulkReject(formIds, 'ADVISOR', req.user.id, reason);
+  }
+
 }
