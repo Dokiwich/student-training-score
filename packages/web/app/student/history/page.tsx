@@ -72,22 +72,27 @@ export default function StudentHistoryPage() {
   useEffect(() => {
     if (!studentId) return;
 
+    const abortController = new AbortController();
+
     const fetchHistory = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/scoring-history`);
+        const res = await fetch(`/api/scoring-history`, { signal: abortController.signal });
         if (!res.ok) throw new Error('Không thể tải lịch sử');
         const json = await res.json();
         setRecords(json.data || []);
       } catch (err: any) {
-        setError(err.message);
+        if (err.name !== 'AbortError') {
+          setError(err.message);
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchHistory();
+    return () => abortController.abort();
   }, [studentId]);
 
   return (

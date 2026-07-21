@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 import { Providers } from "./components/Providers";
+import { SemesterProvider } from "./providers/SemesterProvider";
 import { APP_BRANDING } from "../lib/branding";
 
 export const metadata: Metadata = {
@@ -34,9 +35,11 @@ export default function RootLayout({
     >
       <body className="min-h-full flex bg-background text-foreground transition-colors duration-200">
         <Providers>
-          <main className="flex-1 min-h-screen">
-            {children}
-          </main>
+          <SemesterProvider>
+            <main className="flex-1 min-h-screen">
+              {children}
+            </main>
+          </SemesterProvider>
         </Providers>
       </body>
     </html>

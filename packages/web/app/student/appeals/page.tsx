@@ -85,22 +85,24 @@ export default function StudentAppealsPage() {
     setSelectedCriteriaIds(next);
   };
 
-  const fetchAppeals = useCallback(async () => {
+  const fetchAppeals = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const r = await fetch('/api/appeals');
+      const r = await fetch('/api/appeals', { signal });
       if (r.ok) {
         const j = await r.json();
         setAppeals(j.data || []);
       }
-    } catch { /* ignore */ }
+    } catch (err: any) { 
+      if (err.name !== 'AbortError') console.error(err);
+    }
     finally { setLoading(false); }
   }, []);
 
   // Fetch sheets for the form dropdown
-  const fetchSheets = useCallback(async () => {
+  const fetchSheets = useCallback(async (signal?: AbortSignal) => {
     try {
-      const r = await fetch('/api/scoring-history');
+      const r = await fetch('/api/scoring-history', { signal });
       if (r.ok) {
         const j = await r.json();
         const opts: SheetOption[] = (j.data || [])
@@ -112,12 +114,14 @@ export default function StudentAppealsPage() {
             advisorTotal: d.advisorTotal,
           }));
         setSheets(opts);
-        if (opts.length > 0 && !selectedSheetId) {
-          setSelectedSheetId(opts[0].sheetId);
+        if (opts.length > 0) {
+          setSelectedSheetId(prev => prev || opts[0].sheetId);
         }
       }
-    } catch { /* ignore */ }
-  }, [selectedSheetId]);
+    } catch (err: any) { 
+      if (err.name !== 'AbortError') console.error(err);
+    }
+  }, []);
 
   // Fetch criteria for selected sheet
   const fetchCriteria = useCallback(async (sheetId: string) => {
@@ -136,10 +140,12 @@ export default function StudentAppealsPage() {
   }, []);
 
   useEffect(() => {
+    const abortController = new AbortController();
     if (session?.user) {
-      fetchAppeals();
-      fetchSheets();
+      fetchAppeals(abortController.signal);
+      fetchSheets(abortController.signal);
     }
+    return () => abortController.abort();
   }, [session, fetchAppeals, fetchSheets]);
 
   // Reload criteria when sheet changes

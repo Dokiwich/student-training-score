@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from './ui/PageHeader';
 import { UserMenu } from './UserMenu';
+import { useSemester } from '../providers/SemesterProvider';
 import './dashboard.css';
 
 // ─── Trạng thái học kỳ ───────────────────────────────────────────────────────
@@ -41,31 +42,7 @@ const SEM_STATUS_META: Record<string, { label: string; color: string; dot: strin
   LOCKED:            { label: 'Đã kết thúc',          color: 'var(--muted-foreground)', dot: 'var(--muted-foreground)' },
 };
 
-function useSemesterStatus(intervalMs = 30000) {
-  const [semester, setSemester] = useState<SemesterInfo | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const fetchSemester = async () => {
-    try {
-      const res = await fetch('/api/semester/active', { cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data) {
-          setSemester(json.data);
-          setLastUpdated(new Date());
-        }
-      }
-    } catch { /* silent fail */ }
-  };
-
-  useEffect(() => {
-    fetchSemester();
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, []);
-
-  return { semester, lastUpdated, refetch: fetchSemester };
-}
+// removed useSemesterStatus in favor of SemesterProvider
 
 function SemesterBadge({ semester }: { semester: SemesterInfo | null }) {
   const [timeLeft, setTimeLeft] = useState<string>('');
@@ -192,23 +169,59 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('vi-VN');
 }
 
-function useNotifications(intervalMs = 30000) {
+function useNotifications(intervalMs = 60000) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { data: session } = useSession();
+  
+  const isFetchingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const fetchNotifications = useCallback(async () => {
+    if (!session?.user || isFetchingRef.current) return;
+    
+    isFetchingRef.current = true;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     try {
-      const res = await fetch('/api/notifications?limit=30', { cache: 'no-store' });
+      const res = await fetch('/api/notifications?limit=10', { 
+        cache: 'no-store',
+        signal: abortControllerRef.current.signal
+      });
+      
+      if (!mountedRef.current) return;
+
       if (res.ok) {
         const json = await res.json();
         setNotifications(json.data || []);
         setUnreadCount(json.unreadCount || 0);
       }
-    } catch { /* silent */ }
-    setLoading(false);
-  }, []);
+    } catch (err: any) { 
+      if (err.name !== 'AbortError') {
+        // silent fail for non-abort errors
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+        isFetchingRef.current = false;
+      }
+    }
+  }, [session]);
 
   const markAsRead = useCallback(async (ids?: string[]) => {
     try {
@@ -220,21 +233,40 @@ function useNotifications(intervalMs = 30000) {
       });
       if (res.ok) {
         const json = await res.json();
-        setUnreadCount(json.unreadCount || 0);
-        if (ids) {
-          setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, isRead: true } : n));
-        } else {
-          setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+        if (mountedRef.current) {
+          setUnreadCount(json.unreadCount || 0);
+          if (ids) {
+            setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, isRead: true } : n));
+          } else {
+            setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+          }
         }
       }
     } catch { /* silent */ }
   }, []);
 
   useEffect(() => {
+    if (!session?.user) return;
     fetchNotifications();
-    timerRef.current = setInterval(fetchNotifications, intervalMs);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [intervalMs, fetchNotifications]);
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchNotifications();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchNotifications();
+      }
+    }, intervalMs);
+
+    return () => { 
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [intervalMs, fetchNotifications, session]);
 
   return { notifications, unreadCount, loading, markAsRead, refetch: fetchNotifications };
 }
@@ -442,7 +474,7 @@ export function DashboardLayout({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
-  const { semester: activeSemester } = useSemesterStatus();
+  const { semester: activeSemester } = useSemester();
 
   // Handle mobile route change
   useEffect(() => {
