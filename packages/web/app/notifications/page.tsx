@@ -50,6 +50,12 @@ export default function NotificationsPage() {
   const fetchIdRef = useRef(0);
   const markAllInProgressRef = useRef(false);
   const markingReadIdsRef = useRef<Set<string>>(new Set());
+  const navigatingNotificationIdsRef = useRef<Set<string>>(new Set());
+  const activeTabRef = useRef(activeTab);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
 
   const fetchPage = useCallback(async (isLoadMore = false, forceRefresh = false, cursorToUse = nextCursor) => {
     if (!userId) return;
@@ -143,6 +149,7 @@ export default function NotificationsPage() {
     const prevNotifications = notifications;
     const prevNextCursor = nextCursor;
     const prevHasMore = hasMore;
+    const operationTab = activeTabRef.current;
 
     // Optimistic Update
     let isRollback = false;
@@ -198,7 +205,7 @@ export default function NotificationsPage() {
         isRollback = true;
       }
     } finally {
-      if (isRollback) {
+      if (isRollback && activeTabRef.current === operationTab) {
         setNotifications(prevNotifications);
         setNextCursor(prevNextCursor);
         setHasMore(prevHasMore);
@@ -211,11 +218,26 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleItemClick = (item: any) => {
-    if (!item.isRead) markAsRead([item.id]);
-    const targetUrl = getNotificationTargetUrl({ type: item.type, currentRole: role, data: item.data });
-    if (targetUrl) {
-      router.push(targetUrl);
+  const handleItemClick = async (item: any) => {
+    const id = item.id;
+    if (navigatingNotificationIdsRef.current.has(id)) {
+      return;
+    }
+    
+    navigatingNotificationIdsRef.current.add(id);
+    
+    try {
+      if (!item.isRead) {
+        await markAsRead([id]);
+      }
+      const targetUrl = getNotificationTargetUrl({ type: item.type, currentRole: role, data: item.data });
+      if (targetUrl) {
+        router.push(targetUrl);
+      }
+    } finally {
+      window.setTimeout(() => {
+        navigatingNotificationIdsRef.current.delete(id);
+      }, 500);
     }
   };
 
