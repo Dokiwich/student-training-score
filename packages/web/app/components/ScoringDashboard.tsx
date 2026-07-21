@@ -8,6 +8,9 @@ import { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
 import { StatusBadge } from './ui/StatusBadge';
 import { Input } from './ui/Input';
 import { EmptyState } from './ui/EmptyState';
+import { BulkActionModal } from './BulkActionModal';
+import { BulkResultDialog } from './BulkResultDialog';
+
 import { Search, Users, CheckCircle, Clock, FileWarning, X } from 'lucide-react';
 
 const API_BASE = '/proxy-api';
@@ -31,6 +34,21 @@ interface ScoringDashboardProps {
   showHeader?: boolean;
   defaultTab?: 'all' | 'pending' | 'unscored' | 'scored';
 }
+
+
+const canBulkApprove = (student: StudentRow, role: 'CLASS_COMMITTEE' | 'ADVISOR') => {
+  if (!student.formId) return false;
+  if (role === 'CLASS_COMMITTEE' && student.status === 'STUDENT_SUBMITTED') return true;
+  if (role === 'ADVISOR' && student.status === 'CLASS_REVIEWED') return true;
+  return false;
+};
+
+const canBulkReject = (student: StudentRow, role: 'CLASS_COMMITTEE' | 'ADVISOR') => {
+  if (!student.formId) return false;
+  if (role === 'CLASS_COMMITTEE' && ['STUDENT_SUBMITTED', 'CLASS_REVIEWING'].includes(student.status)) return true;
+  if (role === 'ADVISOR' && ['STUDENT_SUBMITTED', 'CLASS_REVIEWING', 'CLASS_REVIEWED', 'ADVISOR_REVIEWING', 'ADVISOR_APPROVED'].includes(student.status)) return true;
+  return false;
+};
 
 const ROLE_META = {
   CLASS_COMMITTEE: {
@@ -86,38 +104,51 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
   const router = useRouter();
   const pathname = usePathname();
 
+  
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkActionType, setBulkActionType] = useState<'APPROVE' | 'REJECT'>('APPROVE');
+  const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
+  const [bulkResult, setBulkResult] = useState<any>(null);
+  const [isResultDialogOpen, setIsResultDialogOpen] = useState(false);
+
+  // Clear selection on tab or search change
   useEffect(() => {
+    setSelectedIds([]);
+  }, [activeTab, search]);
+
+  const fetchStudents = async () => {
     if (!session?.user) return;
     const customJwt = (session as any)?.customJwt;
     if (!customJwt) return;
-
-    const fetchStudents = async () => {
-      setIsLoading(true);
-      setFetchError(null);
-      try {
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${customJwt}`,
-        };
-
-        const res = await fetch(`${API_BASE}/scoring/students`, { headers, credentials: 'include' });
-        if (res.ok) {
-          const json = await res.json();
-          setStudents(json.data || []);
-        } else {
-          if (res.status === 401) {
-            setFetchError('Phiên đăng nhập hết hạn. Đang tải lại...');
-            const { signOut } = await import('next-auth/react');
-            setTimeout(() => { signOut({ callbackUrl: '/login' }); }, 1500);
-            return;
-          }
-          const errText = await res.text().catch(() => '');
-          setFetchError(`Lỗi ${res.status}: ${errText}`);
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${customJwt}`,
+      };
+      const res = await fetch(`${API_BASE}/scoring/students`, { headers, credentials: 'include' });
+      if (res.ok) {
+        const json = await res.json();
+        setStudents(json.data || []);
+      } else {
+        if (res.status === 401) {
+          setFetchError('Phiên đăng nhập hết hạn. Đang tải lại...');
+          const { signOut } = await import('next-auth/react');
+          setTimeout(() => { signOut({ callbackUrl: '/login' }); }, 1500);
+          return;
         }
-      } finally {
-        setIsLoading(false);
+        const errText = await res.text().catch(() => '');
+        setFetchError(`Lỗi ${res.status}: ${errText}`);
       }
-    };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchStudents();
   }, [session]);
 
@@ -220,7 +251,86 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
     { id: 'pending', label: 'Chưa nộp phiếu', count: stats.pendingCount, icon: FileWarning },
   ] as const;
 
-  return (
+  
+  const handleBulkAction = async (reason?: string) => {
+    if (selectedIds.length === 0) return;
+    const customJwt = (session as any)?.customJwt;
+    if (!customJwt) return;
+
+    setIsBulkSubmitting(true);
+    
+    // Determine target URL based on role
+    const rolePrefix = role === 'CLASS_COMMITTEE' ? 'class-committee' : 'advisor';
+    const actionPath = bulkActionType === 'APPROVE' ? 'bulk-approve' : 'bulk-reject';
+    const url = `${API_BASE}/scoring/${rolePrefix}/${actionPath}`;
+
+    try {
+      // Map frontend selected student IDs to their formIds for backend processing
+      const formIdsToProcess = students
+        .filter(s => selectedIds.includes(s.id) && s.formId)
+        .map(s => s.formId as string);
+
+      const payload = bulkActionType === 'APPROVE' ? { formIds: formIdsToProcess } : { formIds: formIdsToProcess, reason };
+      
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${customJwt}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error('Yêu cầu thất bại hoặc mất kết nối mạng. Danh sách sẽ được làm mới.');
+      }
+
+      const data = await res.json();
+      setBulkResult(data);
+      setIsBulkModalOpen(false);
+      setIsResultDialogOpen(true);
+
+      // Remove successful formIds from selectedIds
+      if (data.results) {
+        const successFormIds = data.results.filter((r: any) => r.success).map((r: any) => r.formId);
+        
+        // Map formIds back to studentIds
+        const successStudentIds = students
+          .filter(s => s.formId && successFormIds.includes(s.formId))
+          .map(s => s.id);
+          
+        setSelectedIds(prev => prev.filter(id => !successStudentIds.includes(id)));
+      }
+      
+      // Dispatch event for UI
+      window.dispatchEvent(new CustomEvent('NOTIFICATIONS_UPDATED'));
+
+    } catch (err: any) {
+      alert(err.message || 'Lỗi không xác định.');
+    } finally {
+      setIsBulkSubmitting(false);
+      // Force refresh data
+      fetchStudents();
+    }
+  };
+
+  const getBulkValidationStats = () => {
+    const selectedStudents = students.filter(s => selectedIds.includes(s.id));
+    let valid = 0;
+    for (const s of selectedStudents) {
+      if (bulkActionType === 'APPROVE' && canBulkApprove(s, role)) valid++;
+      else if (bulkActionType === 'REJECT' && canBulkReject(s, role)) valid++;
+    }
+    return {
+      validCount: valid,
+      invalidCount: selectedStudents.length - valid,
+      invalidReason: bulkActionType === 'APPROVE' ? 'Trạng thái hiện tại của phiếu không cho phép duyệt tiếp.' : 'Trạng thái hiện tại của phiếu không thể trả lại.'
+    };
+  };
+
+  const validationStats = getBulkValidationStats();
+
+return (
     <div className={`flex flex-col overflow-hidden ${showHeader ? 'h-full min-h-[600px]' : ''}`}>
       <div className="flex-1 flex flex-col min-h-0 bg-background relative">
         
@@ -310,7 +420,29 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
                 <table className="w-full text-left border-collapse min-w-[700px]">
                   <thead>
                     <tr className="bg-surface-muted border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-bold">
-                      <th className="px-6 py-4 text-center w-16">STT</th>
+                      <th className="px-6 py-4 text-center w-12">
+                            <input 
+                              type="checkbox"
+                              className="w-4 h-4 rounded border-border text-primary focus:ring-primary/20 cursor-pointer"
+                              title="Chọn tất cả kết quả đang hiển thị hợp lệ"
+                              checked={filtered.length > 0 && selectedIds.length > 0 && selectedIds.length === filtered.filter(s => canBulkApprove(s, role) || canBulkReject(s, role)).length}
+                              ref={input => {
+                                if (input) {
+                                  const validCount = filtered.filter(s => canBulkApprove(s, role) || canBulkReject(s, role)).length;
+                                  input.indeterminate = selectedIds.length > 0 && selectedIds.length < validCount;
+                                }
+                              }}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const validIds = filtered.filter(s => canBulkApprove(s, role) || canBulkReject(s, role)).map(s => s.id);
+                                  setSelectedIds(validIds);
+                                } else {
+                                  setSelectedIds([]);
+                                }
+                              }}
+                            />
+                          </th>
+                          <th className="px-6 py-4 text-center w-16">STT</th>
                       <th className="px-6 py-4 w-32">MSSV</th>
                       <th className="px-6 py-4">Họ và tên</th>
                       <th className="px-6 py-4 w-40">Trạng thái</th>
@@ -400,6 +532,53 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
             </div>
           </div>
         </div>
+      )}
+
+      {/* Sticky Bulk Toolbar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border shadow-[0_-4px_12px_rgba(0,0,0,0.05)] p-4 flex items-center justify-between px-8 md:pl-[18rem] transition-all">
+          <div className="font-semibold text-foreground flex items-center gap-4">
+            <span>Đã chọn <strong className="text-primary">{selectedIds.length}</strong> sinh viên</span>
+            <button onClick={() => setSelectedIds([])} className="text-sm text-muted-foreground hover:text-foreground">
+              (Bỏ chọn)
+            </button>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => { setBulkActionType('REJECT'); setIsBulkModalOpen(true); }}
+              className="px-4 py-2 bg-surface-muted text-red-600 font-bold border border-red-200 hover:bg-red-50 hover:border-red-300 rounded-lg transition-colors"
+            >
+              Trả lại phiếu
+            </button>
+            <button 
+              onClick={() => { setBulkActionType('APPROVE'); setIsBulkModalOpen(true); }}
+              className="px-4 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              Duyệt phiếu
+            </button>
+          </div>
+        </div>
+      )}
+
+      <BulkActionModal
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        onConfirm={handleBulkAction}
+        actionType={bulkActionType}
+        validCount={validationStats.validCount}
+        invalidCount={validationStats.invalidCount}
+        invalidReason={validationStats.invalidReason}
+        isSubmitting={isBulkSubmitting}
+      />
+
+      {bulkResult && (
+        <BulkResultDialog
+          isOpen={isResultDialogOpen}
+          onClose={() => setIsResultDialogOpen(false)}
+          summary={bulkResult.summary}
+          results={bulkResult.results}
+          warnings={bulkResult.warnings}
+        />
       )}
     </div>
   );
