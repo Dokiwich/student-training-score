@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { ScoringForm } from '../../components/ScoringForm';
-import { fetchWithCache } from '../../lib/request-cache';
+import { fetchWithCache, StaleRequestError } from '../../lib/client-request-cache';
 
 interface Note {
   id: string;
@@ -85,7 +85,11 @@ export default function StudentHistoryPage() {
         }
       } catch (err: any) {
         if (mounted) {
-          setError(err.message);
+          if (err instanceof StaleRequestError || err.name === 'StaleRequestError') {
+             // Silently ignore stale responses
+          } else {
+             setError(err.message);
+          }
         }
       } finally {
         if (mounted) {

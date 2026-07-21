@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '../../components/DashboardLayout';
-import { fetchWithCache } from '../../lib/request-cache';
+import { fetchWithCache, StaleRequestError, invalidateRequestCache } from '../../lib/client-request-cache';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -86,17 +86,19 @@ export default function StudentAppealsPage() {
     setSelectedCriteriaIds(next);
   };
 
-  const fetchAppeals = useCallback(async (mountedObj: { current: boolean } = { current: true }) => {
+  const fetchAppeals = useCallback(async (mountedObj: { current: boolean } = { current: true }, forceRefresh = false) => {
     setLoading(true);
     try {
       const userId = (session?.user as any)?.id;
       if (!userId) return;
-      const json = await fetchWithCache<any>('/api/appeals', userId);
+      const json = await fetchWithCache<any>('/api/appeals', userId, { forceRefresh });
       if (mountedObj.current) {
         setAppeals(json.data || []);
       }
     } catch (err: any) { 
-      if (mountedObj.current) console.error(err);
+      if (mountedObj.current && !(err instanceof StaleRequestError) && err.name !== 'StaleRequestError') {
+        console.error(err);
+      }
     }
     finally { 
       if (mountedObj.current) setLoading(false); 
@@ -124,7 +126,9 @@ export default function StudentAppealsPage() {
         }
       }
     } catch (err: any) { 
-      if (mountedObj.current) console.error(err);
+      if (mountedObj.current && !(err instanceof StaleRequestError) && err.name !== 'StaleRequestError') {
+        console.error(err);
+      }
     }
   }, [session]);
 
@@ -185,7 +189,14 @@ export default function StudentAppealsPage() {
         setShowForm(false);
         setReason('');
         setSelectedCriteriaIds(new Set());
-        fetchAppeals();
+        
+        const userId = (session?.user as any)?.id;
+        if (userId) {
+          invalidateRequestCache(userId, '/api/appeals');
+          invalidateRequestCache(userId, '/api/scoring-history');
+        }
+        
+        fetchAppeals({ current: true }, true);
       } else {
         alert(d.message || 'Có lỗi xảy ra');
       }

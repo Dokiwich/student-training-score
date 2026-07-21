@@ -15,6 +15,7 @@ import {
 import { PageHeader } from './ui/PageHeader';
 import { UserMenu } from './UserMenu';
 import { useSemester } from '../providers/SemesterProvider';
+import { fetchWithCache, invalidateRequestCache, clearUserRequestCache, StaleRequestError } from '../lib/client-request-cache';
 import './dashboard.css';
 
 // ─── Trạng thái học kỳ ───────────────────────────────────────────────────────
@@ -176,48 +177,34 @@ function useNotifications(intervalMs = 60000) {
   const { data: session } = useSession();
   
   const isFetchingRef = useRef(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   const lastFetchedAtRef = useRef<number>(0);
+  const markReadLocks = useRef<Set<string>>(new Set());
+  const isMarkingAllRead = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       isFetchingRef.current = false;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
     };
   }, []);
 
-  const fetchNotifications = useCallback(async () => {
-    if (!session?.user || isFetchingRef.current) return;
+  const fetchNotifications = useCallback(async (forceRefresh = false) => {
+    const userId = (session?.user as any)?.id;
+    if (!userId || isFetchingRef.current) return;
     
     isFetchingRef.current = true;
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
 
     try {
-      const res = await fetch('/api/notifications?limit=10', { 
-        cache: 'no-store',
-        signal: abortControllerRef.current.signal
-      });
-      
+      const json = await fetchWithCache<any>('/api/notifications?limit=10', userId, { ttl: 10000, forceRefresh });
       if (!mountedRef.current) return;
-
-      if (res.ok) {
-        const json = await res.json();
-        setNotifications(json.data || []);
-        setUnreadCount(json.unreadCount || 0);
-        lastFetchedAtRef.current = Date.now();
-      }
+      setNotifications(json.data || []);
+      setUnreadCount(json.unreadCount || 0);
+      lastFetchedAtRef.current = Date.now();
     } catch (err: any) { 
-      if (err.name !== 'AbortError') {
-        // silent fail for non-abort errors
+      if (mountedRef.current && !(err instanceof StaleRequestError) && err.name !== 'StaleRequestError') {
+        // silent fail
       }
     } finally {
       isFetchingRef.current = false;
@@ -228,6 +215,39 @@ function useNotifications(intervalMs = 60000) {
   }, [session]);
 
   const markAsRead = useCallback(async (ids?: string[]) => {
+    const userId = (session?.user as any)?.id;
+    if (!userId) return;
+
+    if (ids) {
+      if (ids.some(id => markReadLocks.current.has(id))) return;
+      ids.forEach(id => markReadLocks.current.add(id));
+    } else {
+      if (isMarkingAllRead.current) return;
+      isMarkingAllRead.current = true;
+    }
+
+    // Optimistic Rollback States
+    const previousNotifications = notifications;
+    const previousUnreadCount = unreadCount;
+
+    // Optimistic Update
+    if (mountedRef.current) {
+      if (ids) {
+        let changedCount = 0;
+        setNotifications(prev => prev.map(n => {
+          if (ids.includes(n.id) && !n.isRead) {
+            changedCount++;
+            return { ...n, isRead: true };
+          }
+          return n;
+        }));
+        setUnreadCount(prev => Math.max(0, prev - changedCount));
+      } else {
+        setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+        setUnreadCount(0);
+      }
+    }
+
     try {
       const body = ids ? { ids } : { markAllRead: true };
       const res = await fetch('/api/notifications', {
@@ -235,19 +255,27 @@ function useNotifications(intervalMs = 60000) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+
       if (res.ok) {
-        const json = await res.json();
-        if (mountedRef.current) {
-          setUnreadCount(json.unreadCount || 0);
-          if (ids) {
-            setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, isRead: true } : n));
-          } else {
-            setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-          }
-        }
+        invalidateRequestCache(userId, '/api/notifications');
+        fetchNotifications(true);
+      } else {
+        throw new Error('Failed to mark read');
       }
-    } catch { /* silent */ }
-  }, []);
+    } catch {
+      // Rollback on fail
+      if (mountedRef.current) {
+        setNotifications(previousNotifications);
+        setUnreadCount(previousUnreadCount);
+      }
+    } finally {
+      if (ids) {
+        ids.forEach(id => markReadLocks.current.delete(id));
+      } else {
+        isMarkingAllRead.current = false;
+      }
+    }
+  }, [notifications, unreadCount, session, fetchNotifications]);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -277,6 +305,20 @@ function useNotifications(intervalMs = 60000) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [intervalMs, fetchNotifications, session]);
+
+  // Session Cleanup
+  const prevUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const userId = (session?.user as any)?.id || null;
+    if (prevUserIdRef.current && prevUserIdRef.current !== userId) {
+      clearUserRequestCache(prevUserIdRef.current);
+      setNotifications([]);
+      setUnreadCount(0);
+      setLoading(true);
+      lastFetchedAtRef.current = 0;
+    }
+    prevUserIdRef.current = userId;
+  }, [session]);
 
   return { notifications, unreadCount, loading, markAsRead, refetch: fetchNotifications };
 }
