@@ -11,6 +11,7 @@ interface BulkActionModalProps {
   invalidCount: number;
   invalidReason: string;
   isSubmitting: boolean;
+  ineligibleStudents?: any[];
 }
 
 export function BulkActionModal({
@@ -21,7 +22,8 @@ export function BulkActionModal({
   validCount,
   invalidCount,
   invalidReason,
-  isSubmitting
+  isSubmitting,
+  ineligibleStudents = []
 }: BulkActionModalProps) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -62,13 +64,28 @@ export function BulkActionModal({
               Bạn đang chọn thao tác cho <strong>{validCount}</strong> phiếu hợp lệ.
             </p>
             {invalidCount > 0 && (
-              <div className="mt-3 p-3 bg-red-50 text-red-700 text-sm rounded-lg flex items-start gap-2 border border-red-200">
-                <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                <div>
-                  <strong>Cảnh báo:</strong> Có <strong>{invalidCount}</strong> phiếu trong danh sách đang chọn không thể thực hiện thao tác này.
-                  <div className="mt-1 opacity-90">{invalidReason}</div>
-                  Các phiếu không hợp lệ sẽ tự động bị bỏ qua.
+              <div className="mt-3 p-3 bg-warning-bg text-warning-foreground text-sm rounded-lg flex flex-col gap-2 border border-warning-border">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <div>
+                    <strong>Cảnh báo:</strong> Có <strong>{invalidCount}</strong> phiếu trong danh sách đang chọn không thể thực hiện thao tác này.
+                    <div className="mt-1 opacity-90">{invalidReason}</div>
+                    <div className="mt-1 opacity-90 italic">Các phiếu không hợp lệ sẽ tự động bị bỏ qua.</div>
+                  </div>
                 </div>
+                {ineligibleStudents.length > 0 && (
+                  <div className="mt-2 pl-6">
+                    <p className="font-semibold text-xs mb-1">Danh sách chi tiết:</p>
+                    <ul className="list-disc pl-5 mt-1 space-y-1 text-xs opacity-90 max-h-24 overflow-y-auto">
+                      {ineligibleStudents.slice(0, 5).map((s: any) => (
+                        <li key={s.id}>{s.name} ({s.code})</li>
+                      ))}
+                      {ineligibleStudents.length > 5 && (
+                        <li>... và {ineligibleStudents.length - 5} phiếu khác.</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </div>

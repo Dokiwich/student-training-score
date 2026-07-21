@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { ScoringForm } from './ScoringForm';
@@ -104,6 +104,10 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
   const router = useRouter();
   const pathname = usePathname();
 
+  
+
+  const bulkActionInProgressRef = useRef(false);
+  const [isRecoveringUnknownOutcome, setIsRecoveringUnknownOutcome] = useState(false);
   
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -252,24 +256,36 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
   ] as const;
 
   
+
   const handleBulkAction = async (reason?: string) => {
+    if (bulkActionInProgressRef.current) return;
     if (selectedIds.length === 0) return;
+
+    const selectedStudents = students.filter(s => selectedIds.includes(s.id));
+    const eligibleStudents = bulkActionType === 'APPROVE'
+      ? selectedStudents.filter(s => canBulkApprove(s, role))
+      : selectedStudents.filter(s => canBulkReject(s, role));
+
+    const formIdsToProcess = eligibleStudents
+      .map(s => s.formId)
+      .filter((id): id is string => Boolean(id));
+
+    if (formIdsToProcess.length === 0) {
+        return;
+    }
+
     const customJwt = (session as any)?.customJwt;
     if (!customJwt) return;
 
     setIsBulkSubmitting(true);
+    bulkActionInProgressRef.current = true;
     
-    // Determine target URL based on role
     const rolePrefix = role === 'CLASS_COMMITTEE' ? 'class-committee' : 'advisor';
     const actionPath = bulkActionType === 'APPROVE' ? 'bulk-approve' : 'bulk-reject';
     const url = `${API_BASE}/scoring/${rolePrefix}/${actionPath}`;
 
+    let refreshNeeded = true;
     try {
-      // Map frontend selected student IDs to their formIds for backend processing
-      const formIdsToProcess = students
-        .filter(s => selectedIds.includes(s.id) && s.formId)
-        .map(s => s.formId as string);
-
       const payload = bulkActionType === 'APPROVE' ? { formIds: formIdsToProcess } : { formIds: formIdsToProcess, reason };
       
       const res = await fetch(url, {
@@ -282,7 +298,12 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
       });
 
       if (!res.ok) {
-        throw new Error('Yêu cầu thất bại hoặc mất kết nối mạng. Danh sách sẽ được làm mới.');
+        if (res.status === 400 || res.status === 401 || res.status === 403 || res.status === 500) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || `Lỗi xử lý yêu cầu (${res.status})`);
+        }
+        setIsRecoveringUnknownOutcome(true);
+        throw new Error('Mất kết nối mạng. Đang kiểm tra lại trạng thái danh sách...');
       }
 
       const data = await res.json();
@@ -290,11 +311,8 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
       setIsBulkModalOpen(false);
       setIsResultDialogOpen(true);
 
-      // Remove successful formIds from selectedIds
       if (data.results) {
         const successFormIds = data.results.filter((r: any) => r.success).map((r: any) => r.formId);
-        
-        // Map formIds back to studentIds
         const successStudentIds = students
           .filter(s => s.formId && successFormIds.includes(s.formId))
           .map(s => s.id);
@@ -302,33 +320,35 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
         setSelectedIds(prev => prev.filter(id => !successStudentIds.includes(id)));
       }
       
-      // Dispatch event for UI
-      window.dispatchEvent(new CustomEvent('NOTIFICATIONS_UPDATED'));
-
     } catch (err: any) {
       alert(err.message || 'Lỗi không xác định.');
     } finally {
       setIsBulkSubmitting(false);
-      // Force refresh data
-      fetchStudents();
+      bulkActionInProgressRef.current = false;
+      if (refreshNeeded) {
+        await fetchStudents();
+        setIsRecoveringUnknownOutcome(false);
+      }
     }
   };
 
   const getBulkValidationStats = () => {
     const selectedStudents = students.filter(s => selectedIds.includes(s.id));
-    let valid = 0;
-    for (const s of selectedStudents) {
-      if (bulkActionType === 'APPROVE' && canBulkApprove(s, role)) valid++;
-      else if (bulkActionType === 'REJECT' && canBulkReject(s, role)) valid++;
-    }
+    const eligibleStudents = bulkActionType === 'APPROVE'
+      ? selectedStudents.filter(s => canBulkApprove(s, role))
+      : selectedStudents.filter(s => canBulkReject(s, role));
+    const ineligibleStudents = selectedStudents.filter(s => !eligibleStudents.includes(s));
+    
     return {
-      validCount: valid,
-      invalidCount: selectedStudents.length - valid,
+      validCount: eligibleStudents.length,
+      invalidCount: ineligibleStudents.length,
+      ineligibleStudents,
       invalidReason: bulkActionType === 'APPROVE' ? 'Trạng thái hiện tại của phiếu không cho phép duyệt tiếp.' : 'Trạng thái hiện tại của phiếu không thể trả lại.'
     };
   };
 
   const validationStats = getBulkValidationStats();
+
 
 return (
     <div className={`flex flex-col overflow-hidden ${showHeader ? 'h-full min-h-[600px]' : ''}`}>
@@ -546,7 +566,7 @@ return (
           <div className="flex gap-3">
             <button 
               onClick={() => { setBulkActionType('REJECT'); setIsBulkModalOpen(true); }}
-              className="px-4 py-2 bg-surface-muted text-red-600 font-bold border border-red-200 hover:bg-red-50 hover:border-red-300 rounded-lg transition-colors"
+              className="px-4 py-2 bg-surface-muted text-warning-foreground font-bold border border-warning-border hover:bg-warning-bg hover:border-warning-border rounded-lg transition-colors"
             >
               Trả lại phiếu
             </button>
@@ -566,6 +586,7 @@ return (
         onConfirm={handleBulkAction}
         actionType={bulkActionType}
         validCount={validationStats.validCount}
+        ineligibleStudents={validationStats.ineligibleStudents}
         invalidCount={validationStats.invalidCount}
         invalidReason={validationStats.invalidReason}
         isSubmitting={isBulkSubmitting}

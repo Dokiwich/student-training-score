@@ -108,7 +108,7 @@ export class ScoringController {
 
   @Post('class-committee/bulk-approve')
   async classCommitteeBulkApprove(
-    @Body('formIds') formIds: string[],
+    @Body('formIds') formIds: any[],
     @Req() req: any
   ) {
     return this.scoringService.bulkApprove(formIds, 'CLASS_COMMITTEE', req.user.id);
@@ -116,8 +116,8 @@ export class ScoringController {
 
   @Post('class-committee/bulk-reject')
   async classCommitteeBulkReject(
-    @Body('formIds') formIds: string[],
-    @Body('reason') reason: string,
+    @Body('formIds') formIds: any[],
+    @Body('reason') reason: any,
     @Req() req: any
   ) {
     return this.scoringService.bulkReject(formIds, 'CLASS_COMMITTEE', req.user.id, reason);
@@ -125,7 +125,7 @@ export class ScoringController {
 
   @Post('advisor/bulk-approve')
   async advisorBulkApprove(
-    @Body('formIds') formIds: string[],
+    @Body('formIds') formIds: any[],
     @Req() req: any
   ) {
     return this.scoringService.bulkApprove(formIds, 'ADVISOR', req.user.id);
@@ -133,8 +133,8 @@ export class ScoringController {
 
   @Post('advisor/bulk-reject')
   async advisorBulkReject(
-    @Body('formIds') formIds: string[],
-    @Body('reason') reason: string,
+    @Body('formIds') formIds: any[],
+    @Body('reason') reason: any,
     @Req() req: any
   ) {
     return this.scoringService.bulkReject(formIds, 'ADVISOR', req.user.id, reason);

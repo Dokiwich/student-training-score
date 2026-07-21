@@ -1301,41 +1301,140 @@ export class ScoringService {
   // =============================================
   // 6.2 BULK ACTIONS
   // =============================================
-  async bulkApprove(formIds: string[], role: string, actorId: string) {
-    if (!Array.isArray(formIds) || formIds.length === 0) {
-      throw new BadRequestException('Danh sách phiếu không hợp lệ.');
+  
+  private mapBulkActionError(err: any): { code: string; message: string } {
+    if (err.name === 'BadRequestException' || err.status === 400) {
+      const msg = err.message || '';
+      const response = err.response || {};
+      const resMsg = response.message || msg;
+
+      if (msg === 'STALE_STATUS' || resMsg === 'STALE_STATUS') {
+        return { code: 'STALE_STATUS', message: 'Trạng thái phiếu đã thay đổi, vui lòng tải lại trang.' };
+      }
+      if (resMsg.includes && (resMsg.includes('quá thời hạn') || resMsg.includes('hết hạn'))) {
+        return { code: 'DEADLINE_EXPIRED', message: resMsg };
+      }
+      if (resMsg.includes && resMsg.includes('Không tìm thấy')) {
+        return { code: 'NOT_FOUND', message: resMsg };
+      }
+      if (resMsg.includes && resMsg.includes('quyền')) {
+        return { code: 'FORBIDDEN', message: resMsg };
+      }
+      if (resMsg.includes && (resMsg.includes('trạng thái') || resMsg.includes('chỉ được'))) {
+         return { code: 'INVALID_STATUS', message: resMsg };
+      }
+      if (response.errors && Array.isArray(response.errors)) {
+         return { code: 'VALIDATION_FAILED', message: response.errors[0] };
+      }
+
+      return { code: 'VALIDATION_FAILED', message: resMsg };
     }
-    const uniqueIds = [...new Set(formIds)];
+    
+    if (err.name === 'ForbiddenException' || err.status === 403) {
+      return { code: 'FORBIDDEN', message: 'Không có quyền thao tác trên phiếu này.' };
+    }
+
+    if (err.name === 'NotFoundException' || err.status === 404) {
+      return { code: 'NOT_FOUND', message: 'Không tìm thấy phiếu.' };
+    }
+
+    return { code: 'UNKNOWN_ERROR', message: 'Lỗi không xác định khi xử lý phiếu.' };
+  }
+
+  private async mapWithConcurrency<T, R>(
+    items: T[],
+    concurrency: number,
+    worker: (item: T, index: number) => Promise<R>,
+  ): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    let currentIndex = 0;
+    
+    const next = async (): Promise<void> => {
+      while (currentIndex < items.length) {
+        const index = currentIndex++;
+        results[index] = await worker(items[index], index);
+      }
+    };
+    
+    const workers = Array(Math.min(concurrency, items.length)).fill(null).map(() => next());
+    await Promise.all(workers);
+    return results;
+  }
+
+  private validateBulkRequestAndGetUUIDs(formIds: any[]): string[] {
+    if (!Array.isArray(formIds) || formIds.length === 0) {
+      throw new BadRequestException('Danh sách phiếu không hợp lệ hoặc trống.');
+    }
+    
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const invalidFormat = formIds.some(id => typeof id !== 'string' || !uuidRegex.test(id.trim()));
+    if (invalidFormat) {
+      throw new BadRequestException('Định dạng ID phiếu không hợp lệ.');
+    }
+    
+    const uniqueIds = [...new Set(formIds.map(id => id.trim()))];
     if (uniqueIds.length > 50) {
       throw new BadRequestException('Chỉ hỗ trợ tối đa 50 phiếu mỗi lần thực thi.');
     }
+    
+    return uniqueIds;
+  }
 
+  private async getFormsMetadata(formIds: string[]) {
+    const formsMeta = await prisma.scoring_sheets.findMany({
+      where: { id: { in: formIds } },
+      include: {
+        semester_enrollments: {
+          include: {
+            users: true
+          }
+        }
+      }
+    });
+    
+    const metaMap = new Map();
+    for (const f of formsMeta) {
+      metaMap.set(f.id, {
+        studentId: f.semester_enrollments?.users?.id || null,
+        studentCode: f.semester_enrollments?.users?.student_id || null,
+        studentName: f.semester_enrollments?.users?.full_name || null,
+        previousStatus: f.status
+      });
+    }
+    return metaMap;
+  }
+
+  async bulkApprove(formIds: any[], role: string, actorId: string) {
+    const uniqueIds = this.validateBulkRequestAndGetUUIDs(formIds);
     let succeeded = 0;
     let failed = 0;
-    const results: any[] = [];
-    const warningsList: any[] = [];
 
-    // Chunking to avoid pool exhaustion
-    for (const formId of uniqueIds) {
+    const metaMap = await this.getFormsMetadata(uniqueIds);
+
+    const results = await this.mapWithConcurrency(uniqueIds, 5, async (formId) => {
+      const meta = metaMap.get(formId) || { studentId: null, studentCode: null, studentName: null, previousStatus: null };
       try {
-        const { updated, warnings, transition } = await this.approveSingleFormInternal(formId, role, actorId);
+        const { warnings, transition } = await this.approveSingleFormInternal(formId, role, actorId);
         succeeded++;
-        results.push({
+        return {
           formId,
+          ...meta,
           success: true,
-          newStatus: transition.nextStatus
-        });
-        if (warnings && warnings.length > 0) warningsList.push(...warnings);
+          newStatus: transition.nextStatus,
+          warnings: warnings && warnings.length > 0 ? warnings : undefined
+        };
       } catch (err: any) {
         failed++;
-        results.push({
+        const mappedError = this.mapBulkActionError(err);
+        return {
           formId,
+          ...meta,
           success: false,
-          code: err.status === 403 ? 'FORBIDDEN' : 'INVALID_STATUS',
-          message: err.response?.message || err.message || 'Lỗi không xác định'
-        });
+          code: mappedError.code,
+          message: mappedError.message
+        };
       }
-    }
+    });
 
     return {
       summary: {
@@ -1344,45 +1443,50 @@ export class ScoringService {
         succeeded,
         failed
       },
-      results,
-      warnings: warningsList.length > 0 ? warningsList : undefined
+      results
     };
   }
 
-  async bulkReject(formIds: string[], role: string, actorId: string, reason: string) {
-    if (!Array.isArray(formIds) || formIds.length === 0) {
-      throw new BadRequestException('Danh sách phiếu không hợp lệ.');
+  async bulkReject(formIds: any[], role: string, actorId: string, reason: string) {
+    const uniqueIds = this.validateBulkRequestAndGetUUIDs(formIds);
+    
+    if (typeof reason !== 'string') {
+      throw new BadRequestException('Lý do phải là chuỗi văn bản.');
     }
-    const uniqueIds = [...new Set(formIds)];
-    if (uniqueIds.length > 50) {
-      throw new BadRequestException('Chỉ hỗ trợ tối đa 50 phiếu mỗi lần thực thi.');
+    const cleanReason = reason.trim();
+    if (cleanReason.length < 5 || cleanReason.length > 500) {
+      throw new BadRequestException('Lý do trả lại phải từ 5 đến 500 ký tự.');
     }
 
     let succeeded = 0;
     let failed = 0;
-    const results: any[] = [];
-    const warningsList: any[] = [];
 
-    for (const formId of uniqueIds) {
+    const metaMap = await this.getFormsMetadata(uniqueIds);
+
+    const results = await this.mapWithConcurrency(uniqueIds, 5, async (formId) => {
+      const meta = metaMap.get(formId) || { studentId: null, studentCode: null, studentName: null, previousStatus: null };
       try {
-        const { form, warnings } = await this.rejectSingleFormInternal(formId, role, actorId, reason);
+        const { warnings } = await this.rejectSingleFormInternal(formId, role, actorId, cleanReason);
         succeeded++;
-        results.push({
+        return {
           formId,
+          ...meta,
           success: true,
-          newStatus: role === 'CLASS_COMMITTEE' ? 'CLASS_REJECTED' : 'ADVISOR_REJECTED'
-        });
-        if (warnings && warnings.length > 0) warningsList.push(...warnings);
+          newStatus: role === 'CLASS_COMMITTEE' ? 'CLASS_REJECTED' : 'ADVISOR_REJECTED',
+          warnings: warnings && warnings.length > 0 ? warnings : undefined
+        };
       } catch (err: any) {
         failed++;
-        results.push({
+        const mappedError = this.mapBulkActionError(err);
+        return {
           formId,
+          ...meta,
           success: false,
-          code: err.status === 403 ? 'FORBIDDEN' : 'INVALID_STATUS',
-          message: err.response?.message || err.message || 'Lỗi không xác định'
-        });
+          code: mappedError.code,
+          message: mappedError.message
+        };
       }
-    }
+    });
 
     return {
       summary: {
@@ -1391,8 +1495,7 @@ export class ScoringService {
         succeeded,
         failed
       },
-      results,
-      warnings: warningsList.length > 0 ? warningsList : undefined
+      results
     };
   }
 

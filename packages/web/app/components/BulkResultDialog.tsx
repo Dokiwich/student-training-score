@@ -49,12 +49,12 @@ export function BulkResultDialog({ isOpen, onClose, summary, results, warnings }
             </div>
             <div className="bg-surface p-3 rounded-xl border border-border text-center">
               <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Thất bại</div>
-              <div className="text-xl font-black text-red-600">{summary.failed}</div>
+              <div className="text-xl font-black text-warning-foreground">{summary.failed}</div>
             </div>
           </div>
 
           {warnings && warnings.length > 0 && (
-            <div className="mb-6 p-4 bg-yellow-50 text-yellow-800 rounded-xl border border-yellow-200">
+            <div className="mb-6 p-4 bg-warning-bg text-warning-foreground rounded-xl border border-yellow-200">
               <div className="flex items-center gap-2 font-bold mb-2">
                 <AlertTriangle size={18} /> Cảnh báo (Không ảnh hưởng kết quả điểm)
               </div>
@@ -88,7 +88,7 @@ export function BulkResultDialog({ isOpen, onClose, summary, results, warnings }
                           <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.studentCode || item.formId}</div>
                         </td>
                         <td className="p-3">
-                          <div className="text-red-600 font-medium">{item.message}</div>
+                          <div className="text-warning-foreground font-medium">{item.message}</div>
                           <div className="text-xs text-muted-foreground mt-0.5">{item.code}</div>
                         </td>
                       </tr>
