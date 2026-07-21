@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession, signOut } from 'next-auth/react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { APP_BRANDING } from '../../lib/branding';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
@@ -16,6 +16,7 @@ import { PageHeader } from './ui/PageHeader';
 import { UserMenu } from './UserMenu';
 import { useSemester } from '../providers/SemesterProvider';
 import { fetchWithCache, invalidateRequestCache, clearUserRequestCache, StaleRequestError } from '../lib/client-request-cache';
+import { getNotificationTargetUrl } from '../lib/notification-target';
 import './dashboard.css';
 
 // ─── Trạng thái học kỳ ───────────────────────────────────────────────────────
@@ -339,6 +340,8 @@ function NotificationBell() {
   const { notifications, unreadCount, loading, markAsRead } = useNotifications(60000);
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const { data: session } = useSession();
 
   useEffect(() => {
     if (!open) return;
@@ -351,6 +354,12 @@ function NotificationBell() {
 
   const handleItemClick = (item: NotificationItem) => {
     if (!item.isRead) markAsRead([item.id]);
+    setOpen(false);
+    const role = (session?.user as any)?.role || 'STUDENT';
+    const targetUrl = getNotificationTargetUrl({ type: item.type, currentRole: role, data: item.data });
+    if (targetUrl) {
+      router.push(targetUrl);
+    }
   };
 
   const defaultMeta = { icon: <Bell size={14} />, color: '#6b7280' };
@@ -417,6 +426,12 @@ function NotificationBell() {
                 })}
               </div>
             )}
+          </div>
+          
+          <div className="p-2 border-t border-border bg-surface-muted flex justify-center">
+             <Link href="/notifications" onClick={() => setOpen(false)} className="text-sm text-primary font-medium hover:underline p-1">
+               Xem tất cả thông báo
+             </Link>
           </div>
         </div>
       )}

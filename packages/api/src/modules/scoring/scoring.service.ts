@@ -1897,6 +1897,7 @@ export class ScoringService {
                 title: 'Có phiếu rèn luyện mới gửi lên',
                 content: `Sinh viên ${enrollInfo.users.full_name} đã nộp tự đánh giá điểm rèn luyện. Vui lòng chấm duyệt.`,
                 is_read: 0,
+                data: { resourceType: 'SCORING', scoringSheetId: form.id, studentId },
               })),
             });
           }
@@ -1926,6 +1927,7 @@ export class ScoringService {
               title: 'Phiếu rèn luyện đã được Ban cán sự duyệt',
               content: 'Phiếu tự đánh giá của bạn đã được Ban cán sự lớp duyệt và chuyển cho Cố vấn học tập.',
               is_read: 0,
+              data: { resourceType: 'SCORING', scoringSheetId: form.id, studentId: enrollInfo.user_id },
             },
           });
 
@@ -1944,6 +1946,7 @@ export class ScoringService {
                 title: 'Có phiếu rèn luyện chờ phê duyệt',
                 content: `Phiếu của sinh viên ${enrollInfo.users.full_name} đã được BCS duyệt. Vui lòng phê duyệt.`,
                 is_read: 0,
+                data: { resourceType: 'SCORING', scoringSheetId: form.id, studentId: enrollInfo.user_id },
               })),
             });
           }
@@ -1958,6 +1961,7 @@ export class ScoringService {
             title: 'Phiếu rèn luyện đã được phê duyệt',
             content: 'Phiếu tự đánh giá của bạn đã được Cố vấn học tập phê duyệt và chốt sổ.',
             is_read: 0,
+            data: { resourceType: 'SCORING', scoringSheetId: form.id, studentId },
           },
         });
       }
@@ -2044,6 +2048,7 @@ export class ScoringService {
           title: 'Phiếu rèn luyện đã bị trả lại',
           content: `Phiếu tự đánh giá của bạn đã bị ${rejecterLabel} trả lại với lý do: "${reason.trim()}". Vui lòng xem lại và nộp lại.`,
           is_read: 0,
+          data: { resourceType: 'SCORING', scoringSheetId: form.id, studentId },
         },
       });
     } catch (notifErr) {

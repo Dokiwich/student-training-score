@@ -310,6 +310,7 @@ export class AppealService {
               title: 'Có khiếu nại mới cần xử lý',
               content: `Sinh viên ${studentName} đã gửi khiếu nại ${criteriaIds.length} tiêu chí. Vui lòng xem xét và phê duyệt.`,
               is_read: 0,
+              data: { resourceType: 'APPEAL', scoringSheetId: sheetId, studentId },
             },
           });
         }
@@ -461,6 +462,7 @@ export class AppealService {
               title: 'Khoa đã xem xét khiếu nại — Cần Admin phê duyệt',
               content: `Khoa đã ${decisionText} khiếu nại của SV ${student?.full_name || ''}. Vui lòng phê duyệt cuối cùng.`,
               is_read: 0,
+              data: { resourceType: 'APPEAL', appealId, decision, scoringSheetId: appeal.scoring_sheet_id, studentId },
             },
           });
         }
@@ -480,6 +482,7 @@ export class AppealService {
             title: `Khoa đã xem xét khiếu nại (${decisionText})`,
             content: `Khoa đã ${decisionText} khiếu nại của bạn. Đang chờ Admin trường phê duyệt cuối cùng. Phản hồi Khoa: ${resolution.trim()}`,
             is_read: 0,
+            data: { resourceType: 'APPEAL', appealId, decision, scoringSheetId: appeal.scoring_sheet_id, studentId },
           },
         });
       } catch (err) {
@@ -633,6 +636,7 @@ export class AppealService {
             title: `Khiếu nại đã được Admin trường ${decisionText}`,
             content: `Khiếu nại của bạn đã được Admin trường ${decisionText} (quyết định cuối cùng). Phản hồi: ${resolution.trim()}`,
             is_read: 0,
+            data: { resourceType: 'APPEAL', appealId, decision, scoringSheetId: appeal.scoring_sheet_id, studentId },
           },
         });
       } catch (err) {
@@ -734,6 +738,7 @@ export class AppealService {
               title: 'Khoa đã xem xét tất cả khiếu nại — Cần Admin phê duyệt',
               content: `Khoa đã đề xuất từ chối ${pendingAppeals.length} khiếu nại trên phiếu. Vui lòng phê duyệt cuối cùng.`,
               is_read: 0,
+              data: { resourceType: 'APPEAL', scoringSheetId: sheet.id, studentId },
             },
           });
         }
@@ -817,6 +822,7 @@ export class AppealService {
           title: 'Tất cả khiếu nại đã được xử lý (Admin)',
           content: `Admin trường đã xử lý tất cả khiếu nại trên phiếu (quyết định cuối cùng). Phiếu đã chuyển về trạng thái chờ duyệt.`,
           is_read: 0,
+          data: { resourceType: 'APPEAL', scoringSheetId: sheet.id, studentId },
         },
       });
     } catch (err) {
