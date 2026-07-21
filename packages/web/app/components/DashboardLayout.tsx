@@ -175,12 +175,14 @@ function useNotifications(intervalMs = 60000) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const { data: session } = useSession();
+  const userId = (session?.user as any)?.id ?? null;
   
   const isFetchingRef = useRef(false);
   const mountedRef = useRef(true);
   const lastFetchedAtRef = useRef<number>(0);
   const markReadLocks = useRef<Set<string>>(new Set());
   const isMarkingAllRead = useRef(false);
+  const pendingForceRefreshRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -191,13 +193,20 @@ function useNotifications(intervalMs = 60000) {
   }, []);
 
   const fetchNotifications = useCallback(async (forceRefresh = false) => {
-    const userId = (session?.user as any)?.id;
-    if (!userId || isFetchingRef.current) return;
+    if (!userId) return;
+    
+    if (forceRefresh) {
+      pendingForceRefreshRef.current = true;
+    }
+
+    if (isFetchingRef.current) return;
     
     isFetchingRef.current = true;
+    let currentForceRefresh = pendingForceRefreshRef.current;
+    pendingForceRefreshRef.current = false;
 
     try {
-      const json = await fetchWithCache<any>('/api/notifications?limit=10', userId, { ttl: 10000, forceRefresh });
+      const json = await fetchWithCache<any>('/api/notifications?limit=10', userId, { ttl: 10000, forceRefresh: currentForceRefresh });
       if (!mountedRef.current) return;
       setNotifications(json.data || []);
       setUnreadCount(json.unreadCount || 0);
@@ -210,12 +219,15 @@ function useNotifications(intervalMs = 60000) {
       isFetchingRef.current = false;
       if (mountedRef.current) {
         setLoading(false);
+        // If a new force refresh was queued while we were fetching
+        if (pendingForceRefreshRef.current) {
+          fetchNotifications();
+        }
       }
     }
-  }, [session]);
+  }, [userId]);
 
   const markAsRead = useCallback(async (ids?: string[]) => {
-    const userId = (session?.user as any)?.id;
     if (!userId) return;
 
     if (ids) {
@@ -230,17 +242,18 @@ function useNotifications(intervalMs = 60000) {
     const previousNotifications = notifications;
     const previousUnreadCount = unreadCount;
 
+    // Snapshot changedCount before updater
+    let changedCount = 0;
+    if (ids) {
+      changedCount = notifications.filter(n => ids.includes(n.id) && !n.isRead).length;
+    } else {
+      changedCount = unreadCount;
+    }
+
     // Optimistic Update
     if (mountedRef.current) {
       if (ids) {
-        let changedCount = 0;
-        setNotifications(prev => prev.map(n => {
-          if (ids.includes(n.id) && !n.isRead) {
-            changedCount++;
-            return { ...n, isRead: true };
-          }
-          return n;
-        }));
+        setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, isRead: true } : n));
         setUnreadCount(prev => Math.max(0, prev - changedCount));
       } else {
         setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
@@ -275,10 +288,10 @@ function useNotifications(intervalMs = 60000) {
         isMarkingAllRead.current = false;
       }
     }
-  }, [notifications, unreadCount, session, fetchNotifications]);
+  }, [userId, notifications, unreadCount, fetchNotifications]);
 
   useEffect(() => {
-    if (!session?.user) return;
+    if (!userId) return;
     
     // Initial fetch if it's been a while or first time
     if (Date.now() - lastFetchedAtRef.current > 10000) {
@@ -304,12 +317,11 @@ function useNotifications(intervalMs = 60000) {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [intervalMs, fetchNotifications, session]);
+  }, [intervalMs, fetchNotifications, userId]);
 
   // Session Cleanup
   const prevUserIdRef = useRef<string | null>(null);
   useEffect(() => {
-    const userId = (session?.user as any)?.id || null;
     if (prevUserIdRef.current && prevUserIdRef.current !== userId) {
       clearUserRequestCache(prevUserIdRef.current);
       setNotifications([]);
@@ -318,7 +330,7 @@ function useNotifications(intervalMs = 60000) {
       lastFetchedAtRef.current = 0;
     }
     prevUserIdRef.current = userId;
-  }, [session]);
+  }, [userId]);
 
   return { notifications, unreadCount, loading, markAsRead, refetch: fetchNotifications };
 }

@@ -28,6 +28,7 @@ type InFlightEntry<T> = {
 const dataCache = new Map<string, CacheEntry<any>>();
 const inFlightRequests = new Map<string, InFlightEntry<any>>();
 const keyGenerations = new Map<string, number>();
+const activePromises = new Map<string, number>();
 
 const DEFAULT_TTL = 30000;
 const MAX_ENTRIES = 200;
@@ -141,6 +142,16 @@ export async function fetchWithCache<T>(
       if (currentInFlight && currentInFlight.promise === fetchPromise) {
         inFlightRequests.delete(cacheKey);
       }
+      
+      const count = (activePromises.get(cacheKey) || 0) - 1;
+      if (count <= 0) {
+        activePromises.delete(cacheKey);
+        if (!dataCache.has(cacheKey) && !inFlightRequests.has(cacheKey)) {
+          keyGenerations.delete(cacheKey);
+        }
+      } else {
+        activePromises.set(cacheKey, count);
+      }
     });
 
   inFlightRequests.set(cacheKey, {
@@ -148,6 +159,8 @@ export async function fetchWithCache<T>(
     createdAt: Date.now(),
     generation: currentGen
   });
+  
+  activePromises.set(cacheKey, (activePromises.get(cacheKey) || 0) + 1);
 
   return fetchPromise;
 }
@@ -179,19 +192,44 @@ export function invalidateRequestCache(userScope: string, urlOrPrefix: string) {
 
 export function clearUserRequestCache(userScope: string) {
   const prefix = `${userScope}:`;
+  const keysToInvalidate = new Set<string>();
+  
   for (const key of dataCache.keys()) {
-    if (key.startsWith(prefix)) dataCache.delete(key);
+    if (key.startsWith(prefix)) keysToInvalidate.add(key);
   }
   for (const key of inFlightRequests.keys()) {
-    if (key.startsWith(prefix)) inFlightRequests.delete(key);
+    if (key.startsWith(prefix)) keysToInvalidate.add(key);
   }
   for (const key of keyGenerations.keys()) {
-    if (key.startsWith(prefix)) keyGenerations.delete(key);
+    if (key.startsWith(prefix)) keysToInvalidate.add(key);
+  }
+
+  for (const key of keysToInvalidate) {
+    keyGenerations.set(key, getGeneration(key) + 1);
+    dataCache.delete(key);
+    inFlightRequests.delete(key);
+    
+    // Safety cleanup if no active promises
+    if (!activePromises.has(key)) {
+      keyGenerations.delete(key);
+    }
   }
 }
 
 export function clearAllRequestCache() {
-  dataCache.clear();
-  inFlightRequests.clear();
-  keyGenerations.clear();
+  const allKeys = new Set([
+    ...dataCache.keys(),
+    ...inFlightRequests.keys(),
+    ...keyGenerations.keys()
+  ]);
+  
+  for (const key of allKeys) {
+    keyGenerations.set(key, getGeneration(key) + 1);
+    dataCache.delete(key);
+    inFlightRequests.delete(key);
+    
+    if (!activePromises.has(key)) {
+      keyGenerations.delete(key);
+    }
+  }
 }
