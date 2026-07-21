@@ -161,7 +161,17 @@ export async function PATCH(req: Request) {
   const userId = (session?.user as any)?.id;
 
   try {
-    const body = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ message: 'JSON không hợp lệ' }, { status: 400 });
+    }
+
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+      return NextResponse.json({ message: 'Dữ liệu yêu cầu không hợp lệ' }, { status: 400 });
+    }
+
     const now = new Date();
 
     const hasIds = 'ids' in body;

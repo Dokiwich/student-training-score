@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '../components/DashboardLayout';
-import { fetchWithCache, invalidateRequestCache } from '../lib/client-request-cache';
+import { fetchWithCache, invalidateRequestCache, StaleRequestError } from '../lib/client-request-cache';
 import { getNotificationTargetUrl } from '../lib/notification-target';
 import { NOTIFICATION_EVENTS } from '../lib/notification-events';
 import { useRouter } from 'next/navigation';
@@ -49,6 +49,7 @@ export default function NotificationsPage() {
   
   const fetchIdRef = useRef(0);
   const markAllInProgressRef = useRef(false);
+  const markingReadIdsRef = useRef<Set<string>>(new Set());
 
   const fetchPage = useCallback(async (isLoadMore = false, forceRefresh = false, cursorToUse = nextCursor) => {
     if (!userId) return;
@@ -80,8 +81,11 @@ export default function NotificationsPage() {
       }
       setHasMore(res.hasMore);
       setNextCursor(res.nextCursor);
-    } catch (err) {
-      console.error('Fetch error:', err);
+    } catch (err: any) {
+      if (!(err instanceof StaleRequestError) && err.name !== 'StaleRequestError') {
+        console.error('Fetch error:', err);
+      }
+      throw err;
     } finally {
       if (fetchIdRef.current === currentFetchId) {
         if (isLoadMore) setLoadingMore(false);
@@ -126,16 +130,31 @@ export default function NotificationsPage() {
   const markAsRead = async (ids?: string[]) => {
     if (!userId) return;
     
-    if (!ids && markAllInProgressRef.current) return;
-    if (!ids) markAllInProgressRef.current = true;
+    if (ids) {
+      if (ids.some(id => markingReadIdsRef.current.has(id))) return;
+      if (markAllInProgressRef.current) return;
+      ids.forEach(id => markingReadIdsRef.current.add(id));
+    } else {
+      if (markAllInProgressRef.current) return;
+      markAllInProgressRef.current = true;
+    }
 
     // Snapshot state for rollback
     const prevNotifications = notifications;
+    const prevNextCursor = nextCursor;
+    const prevHasMore = hasMore;
 
     // Optimistic Update
+    let isRollback = false;
+    let mutationSucceeded = false;
+
     setNotifications(prev => {
       if (activeTab === 'unread') {
-        if (!ids) return [];
+        if (!ids) {
+          setNextCursor(null);
+          setHasMore(false);
+          return [];
+        }
         return prev.filter(n => !ids.includes(n.id));
       } else {
         return prev.map(n => {
@@ -159,18 +178,34 @@ export default function NotificationsPage() {
         throw new Error('Failed to mark read');
       }
       
-      // Dispatch event to sync with Bell
-      window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENTS.UPDATED));
-      
-      // Force refresh data in background to keep nextCursor and list perfectly synced
+      mutationSucceeded = true;
       invalidateRequestCache(userId, '/api/notifications');
+      
+      try {
+        await fetchPage(false, true, null);
+      } catch (err: any) {
+         if (!(err instanceof StaleRequestError) && err.name !== 'StaleRequestError') {
+           console.warn('Đã cập nhật trạng thái nhưng chưa thể tải lại danh sách.', err);
+           alert('Đã cập nhật trạng thái nhưng chưa thể tải lại danh sách.');
+         }
+      }
+      
+      window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENTS.UPDATED));
     } catch (err) {
-      console.error(err);
-      alert('Đã có lỗi xảy ra khi cập nhật thông báo.');
-      // Rollback
-      setNotifications(prevNotifications);
+      if (!mutationSucceeded) {
+        console.error(err);
+        alert('Không thể cập nhật trạng thái thông báo.');
+        isRollback = true;
+      }
     } finally {
-      if (!ids) {
+      if (isRollback) {
+        setNotifications(prevNotifications);
+        setNextCursor(prevNextCursor);
+        setHasMore(prevHasMore);
+      }
+      if (ids) {
+        ids.forEach(id => markingReadIdsRef.current.delete(id));
+      } else {
         markAllInProgressRef.current = false;
       }
     }
