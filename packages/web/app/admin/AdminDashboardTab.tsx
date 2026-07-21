@@ -32,7 +32,7 @@ interface ComparisonData {
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 
 const CLASSIFICATION_LABELS: Record<string, string> = { EXCELLENT: 'Xuất sắc', VERY_GOOD: 'Giỏi', GOOD: 'Khá', AVERAGE: 'Trung bình', WEAK: 'Yếu', POOR: 'Kém' };
-const CLS_COLORS: Record<string, { chart: string }> = { EXCELLENT: { chart: '#10b981' }, VERY_GOOD: { chart: '#b91c1c' }, GOOD: { chart: '#f59e0b' }, AVERAGE: { chart: '#9ca3af' }, WEAK: { chart: '#ef4444' }, POOR: { chart: '#dc2626' } };
+const CLS_COLORS: Record<string, { chart: string }> = { EXCELLENT: { chart: 'var(--success)' }, VERY_GOOD: { chart: 'var(--danger-foreground)' }, GOOD: { chart: '#f59e0b' }, AVERAGE: { chart: 'var(--muted-foreground)' }, WEAK: { chart: 'var(--danger)' }, POOR: { chart: 'var(--danger)' } };
 const CLS_KEYS = ['EXCELLENT', 'VERY_GOOD', 'GOOD', 'AVERAGE', 'WEAK', 'POOR'];
 
 function DonutChart({ data, total }: { data: Record<string, number>; total: number }) {

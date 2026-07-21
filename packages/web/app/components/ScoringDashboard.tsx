@@ -376,7 +376,7 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
             <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface shrink-0">
               <h3 className="text-lg font-bold text-foreground">
                 Chấm điểm sinh viên: <span className="text-primary">{selectedStudent.name}</span>
-                <span className="ml-2 font-mono text-sm text-muted-foreground font-semibold bg-gray-100 px-2 py-0.5 rounded">
+                <span className="ml-2 font-mono text-sm text-muted-foreground font-semibold bg-muted px-2 py-0.5 rounded">
                   {selectedStudent.studentCode}
                 </span>
               </h3>

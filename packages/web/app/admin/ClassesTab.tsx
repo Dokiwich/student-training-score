@@ -69,7 +69,7 @@ export function ClassesTab() {
     { header: 'Khoa', render: (c: ClassItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{c.departmentName}</span> },
     { header: 'Năm học', width: 100, render: (c: ClassItem) => <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{c.academic_year}</span> },
     { header: 'Sĩ số', width: 70, align: 'center' as const, render: (c: ClassItem) => <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', padding: '2px 8px', borderRadius: 9999, fontSize: 12, fontWeight: 600 }}>{c.studentCount}</span> },
-    { header: 'Trạng thái', width: 100, align: 'center' as const, render: (c: ClassItem) => <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: c.is_active ? 'var(--success-bg)' : '#f3f4f6', color: c.is_active ? 'var(--success)' : 'var(--muted-foreground)' }}>{c.is_active ? 'Hoạt động' : 'Ẩn'}</span> },
+    { header: 'Trạng thái', width: 100, align: 'center' as const, render: (c: ClassItem) => <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: c.is_active ? 'var(--success-bg)' : 'var(--border)', color: c.is_active ? 'var(--success)' : 'var(--muted-foreground)' }}>{c.is_active ? 'Hoạt động' : 'Ẩn'}</span> },
     { header: 'Thao tác', width: 200, align: 'center' as const, render: (c: ClassItem) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
           <button onClick={(e) => { e.stopPropagation(); startEdit(c); }} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>

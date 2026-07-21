@@ -151,13 +151,13 @@ export function CriteriaSetCreateForm({ versions, onClose, onSuccess }: Criteria
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-[14px] font-[510] text-[#374151]">
+                <label className="text-[14px] font-[510] text-[var(--foreground)]">
                   Sao chép từ (Tùy chọn)
                 </label>
                 <select
                   value={cloneFromId}
                   onChange={(e) => setCloneFromId(e.target.value)}
-                  className="px-3 py-2.5 bg-white border border-[#D1D5DB] rounded-[6px] text-[15px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                  className="px-3 py-2.5 bg-surface border border-[var(--border)] rounded-[6px] text-[15px] text-[var(--foreground)] outline-none focus:border-[var(--danger-foreground)] focus:ring-[3px] focus:ring-[var(--danger-bg)] transition-all"
                 >
                   <option value="">-- Bắt đầu từ mẫu trống --</option>
                   {versions.map(v => (

@@ -321,7 +321,7 @@ export default function StudentAppealsPage() {
                                   type="checkbox" 
                                   checked={isSelected} 
                                   readOnly
-                                  className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
+                                  className="w-4 h-4 rounded text-primary focus:ring-primary border-border-dark"
                                 />
                                 <div className="flex-1 min-w-0">
                                   <div className="text-sm font-semibold text-foreground">
@@ -375,7 +375,7 @@ export default function StudentAppealsPage() {
                                         type="checkbox" 
                                         checked={isSelected} 
                                         readOnly
-                                        className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
+                                        className="w-4 h-4 rounded text-primary focus:ring-primary border-border-dark"
                                       />
                                       <div className="flex-1 min-w-0">
                                         <div className={`text-sm ${isSelected ? 'font-bold' : 'font-medium'} text-foreground leading-tight`}>

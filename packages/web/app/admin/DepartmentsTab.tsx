@@ -63,9 +63,9 @@ export function DepartmentsTab() {
     { header: 'Số users', width: 90, align: 'center' as const, render: (d: Dept) => <span style={{ fontSize: 12 }}>{d.userCount}</span> },
     { header: 'Trạng thái', width: 100, align: 'center' as const, render: (d: Dept) => (
         <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999,
-          background: d.is_active ? 'var(--success-bg)' : '#f3f4f6',
+          background: d.is_active ? 'var(--success-bg)' : 'var(--border)',
           color: d.is_active ? 'var(--success)' : 'var(--muted-foreground)',
-          border: `1px solid ${d.is_active ? 'var(--success-border)' : '#e5e7eb'}` }}>
+          border: `1px solid ${d.is_active ? 'var(--success-border)' : 'var(--border)'}` }}>
           {d.is_active ? 'Hoạt động' : 'Ẩn'}
         </span>
       )

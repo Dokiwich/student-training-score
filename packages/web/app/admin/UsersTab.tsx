@@ -334,7 +334,7 @@ export function UsersTab() {
     { header: 'Email', render: (u: UserItem) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{u.email}</span> },
     {
       header: 'Vai trò', width: 110, render: (u: UserItem) => {
-        const rc = ROLE_COLORS[u.role] || { bg: '#f3f4f6', color: '#6b7280' };
+        const rc = ROLE_COLORS[u.role] || { bg: 'var(--border)', color: 'var(--muted-foreground)' };
         return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: rc.bg, color: rc.color }}>{ROLE_LABELS[u.role] || u.role}</span>;
       }
     },
@@ -507,7 +507,7 @@ export function UsersTab() {
                       onClick={downloadTemplate}
                       style={{
                         padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
-                        border: '1px solid #d1d5db', background: '#fff', color: '#374151',
+                        border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)',
                         cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
                       }}
                     >
@@ -519,14 +519,14 @@ export function UsersTab() {
                       <label
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
-                          border: '2px dashed #d1d5db', borderRadius: 8, cursor: 'pointer',
-                          background: importFileName ? '#f0fdf4' : '#fafafa',
-                          borderColor: importFileName ? '#86efac' : '#d1d5db',
+                          border: '2px dashed var(--border)', borderRadius: 8, cursor: 'pointer',
+                          background: importFileName ? 'var(--success-bg)' : '#fafafa',
+                          borderColor: importFileName ? '#86efac' : 'var(--border)',
                           transition: 'all 0.2s',
                         }}
                       >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={importFileName ? '#16a34a' : '#9ca3af'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-                        <span style={{ fontSize: 13, color: importFileName ? '#16a34a' : '#6b7280', fontWeight: 500 }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={importFileName ? 'var(--success)' : 'var(--muted-foreground)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                        <span style={{ fontSize: 13, color: importFileName ? 'var(--success)' : 'var(--muted-foreground)', fontWeight: 500 }}>
                           {importFileName || 'Chọn file .xlsx hoặc .xls'}
                         </span>
                         <input
@@ -544,46 +544,46 @@ export function UsersTab() {
                   {importData.length > 0 && (
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <p style={{ fontSize: 14, fontWeight: 600, color: '#1f2937', margin: 0 }}>
+                        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)', margin: 0 }}>
                           Xem trước: {importData.length} dòng dữ liệu
                         </p>
                         <button
                           onClick={resetImport}
-                          style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                          style={{ fontSize: 12, color: 'var(--muted-foreground)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                         >
                           Chọn file khác
                         </button>
                       </div>
 
-                      <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, maxHeight: 350 }}>
+                      <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8, maxHeight: 350 }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                           <thead>
-                            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
-                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Dòng</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>MSSV</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Họ tên</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Email</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Vai trò</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Khoa</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>Lớp</th>
+                            <tr style={{ background: 'var(--surface-muted)', position: 'sticky', top: 0 }}>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Dòng</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>MSSV</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Họ tên</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Email</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Vai trò</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Khoa</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Lớp</th>
                             </tr>
                           </thead>
                           <tbody>
                             {importData.map((row, i) => {
                               const hasError = !row.full_name || !row.email || !row.password;
                               return (
-                                <tr key={i} style={{ background: hasError ? '#fef2f2' : 'transparent' }}>
-                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#9ca3af' }}>{row.rowIndex}</td>
-                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', fontFamily: 'monospace' }}>{row.student_id || '-'}</td>
-                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', fontWeight: 500, color: !row.full_name ? '#dc2626' : '#1f2937' }}>{row.full_name || '⚠ Thiếu'}</td>
-                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: !row.email ? '#dc2626' : '#6b7280' }}>{row.email || '⚠ Thiếu'}</td>
-                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6' }}>
-                                    <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: '#f3f4f6', color: '#374151' }}>
+                                <tr key={i} style={{ background: hasError ? 'var(--danger-bg)' : 'transparent' }}>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', color: 'var(--muted-foreground)' }}>{row.rowIndex}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', fontFamily: 'monospace' }}>{row.student_id || '-'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', fontWeight: 500, color: !row.full_name ? 'var(--danger)' : 'var(--foreground)' }}>{row.full_name || '⚠ Thiếu'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', color: !row.email ? 'var(--danger)' : 'var(--muted-foreground)' }}>{row.email || '⚠ Thiếu'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)' }}>
+                                    <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: 'var(--muted)', color: 'var(--foreground)' }}>
                                       {ROLE_LABELS[row.role] || row.role}
                                     </span>
                                   </td>
-                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{row.department_code || '-'}</td>
-                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{row.class_code || '-'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', color: 'var(--muted-foreground)' }}>{row.department_code || '-'}</td>
+                                  <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', color: 'var(--muted-foreground)' }}>{row.class_code || '-'}</td>
                                 </tr>
                               );
                             })}
@@ -599,36 +599,36 @@ export function UsersTab() {
               {importResults && importStats && (
                 <div>
                   <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-                    <div style={{ flex: 1, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 16, textAlign: 'center' }}>
-                      <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>{importStats.successCount}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#15803d' }}>Thành công</div>
+                    <div style={{ flex: 1, background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--success)' }}>{importStats.successCount}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--success-foreground)' }}>Thành công</div>
                     </div>
-                    <div style={{ flex: 1, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 16, textAlign: 'center' }}>
-                      <div style={{ fontSize: 28, fontWeight: 800, color: '#dc2626' }}>{importStats.errorCount}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c' }}>Lỗi</div>
+                    <div style={{ flex: 1, background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--danger)' }}>{importStats.errorCount}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger-foreground)' }}>Lỗi</div>
                     </div>
-                    <div style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, textAlign: 'center' }}>
-                      <div style={{ fontSize: 28, fontWeight: 800, color: '#475569' }}>{importStats.total}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>Tổng cộng</div>
+                    <div style={{ flex: 1, background: 'var(--surface-muted)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--foreground)' }}>{importStats.total}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted-foreground)' }}>Tổng cộng</div>
                     </div>
                   </div>
 
                   {importStats.errorCount > 0 && (
-                    <div style={{ overflowX: 'auto', border: '1px solid #fecaca', borderRadius: 8, maxHeight: 300 }}>
+                    <div style={{ overflowX: 'auto', border: '1px solid var(--danger-border)', borderRadius: 8, maxHeight: 300 }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                         <thead>
-                          <tr style={{ background: '#fef2f2', position: 'sticky', top: 0 }}>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #fecaca' }}>Dòng</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #fecaca' }}>Họ tên</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #fecaca' }}>Lý do lỗi</th>
+                          <tr style={{ background: 'var(--danger-bg)', position: 'sticky', top: 0 }}>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--danger-border)' }}>Dòng</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--danger-border)' }}>Họ tên</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--danger-border)' }}>Lý do lỗi</th>
                           </tr>
                         </thead>
                         <tbody>
                           {importResults.filter(r => !r.success).map((r, i) => (
                             <tr key={i}>
-                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #fee2e2', color: '#9ca3af' }}>{r.rowIndex}</td>
-                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #fee2e2', fontWeight: 500 }}>{r.full_name || '-'}</td>
-                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #fee2e2', color: '#dc2626' }}>{r.message}</td>
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--danger-border)', color: 'var(--muted-foreground)' }}>{r.rowIndex}</td>
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--danger-border)', fontWeight: 500 }}>{r.full_name || '-'}</td>
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--danger-border)', color: 'var(--danger)' }}>{r.message}</td>
                             </tr>
                           ))}
                         </tbody>

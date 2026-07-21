@@ -289,7 +289,7 @@
   padding: 0 4px;
   border-radius: 9px;
   background: #ef4444;
-  color: #fff;
+  color: var(--primary-foreground);
   font-size: 9px;
   font-weight: 700;
   display: flex;
@@ -1173,13 +1173,13 @@
 }
 .sf-stepper-dot.active {
   background: var(--success);
-  color: #fff;
+  color: var(--primary-foreground);
   box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 .sf-stepper-dot.inactive {
   background: var(--muted);
   color: var(--muted-foreground);
-  border: 2px solid #e5e7eb;
+  border: 2px solid var(--border);
 }
 .sf-stepper-label {
   font-size: 12px;
@@ -1261,7 +1261,7 @@
 .sf-hero-stat-bar {
   width: 100%;
   height: 4px;
-  background: #e5e7eb;
+  background: var(--border);
   border-radius: 2px;
   margin-top: 6px;
   overflow: hidden;
@@ -1330,7 +1330,7 @@
   border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
-  background: #e5e7eb;
+  background: var(--border);
   color: var(--muted-foreground);
 }
 .sf-pill-tab.active .sf-pill-tab-badge {
@@ -1404,7 +1404,7 @@
 }
 .sf-card-code.root {
   background: var(--accent);
-  color: #fff;
+  color: var(--primary-foreground);
 }
 .sf-card-code.child { background: var(--muted); color: var(--muted-foreground); }
 .sf-card-parent-content {
@@ -1444,7 +1444,7 @@
 /* ── Leaf Card — Horizontal Layout ── */
 .sf-card-leaf {
   background: var(--surface);
-  border: 1px solid #f3f4f6;
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 14px;
   transition: all 0.2s ease;
@@ -1520,7 +1520,7 @@
   width: 64px;
   padding: 5px 8px;
   border-radius: 8px;
-  border: 1.5px solid #e5e7eb;
+  border: 1.5px solid var(--border);
   font-size: 14px;
   font-weight: 600;
   text-align: center;
@@ -1556,7 +1556,7 @@
   max-width: 240px;
   padding: 5px 10px;
   border-radius: 8px;
-  border: 1.5px solid #e5e7eb;
+  border: 1.5px solid var(--border);
   font-size: 12px;
   outline: none;
   transition: all 0.2s ease;
@@ -1584,7 +1584,7 @@
 }
 .sf-card-leaf-save.unsaved {
   background: var(--accent);
-  color: #fff;
+  color: var(--primary-foreground);
   box-shadow: 0 2px 8px rgba(94, 106, 210, 0.25);
 }
 .sf-card-leaf-save.unsaved:hover {
@@ -1645,7 +1645,7 @@
 }
 .sf-action-btn.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--primary-foreground);
   box-shadow: 0 4px 16px rgba(94, 106, 210, 0.3);
 }
 .sf-action-btn.primary:hover {
@@ -1654,7 +1654,7 @@
 }
 .sf-action-btn.success {
   background: var(--success);
-  color: #fff;
+  color: var(--primary-foreground);
   box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
 }
 .sf-action-btn.success:hover {
@@ -1823,7 +1823,7 @@
 }
 .sidebar-notif-btn:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  color: var(--primary-foreground);
 }
 .sidebar-notif-btn.collapsed {
   justify-content: center;
@@ -1840,7 +1840,7 @@
   top: -6px;
   right: -6px;
   background: #ef4444;
-  color: #fff;
+  color: var(--primary-foreground);
   font-size: 10px;
   font-weight: 700;
   padding: 2px 4px;
@@ -1920,7 +1920,7 @@
   display: flex;
   padding: 14px 16px;
   gap: 12px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background 0.2s;
   position: relative;
