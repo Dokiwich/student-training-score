@@ -1,24 +1,25 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { fetchWithCache, invalidateRequestCache } from '../lib/client-request-cache';
 import { getNotificationTargetUrl } from '../lib/notification-target';
+import { NOTIFICATION_EVENTS } from '../lib/notification-events';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, ClipboardCheck, Check, XCircle, ShieldCheck, MessageSquare, MessageSquareCheck, Calendar, Clock, Info, Bell, Loader2 } from 'lucide-react';
 
-const NOTIF_TYPE_META: Record<string, { icon: React.ReactNode; color: string }> = {
-  SCORE_SUBMITTED: { icon: <CheckCircle size={20} />, color: '#10b981' },
-  SCORE_REVIEWED: { icon: <ClipboardCheck size={20} />, color: '#d4af37' },
-  SCORE_APPROVED: { icon: <Check size={20} />, color: '#10b981' },
-  SCORE_REJECTED: { icon: <XCircle size={20} />, color: '#991b1b' },
-  SCORE_FINALIZED: { icon: <ShieldCheck size={20} />, color: '#10b981' },
-  APPEAL_SUBMITTED: { icon: <MessageSquare size={20} />, color: '#d4af37' },
-  APPEAL_RESOLVED: { icon: <MessageSquareCheck size={20} />, color: '#10b981' },
-  SCORING_OPENED: { icon: <Calendar size={20} />, color: '#991b1b' },
-  DEADLINE_REMINDER: { icon: <Clock size={20} />, color: '#f59e0b' },
-  SYSTEM_ANNOUNCEMENT: { icon: <Info size={20} />, color: '#2563eb' },
+const NOTIF_TYPE_META: Record<string, { icon: React.ReactNode; colorClass: string }> = {
+  SCORE_SUBMITTED: { icon: <CheckCircle size={20} />, colorClass: 'text-success' },
+  SCORE_REVIEWED: { icon: <ClipboardCheck size={20} />, colorClass: 'text-warning' },
+  SCORE_APPROVED: { icon: <Check size={20} />, colorClass: 'text-success' },
+  SCORE_REJECTED: { icon: <XCircle size={20} />, colorClass: 'text-danger' },
+  SCORE_FINALIZED: { icon: <ShieldCheck size={20} />, colorClass: 'text-success' },
+  APPEAL_SUBMITTED: { icon: <MessageSquare size={20} />, colorClass: 'text-warning' },
+  APPEAL_RESOLVED: { icon: <MessageSquareCheck size={20} />, colorClass: 'text-success' },
+  SCORING_OPENED: { icon: <Calendar size={20} />, colorClass: 'text-danger' },
+  DEADLINE_REMINDER: { icon: <Clock size={20} />, colorClass: 'text-warning' },
+  SYSTEM_ANNOUNCEMENT: { icon: <Info size={20} />, colorClass: 'text-info' },
 };
 
 function timeAgo(dateStr: string): string {
@@ -45,9 +46,15 @@ export default function NotificationsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  
+  const fetchIdRef = useRef(0);
+  const markAllInProgressRef = useRef(false);
 
   const fetchPage = useCallback(async (isLoadMore = false, forceRefresh = false, cursorToUse = nextCursor) => {
     if (!userId) return;
+    
+    fetchIdRef.current += 1;
+    const currentFetchId = fetchIdRef.current;
     
     if (isLoadMore) setLoadingMore(true);
     else setLoading(true);
@@ -60,8 +67,10 @@ export default function NotificationsPage() {
 
       const res = await fetchWithCache<any>(url, userId, { ttl: 30000, forceRefresh });
       
+      // If a newer fetch was started, discard these stale results
+      if (fetchIdRef.current !== currentFetchId) return;
+      
       if (isLoadMore) {
-        // Lọc trùng id
         setNotifications(prev => {
           const newItems = res.data.filter((newItem: any) => !prev.some((oldItem: any) => oldItem.id === newItem.id));
           return [...prev, ...newItems];
@@ -74,8 +83,10 @@ export default function NotificationsPage() {
     } catch (err) {
       console.error('Fetch error:', err);
     } finally {
-      if (isLoadMore) setLoadingMore(false);
-      else setLoading(false);
+      if (fetchIdRef.current === currentFetchId) {
+        if (isLoadMore) setLoadingMore(false);
+        else setLoading(false);
+      }
     }
   }, [userId, activeTab, nextCursor]);
 
@@ -88,17 +99,25 @@ export default function NotificationsPage() {
     // Call API with no cursor
     const doFetch = async () => {
       if (!userId) return;
+      
+      fetchIdRef.current += 1;
+      const currentFetchId = fetchIdRef.current;
       setLoading(true);
+      
       try {
         const url = `/api/notifications?filter=${activeTab}&limit=20`;
         const res = await fetchWithCache<any>(url, userId, { ttl: 30000 });
+        if (fetchIdRef.current !== currentFetchId) return;
+        
         setNotifications(res.data || []);
         setHasMore(res.hasMore);
         setNextCursor(res.nextCursor);
       } catch (err) {
         console.error(err);
       } finally {
-        setLoading(false);
+        if (fetchIdRef.current === currentFetchId) {
+          setLoading(false);
+        }
       }
     };
     doFetch();
@@ -106,28 +125,54 @@ export default function NotificationsPage() {
 
   const markAsRead = async (ids?: string[]) => {
     if (!userId) return;
+    
+    if (!ids && markAllInProgressRef.current) return;
+    if (!ids) markAllInProgressRef.current = true;
+
+    // Snapshot state for rollback
+    const prevNotifications = notifications;
 
     // Optimistic Update
-    setNotifications(prev => 
-      prev.map(n => {
-        if (!ids || ids.includes(n.id)) {
-          return { ...n, isRead: true };
-        }
-        return n;
-      })
-    );
+    setNotifications(prev => {
+      if (activeTab === 'unread') {
+        if (!ids) return [];
+        return prev.filter(n => !ids.includes(n.id));
+      } else {
+        return prev.map(n => {
+          if (!ids || ids.includes(n.id)) {
+            return { ...n, isRead: true };
+          }
+          return n;
+        });
+      }
+    });
 
     try {
       const body = ids ? { ids } : { markAllRead: true };
-      await fetch('/api/notifications', {
+      const response = await fetch('/api/notifications', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      
+      if (!response.ok) {
+        throw new Error('Failed to mark read');
+      }
+      
+      // Dispatch event to sync with Bell
+      window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENTS.UPDATED));
+      
+      // Force refresh data in background to keep nextCursor and list perfectly synced
       invalidateRequestCache(userId, '/api/notifications');
-      // The bell will update via its own polling/cache invalidation
     } catch (err) {
       console.error(err);
+      alert('Đã có lỗi xảy ra khi cập nhật thông báo.');
+      // Rollback
+      setNotifications(prevNotifications);
+    } finally {
+      if (!ids) {
+        markAllInProgressRef.current = false;
+      }
     }
   };
 
@@ -139,7 +184,7 @@ export default function NotificationsPage() {
     }
   };
 
-  const defaultMeta = { icon: <Bell size={20} />, color: '#6b7280' };
+  const defaultMeta = { icon: <Bell size={20} />, colorClass: 'text-muted-foreground' };
 
   return (
     <DashboardLayout pageTitle="Trung tâm Thông báo" breadcrumbs={[{ label: 'Thông báo' }]}>
@@ -194,7 +239,7 @@ export default function NotificationsPage() {
                     className={`flex items-start gap-4 p-6 transition-colors cursor-pointer hover:bg-surface-muted ${!n.isRead ? 'bg-primary-light/10' : ''}`}
                     onClick={() => handleItemClick(n)}
                   >
-                    <div className="shrink-0 p-2 rounded-full bg-surface shadow-sm border border-border" style={{ color: meta.color }}>
+                    <div className={`shrink-0 p-2 rounded-full bg-surface shadow-sm border border-border ${meta.colorClass}`}>
                       {meta.icon}
                     </div>
                     <div className="flex-1 min-w-0">

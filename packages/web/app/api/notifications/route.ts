@@ -17,10 +17,33 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   
   const filter = url.searchParams.get('filter'); // 'all' or 'unread'
-  // Support old unread_only for compatibility
-  const unreadOnly = filter === 'unread' || url.searchParams.get('unread_only') === 'true';
+  const unreadOnlyLegacy = url.searchParams.get('unread_only');
+  
+  if (filter !== null && filter !== 'all' && filter !== 'unread') {
+    return NextResponse.json({ message: 'Bộ lọc thông báo không hợp lệ' }, { status: 400 });
+  }
+
+  // Support old unread_only for compatibility. Priority to `filter`.
+  let unreadOnly = false;
+  if (filter === 'unread') {
+    unreadOnly = true;
+  } else if (filter === 'all') {
+    unreadOnly = false;
+  } else if (unreadOnlyLegacy === 'true') {
+    unreadOnly = true;
+  }
+
   const limitStr = url.searchParams.get('limit');
-  const limit = Math.min(Number(limitStr) || 20, 50);
+  const parsedLimit = Number(limitStr ?? 20);
+
+  if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 50) {
+    return NextResponse.json(
+      { message: 'limit phải là số nguyên từ 1 đến 50' },
+      { status: 400 }
+    );
+  }
+  
+  const limit = parsedLimit;
   const cursorParam = url.searchParams.get('cursor');
 
   let cursorCreatedAt: Date | null = null;
@@ -30,8 +53,22 @@ export async function GET(req: Request) {
     try {
       const decoded = Buffer.from(cursorParam, 'base64url').toString('utf-8');
       const parsed = JSON.parse(decoded);
-      if (!parsed.createdAt || !parsed.id || !UUID_REGEX.test(parsed.id)) {
-        throw new Error('Invalid cursor format');
+      
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('Cursor must be an object');
+      }
+      
+      const keys = Object.keys(parsed);
+      if (keys.length !== 2 || !keys.includes('createdAt') || !keys.includes('id')) {
+        throw new Error('Cursor must exactly contain createdAt and id');
+      }
+
+      if (typeof parsed.createdAt !== 'string' || typeof parsed.id !== 'string') {
+         throw new Error('Invalid types in cursor payload');
+      }
+
+      if (!UUID_REGEX.test(parsed.id)) {
+        throw new Error('Invalid cursor id format');
       }
       cursorCreatedAt = new Date(parsed.createdAt);
       if (isNaN(cursorCreatedAt.getTime())) {
@@ -127,8 +164,8 @@ export async function PATCH(req: Request) {
     const body = await req.json();
     const now = new Date();
 
-    const hasIds = Array.isArray(body.ids);
-    const hasMarkAll = typeof body.markAllRead === 'boolean' && body.markAllRead === true;
+    const hasIds = 'ids' in body;
+    const hasMarkAll = 'markAllRead' in body;
 
     if (!hasIds && !hasMarkAll) {
       return NextResponse.json({ message: 'Thiếu ids hoặc markAllRead' }, { status: 400 });
@@ -136,6 +173,18 @@ export async function PATCH(req: Request) {
 
     if (hasIds && hasMarkAll) {
       return NextResponse.json({ message: 'Không thể truyền cả ids và markAllRead đồng thời' }, { status: 400 });
+    }
+    
+    if (hasMarkAll && body.markAllRead !== true) {
+      return NextResponse.json({ message: 'markAllRead phải là true' }, { status: 400 });
+    }
+    
+    if (hasIds && !Array.isArray(body.ids)) {
+      return NextResponse.json({ message: 'ids phải là mảng' }, { status: 400 });
+    }
+    
+    if (hasIds && Array.isArray(body.ids) && body.ids.length === 0) {
+      return NextResponse.json({ message: 'ids không được rỗng' }, { status: 400 });
     }
 
     let updatedCount = 0;
@@ -153,7 +202,7 @@ export async function PATCH(req: Request) {
       }
 
       // Validate UUIDs
-      if (uniqueIds.some(id => !UUID_REGEX.test(id))) {
+      if (uniqueIds.some(id => typeof id !== 'string' || !UUID_REGEX.test(id))) {
         return NextResponse.json({ message: 'Định dạng ID không hợp lệ' }, { status: 400 });
       }
 

@@ -17,6 +17,7 @@ import { UserMenu } from './UserMenu';
 import { useSemester } from '../providers/SemesterProvider';
 import { fetchWithCache, invalidateRequestCache, clearUserRequestCache, StaleRequestError } from '../lib/client-request-cache';
 import { getNotificationTargetUrl } from '../lib/notification-target';
+import { NOTIFICATION_EVENTS } from '../lib/notification-events';
 import './dashboard.css';
 
 // ─── Trạng thái học kỳ ───────────────────────────────────────────────────────
@@ -146,17 +147,17 @@ interface NotificationItem {
   createdAt: string;
 }
 
-const NOTIF_TYPE_META: Record<string, { icon: React.ReactNode; color: string }> = {
-  SCORE_SUBMITTED: { icon: <CheckCircle size={16} />, color: '#10b981' },
-  SCORE_REVIEWED: { icon: <ClipboardCheck size={16} />, color: '#d4af37' },
-  SCORE_APPROVED: { icon: <Check size={16} />, color: '#10b981' },
-  SCORE_REJECTED: { icon: <XCircle size={16} />, color: '#991b1b' },
-  SCORE_FINALIZED: { icon: <ShieldCheck size={16} />, color: '#10b981' },
-  APPEAL_SUBMITTED: { icon: <MessageSquare size={16} />, color: '#d4af37' },
-  APPEAL_RESOLVED: { icon: <MessageSquareCheck size={16} />, color: '#10b981' },
-  SCORING_OPENED: { icon: <Calendar size={16} />, color: '#991b1b' },
-  DEADLINE_REMINDER: { icon: <Clock size={16} />, color: '#f59e0b' },
-  SYSTEM_ANNOUNCEMENT: { icon: <Info size={16} />, color: '#2563eb' },
+const NOTIF_TYPE_META: Record<string, { icon: React.ReactNode; colorClass: string }> = {
+  SCORE_SUBMITTED: { icon: <CheckCircle size={16} />, colorClass: 'text-success' },
+  SCORE_REVIEWED: { icon: <ClipboardCheck size={16} />, colorClass: 'text-warning' },
+  SCORE_APPROVED: { icon: <Check size={16} />, colorClass: 'text-success' },
+  SCORE_REJECTED: { icon: <XCircle size={16} />, colorClass: 'text-danger' },
+  SCORE_FINALIZED: { icon: <ShieldCheck size={16} />, colorClass: 'text-success' },
+  APPEAL_SUBMITTED: { icon: <MessageSquare size={16} />, colorClass: 'text-warning' },
+  APPEAL_RESOLVED: { icon: <MessageSquareCheck size={16} />, colorClass: 'text-success' },
+  SCORING_OPENED: { icon: <Calendar size={16} />, colorClass: 'text-danger' },
+  DEADLINE_REMINDER: { icon: <Clock size={16} />, colorClass: 'text-warning' },
+  SYSTEM_ANNOUNCEMENT: { icon: <Info size={16} />, colorClass: 'text-info' },
 };
 
 function timeAgo(dateStr: string): string {
@@ -314,9 +315,15 @@ function useNotifications(intervalMs = 60000) {
       }
     }, intervalMs);
 
+    const handleCustomEvent = () => {
+      fetchNotifications(true);
+    };
+    window.addEventListener(NOTIFICATION_EVENTS.UPDATED, handleCustomEvent);
+
     return () => { 
       clearInterval(timer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener(NOTIFICATION_EVENTS.UPDATED, handleCustomEvent);
     };
   }, [intervalMs, fetchNotifications, userId]);
 
@@ -362,7 +369,7 @@ function NotificationBell() {
     }
   };
 
-  const defaultMeta = { icon: <Bell size={14} />, color: '#6b7280' };
+  const defaultMeta = { icon: <Bell size={14} />, colorClass: 'text-muted-foreground' };
 
   return (
     <div className="relative" ref={panelRef}>
@@ -410,7 +417,7 @@ function NotificationBell() {
                       className={`p-4 flex gap-3 cursor-pointer hover:bg-surface-muted transition-colors ${!n.isRead ? 'bg-primary-light/30' : ''}`}
                       onClick={() => handleItemClick(n)}
                     >
-                      <div className="shrink-0 mt-0.5" style={{ color: meta.color }}>
+                      <div className={`shrink-0 mt-0.5 ${meta.colorClass}`}>
                         {meta.icon}
                       </div>
                       <div className="flex-1 min-w-0">

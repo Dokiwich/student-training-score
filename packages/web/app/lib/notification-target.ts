@@ -21,9 +21,6 @@ export function getNotificationTargetUrl(payload: NotificationPayload): string |
       if (currentRole === 'CLASS_COMMITTEE') {
         return studentId ? `/class-president/${studentId}` : '/class-president/dashboard';
       }
-      if (currentRole === 'ADVISOR') {
-        return studentId ? `/advisor/${studentId}` : '/advisor/reviews';
-      }
       break;
 
     case 'SCORE_REVIEWED':
@@ -36,10 +33,15 @@ export function getNotificationTargetUrl(payload: NotificationPayload): string |
       break;
 
     case 'SCORE_APPROVED':
-    case 'SCORE_REJECTED':
     case 'SCORE_FINALIZED':
       if (currentRole === 'STUDENT') {
         return '/student/history';
+      }
+      break;
+      
+    case 'SCORE_REJECTED':
+      if (currentRole === 'STUDENT') {
+        return '/student';
       }
       break;
 
@@ -59,6 +61,6 @@ export function getNotificationTargetUrl(payload: NotificationPayload): string |
       break;
   }
 
-  // Fallback to null if no matching route is found
+  // Fallback to null if no specific route is matched or if we just want it to be marked as read without navigating
   return null;
 }
