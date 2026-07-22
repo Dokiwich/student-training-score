@@ -13,6 +13,18 @@ export class ScoringController {
     return this.scoringService.getStudentListByUser(userId);
   }
 
+  @Get('class-committee/students')
+  async getClassCommitteeStudents(@Req() req: any, @Query('classId') requestedClassId?: string) {
+    const userId = req.user?.id;
+    return this.scoringService.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE', requestedClassId);
+  }
+
+  @Get('advisor/students')
+  async getAdvisorStudents(@Req() req: any, @Query('classId') requestedClassId?: string) {
+    const userId = req.user?.id;
+    return this.scoringService.getAuthorizedStudentList(userId, 'ADVISOR', requestedClassId);
+  }
+
   @Get('criteria')
   async getAllCriteria(@Query('semesterId') semesterId?: string) {
     return await this.scoringService.getAllCriteria(semesterId);

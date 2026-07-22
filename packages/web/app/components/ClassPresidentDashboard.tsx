@@ -20,7 +20,7 @@ export function ClassPresidentDashboard() {
 
     const fetchStudents = async () => {
       try {
-        const res = await fetch(`${API_BASE}/scoring/students`, {
+        const res = await fetch(`${API_BASE}/scoring/class-committee/students`, {
           headers: { 'Authorization': `Bearer ${customJwt}` },
         });
         if (res.ok) {

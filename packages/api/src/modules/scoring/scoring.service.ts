@@ -188,7 +188,7 @@ export class ScoringService {
   private async findSheetByStudent(studentId: string, semesterId?: string) {
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       targetSemesterId = activeSemester?.id;
     }
 
@@ -205,39 +205,48 @@ export class ScoringService {
   }
 
   // =============================================
-  // HELPER: Lấy active semester
+  // HELPER: Lấy active semester (Deterministic)
   // =============================================
-  private async getActiveSemester(): Promise<{ id: string } | null> {
-    return prisma.semesters.findFirst({
+  async resolveCurrentScoringSemester() {
+    const activeSemesters = await prisma.semesters.findMany({
       where: { is_active: 1 },
-      orderBy: { created_at: 'desc' },
-      select: { id: true },
+      orderBy: [
+        { start_date: 'desc' },
+        { created_at: 'desc' }
+      ],
+      select: {
+        id: true,
+        student_deadline: true,
+        class_committee_deadline: true,
+        advisor_deadline: true,
+        school_deadline: true,
+      }
     });
+
+    if (activeSemesters.length > 1) {
+      console.warn(`[WARNING] Multiple active semesters found. Using ${activeSemesters[0].id} deterministically.`);
+    }
+
+    return activeSemesters.length > 0 ? activeSemesters[0] : null;
   }
 
   // =============================================
   // HELPER: Lấy semester kèm thông tin deadline
   // =============================================
   private async getSemesterWithDeadlines(semesterId?: string) {
-    const selectFields = {
-      id: true,
-      student_deadline: true,
-      class_committee_deadline: true,
-      advisor_deadline: true,
-      school_deadline: true,
-    };
-
     if (semesterId) {
       return prisma.semesters.findUnique({
         where: { id: semesterId },
-        select: selectFields,
+        select: {
+          id: true,
+          student_deadline: true,
+          class_committee_deadline: true,
+          advisor_deadline: true,
+          school_deadline: true,
+        },
       });
     }
-    return prisma.semesters.findFirst({
-      where: { is_active: 1 },
-      orderBy: { created_at: 'desc' },
-      select: selectFields,
-    });
+    return this.resolveCurrentScoringSemester();
   }
 
   // =============================================
@@ -377,7 +386,7 @@ export class ScoringService {
     // Bước 2: Xác định semester
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       targetSemesterId = activeSemester?.id;
     }
     if (!targetSemesterId) {
@@ -410,58 +419,109 @@ export class ScoringService {
   }
 
   // =============================================
-  // 0. LẤY DANH SÁCH SINH VIÊN CÙNG LỚP
+  // HELPER: Phân giải phạm vi lớp học (Class Scope) cho BCS / CVHT
   // =============================================
-  async getStudentListByUser(userId: string) {
-    // Tìm user đang đăng nhập
-    const currentUser = await prisma.users.findFirst({
-      where: { id: userId },
-      include: { user_roles: { include: { roles: true } } },
-    });
-
-    if (!currentUser) {
-      return { message: 'Không tìm thấy người dùng', data: [] };
+  async resolveAssignedClassScope(
+    actorId: string,
+    roleContext: 'CLASS_COMMITTEE' | 'ADVISOR',
+    requestedClassId?: string
+  ) {
+    const activeSemester = await this.resolveCurrentScoringSemester();
+    if (!activeSemester) {
+      throw new BadRequestException('Không có học kỳ nào đang hoạt động.');
     }
 
-    // Xác định class_id qua semester_enrollments hoặc class_roles
-    let classIds: string[] = [];
-    const activeSemester = await this.getActiveSemester();
+    const roleCodes = roleContext === 'CLASS_COMMITTEE' 
+      ? ['MONITOR', 'VICE_MONITOR', 'SECRETARY'] 
+      : ['ADVISOR'];
 
-    const isDept = currentUser.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
-    if (isDept && currentUser.department_id) {
-      const deptClasses = await prisma.classes.findMany({
-        where: { department_id: currentUser.department_id },
-        select: { id: true },
+    const userRoles = await prisma.user_roles.findMany({
+      where: {
+        user_id: actorId,
+        is_active: 1,
+        roles: { code: { in: roleCodes } }
+      },
+      select: { entity_id: true }
+    });
+
+    let classIds = userRoles.map(r => r.entity_id).filter((id): id is string => Boolean(id));
+    
+    // Xác minh lớp tồn tại thực tế
+    if (classIds.length > 0) {
+      const validClasses = await prisma.classes.findMany({
+        where: { id: { in: classIds } },
+        select: { id: true }
       });
-      classIds = deptClasses.map((c) => c.id);
-    } else {
-      if (activeSemester) {
-        const enrollment = await prisma.semester_enrollments.findUnique({
-          where: {
-            user_id_semester_id: {
-              user_id: currentUser.id,
-              semester_id: activeSemester.id,
-            },
-          },
-          select: { class_id: true },
-        });
-        if (enrollment) {
-          classIds = [enrollment.class_id];
-        }
-      }
-
-      // Fallback: user_roles (cho ADVISOR)
-      if (classIds.length === 0) {
-        const userRoles = await prisma.user_roles.findMany({
-          where: { user_id: currentUser.id, is_active: 1 },
-          select: { entity_id: true },
-        });
-        classIds = userRoles.map((cr) => cr.entity_id as string).filter(Boolean);
-      }
+      classIds = validClasses.map(c => c.id);
     }
 
     if (classIds.length === 0) {
-      return { message: 'Không tìm thấy lớp phụ trách', data: [] };
+      throw new ForbiddenException(`Tài khoản không được phân công vai trò ${roleContext} cho bất kỳ lớp nào.`);
+    }
+
+    let selectedClassId = classIds[0];
+    if (classIds.length > 1) {
+      if (requestedClassId) {
+        if (!classIds.includes(requestedClassId)) {
+          throw new ForbiddenException('Bạn không có quyền thao tác trên lớp này.');
+        }
+        selectedClassId = requestedClassId;
+        classIds = [requestedClassId]; // Limit scope to the selected one
+      } else {
+        throw new BadRequestException('CLASS_CONTEXT_REQUIRED');
+      }
+    } else {
+      if (requestedClassId && requestedClassId !== selectedClassId) {
+        throw new ForbiddenException('Bạn không có quyền thao tác trên lớp này.');
+      }
+    }
+
+    return {
+      semesterId: activeSemester.id,
+      classIds: [selectedClassId], // For backend queries
+      selectedClassId
+    };
+  }
+
+  // =============================================
+  // HELPER: Phân giải phạm vi lớp học cho DEPARTMENT
+  // =============================================
+  async resolveDepartmentClassScope(actorId: string) {
+    const activeSemester = await this.resolveCurrentScoringSemester();
+    if (!activeSemester) {
+      throw new BadRequestException('Không có học kỳ nào đang hoạt động.');
+    }
+
+    const user = await prisma.users.findUnique({
+      where: { id: actorId },
+      include: { user_roles: { include: { roles: true } } }
+    });
+
+    const isDept = user?.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
+    if (!isDept || !user?.department_id) {
+      throw new ForbiddenException('Tài khoản không có quyền cấp Khoa.');
+    }
+
+    const deptClasses = await prisma.classes.findMany({
+      where: { department_id: user.department_id },
+      select: { id: true }
+    });
+
+    return {
+      semesterId: activeSemester.id,
+      classIds: deptClasses.map(c => c.id)
+    };
+  }
+
+  // =============================================
+  // API: LẤY DANH SÁCH SINH VIÊN (DÙNG CHUNG / MỚI)
+  // =============================================
+  async getAuthorizedStudentList(actorId: string, roleContext: 'CLASS_COMMITTEE' | 'ADVISOR' | 'DEPARTMENT', requestedClassId?: string) {
+    let scope;
+    if (roleContext === 'DEPARTMENT') {
+      scope = await this.resolveDepartmentClassScope(actorId);
+    } else {
+      scope = await this.resolveAssignedClassScope(actorId, roleContext, requestedClassId);
     }
 
     // ✅ PONYTAIL: Lấy toàn bộ danh mục và tiêu chí 1 lần duy nhất (tránh N+1 query)
@@ -473,8 +533,8 @@ export class ScoringService {
     // Lấy tất cả sinh viên cùng lớp qua semester_enrollments
     const enrollments = await prisma.semester_enrollments.findMany({
       where: {
-        class_id: { in: classIds },
-        ...(activeSemester ? { semester_id: activeSemester.id } : {}),
+        class_id: { in: scope.classIds },
+        semester_id: scope.semesterId,
         is_active: 1,
         users: {
           is_active: 1,
@@ -554,8 +614,36 @@ export class ScoringService {
     return {
       message: 'Lấy danh sách sinh viên thành công',
       data,
-      classId: classIds.length === 1 ? classIds[0] : classIds.join(','),
+      classId: scope.classIds[0], // backward compatibility
+      context: {
+        semesterId: scope.semesterId,
+        classIds: scope.classIds,
+        selectedClassId: (scope as any).selectedClassId || scope.classIds[0]
+      }
     };
+  }
+
+  // =============================================
+  // CŨ: GIỮ LẠI ĐỂ TRÁNH LỖI BACKWARD COMPATIBILITY
+  // =============================================
+  async getStudentListByUser(userId: string) {
+    try {
+      const user = await prisma.users.findUnique({
+        where: { id: userId },
+        include: { user_roles: { include: { roles: true } } }
+      });
+      if (!user) return { data: [] };
+      const isDept = user.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
+      if (isDept) return this.getAuthorizedStudentList(userId, 'DEPARTMENT');
+      const isAdvisor = user.user_roles.some(ur => ur.roles.code === 'ADVISOR' && ur.is_active === 1);
+      if (isAdvisor) return this.getAuthorizedStudentList(userId, 'ADVISOR');
+      return this.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE');
+    } catch (e: any) {
+      if (e.message === 'CLASS_CONTEXT_REQUIRED') {
+        throw new BadRequestException('CLASS_CONTEXT_REQUIRED');
+      }
+      return { message: e.message, data: [] };
+    }
   }
 
   // =============================================
@@ -564,7 +652,7 @@ export class ScoringService {
   async getAllCriteria(semesterId?: string) {
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       if (!activeSemester) {
         return {
           message: 'Không có học kỳ nào đang hoạt động',
@@ -635,13 +723,15 @@ export class ScoringService {
     if (targetSemesterId) {
       const enrollment = await this.resolveEnrollment(studentId, targetSemesterId);
       if (enrollment && enrollment.class_id) {
-        const isClassRole = actorRoles.some(r => 
-          ['MONITOR', 'VICE_MONITOR', 'SECRETARY', 'ADVISOR'].includes(r.roles.code) && 
-          r.entity_id === enrollment.class_id
-        );
-        if (isClassRole) {
+        try {
+          await this.resolveAssignedClassScope(actorId, 'CLASS_COMMITTEE', enrollment.class_id);
           return;
-        }
+        } catch { /* not a committee member for this class */ }
+        
+        try {
+          await this.resolveAssignedClassScope(actorId, 'ADVISOR', enrollment.class_id);
+          return;
+        } catch { /* not an advisor for this class */ }
       }
     }
 
@@ -655,7 +745,7 @@ export class ScoringService {
   async getScoresByFormId(formId: string, studentId: string, actorId: string, semesterId?: string) {
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       targetSemesterId = activeSemester.id;
     }
@@ -749,7 +839,7 @@ export class ScoringService {
       return;
     }
 
-    // 2. Nếu là CLASS_COMMITTEE hoặc ADVISOR, kiểm tra trong bảng class_roles
+    // 2. Nếu là CLASS_COMMITTEE hoặc ADVISOR, kiểm tra qua role assignment mới
     if (!targetSemesterId) {
       throw new BadRequestException('Không tìm thấy học kỳ hoạt động.');
     }
@@ -759,28 +849,13 @@ export class ScoringService {
       throw new BadRequestException('Không tìm thấy thông tin lớp học của sinh viên.');
     }
 
-    const classRoles = await prisma.user_roles.findMany({
-      where: {
-        user_id: actorId,
-        entity_id: enrollment.class_id,
-        is_active: 1,
-      },
-      include: { roles: true },
-    });
-
     if (requestedRole === 'CLASS_COMMITTEE') {
-      const isCommittee = classRoles.some(r => ['MONITOR', 'VICE_MONITOR', 'SECRETARY'].includes(r.roles.code));
-      if (!isCommittee) {
-        throw new ForbiddenException('Bạn không có quyền Ban cán sự tại lớp của sinh viên này.');
-      }
+      await this.resolveAssignedClassScope(actorId, 'CLASS_COMMITTEE', enrollment.class_id);
       return;
     }
 
     if (requestedRole === 'ADVISOR') {
-      const isAdvisor = classRoles.some(r => r.roles.code === 'ADVISOR');
-      if (!isAdvisor) {
-        throw new ForbiddenException('Bạn không phải là Cố vấn học tập của lớp này.');
-      }
+      await this.resolveAssignedClassScope(actorId, 'ADVISOR', enrollment.class_id);
       return;
     }
 
@@ -1508,7 +1583,7 @@ export class ScoringService {
   async getScoringProgress(studentId: string, actorId: string, sheetId?: string, semesterId?: string) {
     let targetSemesterId = semesterId;
     if (!targetSemesterId && !sheetId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ hoạt động');
       targetSemesterId = activeSemester.id;
     }
@@ -1645,7 +1720,7 @@ export class ScoringService {
 
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       targetSemesterId = activeSemester.id;
     }
@@ -1781,7 +1856,7 @@ export class ScoringService {
 
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       targetSemesterId = activeSemester.id;
     }

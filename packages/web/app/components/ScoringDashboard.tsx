@@ -268,7 +268,11 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${customJwt}`,
       };
-      const res = await fetch(`${API_BASE}/scoring/students`, { headers, credentials: 'include' });
+      let endpoint = `${API_BASE}/scoring/students`;
+      if (role === 'CLASS_COMMITTEE') endpoint = `${API_BASE}/scoring/class-committee/students`;
+      if (role === 'ADVISOR') endpoint = `${API_BASE}/scoring/advisor/students`;
+      
+      const res = await fetch(endpoint, { headers, credentials: 'include' });
       if (res.ok) {
         const json = await res.json();
         setStudents(json.data || []);
