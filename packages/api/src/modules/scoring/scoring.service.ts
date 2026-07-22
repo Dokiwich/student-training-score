@@ -424,11 +424,16 @@ export class ScoringService {
   async resolveAssignedClassScope(
     actorId: string,
     roleContext: 'CLASS_COMMITTEE' | 'ADVISOR',
+    mode: 'SINGLE_CLASS' | 'ALL_ASSIGNED_CLASSES',
     requestedClassId?: string
   ) {
     const activeSemester = await this.resolveCurrentScoringSemester();
     if (!activeSemester) {
       throw new BadRequestException('Không có học kỳ nào đang hoạt động.');
+    }
+
+    if (requestedClassId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedClassId)) {
+      throw new BadRequestException('ID lớp không hợp lệ.');
     }
 
     const roleCodes = roleContext === 'CLASS_COMMITTEE' 
@@ -446,11 +451,11 @@ export class ScoringService {
 
     let classIds = userRoles.map(r => r.entity_id).filter((id): id is string => Boolean(id));
     
-    // Xác minh lớp tồn tại thực tế
+    let validClasses: { id: string; name: string }[] = [];
     if (classIds.length > 0) {
-      const validClasses = await prisma.classes.findMany({
-        where: { id: { in: classIds } },
-        select: { id: true }
+      validClasses = await prisma.classes.findMany({
+        where: { id: { in: classIds }, is_active: 1 },
+        select: { id: true, name: true }
       });
       classIds = validClasses.map(c => c.id);
     }
@@ -459,28 +464,38 @@ export class ScoringService {
       throw new ForbiddenException(`Tài khoản không được phân công vai trò ${roleContext} cho bất kỳ lớp nào.`);
     }
 
-    let selectedClassId = classIds[0];
-    if (classIds.length > 1) {
-      if (requestedClassId) {
-        if (!classIds.includes(requestedClassId)) {
-          throw new ForbiddenException('Bạn không có quyền thao tác trên lớp này.');
-        }
-        selectedClassId = requestedClassId;
-        classIds = [requestedClassId]; // Limit scope to the selected one
-      } else {
-        throw new BadRequestException('CLASS_CONTEXT_REQUIRED');
-      }
-    } else {
-      if (requestedClassId && requestedClassId !== selectedClassId) {
-        throw new ForbiddenException('Bạn không có quyền thao tác trên lớp này.');
-      }
+    if (requestedClassId && !classIds.includes(requestedClassId)) {
+      throw new ForbiddenException('Bạn không có quyền thao tác trên lớp này.');
     }
 
-    return {
-      semesterId: activeSemester.id,
-      classIds: [selectedClassId], // For backend queries
-      selectedClassId
-    };
+    if (mode === 'SINGLE_CLASS') {
+      let selectedClassId = classIds[0];
+      if (classIds.length > 1) {
+        if (requestedClassId) {
+          selectedClassId = requestedClassId;
+        } else {
+          throw new BadRequestException({
+            code: 'CLASS_CONTEXT_REQUIRED',
+            message: 'Tài khoản được phân công nhiều lớp. Vui lòng chọn lớp.',
+            classes: validClasses
+          });
+        }
+      }
+      return {
+        semesterId: activeSemester.id,
+        classIds: [selectedClassId],
+        selectedClassId,
+        classes: validClasses.filter(c => c.id === selectedClassId)
+      };
+    } else {
+      const finalClassIds = requestedClassId ? [requestedClassId] : classIds;
+      return {
+        semesterId: activeSemester.id,
+        classIds: finalClassIds,
+        selectedClassId: requestedClassId || null,
+        classes: requestedClassId ? validClasses.filter(c => c.id === requestedClassId) : validClasses
+      };
+    }
   }
 
   // =============================================
@@ -516,12 +531,12 @@ export class ScoringService {
   // =============================================
   // API: LẤY DANH SÁCH SINH VIÊN (DÙNG CHUNG / MỚI)
   // =============================================
-  async getAuthorizedStudentList(actorId: string, roleContext: 'CLASS_COMMITTEE' | 'ADVISOR' | 'DEPARTMENT', requestedClassId?: string) {
+  async getAuthorizedStudentList(actorId: string, roleContext: 'CLASS_COMMITTEE' | 'ADVISOR' | 'DEPARTMENT', mode: 'SINGLE_CLASS' | 'ALL_ASSIGNED_CLASSES' = 'SINGLE_CLASS', requestedClassId?: string) {
     let scope;
     if (roleContext === 'DEPARTMENT') {
       scope = await this.resolveDepartmentClassScope(actorId);
     } else {
-      scope = await this.resolveAssignedClassScope(actorId, roleContext, requestedClassId);
+      scope = await this.resolveAssignedClassScope(actorId, roleContext, mode, requestedClassId);
     }
 
     // ✅ PONYTAIL: Lấy toàn bộ danh mục và tiêu chí 1 lần duy nhất (tránh N+1 query)
@@ -573,6 +588,22 @@ export class ScoringService {
       orderBy: { users: { full_name: 'asc' } },
     });
 
+    const contextPayload = {
+      semesterId: scope.semesterId,
+      classIds: scope.classIds,
+      selectedClassId: (scope as any).selectedClassId || scope.classIds[0] || null,
+      classes: (scope as any).classes || []
+    };
+
+    if (enrollments.length === 0) {
+      return {
+        message: 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại',
+        data: [],
+        reason: 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER',
+        context: contextPayload
+      };
+    }
+
     // Map dữ liệu gọn cho frontend
     const data = enrollments.map((e) => {
       const s = e.users;
@@ -614,12 +645,7 @@ export class ScoringService {
     return {
       message: 'Lấy danh sách sinh viên thành công',
       data,
-      classId: scope.classIds[0], // backward compatibility
-      context: {
-        semesterId: scope.semesterId,
-        classIds: scope.classIds,
-        selectedClassId: (scope as any).selectedClassId || scope.classIds[0]
-      }
+      context: contextPayload
     };
   }
 
@@ -627,23 +653,17 @@ export class ScoringService {
   // CŨ: GIỮ LẠI ĐỂ TRÁNH LỖI BACKWARD COMPATIBILITY
   // =============================================
   async getStudentListByUser(userId: string) {
-    try {
-      const user = await prisma.users.findUnique({
-        where: { id: userId },
-        include: { user_roles: { include: { roles: true } } }
-      });
-      if (!user) return { data: [] };
-      const isDept = user.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
-      if (isDept) return this.getAuthorizedStudentList(userId, 'DEPARTMENT');
-      const isAdvisor = user.user_roles.some(ur => ur.roles.code === 'ADVISOR' && ur.is_active === 1);
-      if (isAdvisor) return this.getAuthorizedStudentList(userId, 'ADVISOR');
-      return this.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE');
-    } catch (e: any) {
-      if (e.message === 'CLASS_CONTEXT_REQUIRED') {
-        throw new BadRequestException('CLASS_CONTEXT_REQUIRED');
-      }
-      return { message: e.message, data: [] };
-    }
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      include: { user_roles: { include: { roles: true } } }
+    });
+    if (!user) throw new ForbiddenException('Tài khoản không tồn tại.');
+    const isDept = user.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
+    if (isDept) return this.getAuthorizedStudentList(userId, 'DEPARTMENT');
+    const isAdvisor = user.user_roles.some(ur => ur.roles.code === 'ADVISOR' && ur.is_active === 1);
+    // Backward compatibility: use ALL_ASSIGNED_CLASSES for Advisor, SINGLE_CLASS for Class Committee
+    if (isAdvisor) return this.getAuthorizedStudentList(userId, 'ADVISOR');
+    return this.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE');
   }
 
   // =============================================
@@ -724,12 +744,12 @@ export class ScoringService {
       const enrollment = await this.resolveEnrollment(studentId, targetSemesterId);
       if (enrollment && enrollment.class_id) {
         try {
-          await this.resolveAssignedClassScope(actorId, 'CLASS_COMMITTEE', enrollment.class_id);
+          await this.resolveAssignedClassScope(actorId, 'CLASS_COMMITTEE', 'SINGLE_CLASS', enrollment.class_id);
           return;
         } catch { /* not a committee member for this class */ }
         
         try {
-          await this.resolveAssignedClassScope(actorId, 'ADVISOR', enrollment.class_id);
+          await this.resolveAssignedClassScope(actorId, 'ADVISOR', 'SINGLE_CLASS', enrollment.class_id);
           return;
         } catch { /* not an advisor for this class */ }
       }
@@ -850,12 +870,12 @@ export class ScoringService {
     }
 
     if (requestedRole === 'CLASS_COMMITTEE') {
-      await this.resolveAssignedClassScope(actorId, 'CLASS_COMMITTEE', enrollment.class_id);
+      await this.resolveAssignedClassScope(actorId, 'CLASS_COMMITTEE', 'SINGLE_CLASS', enrollment.class_id);
       return;
     }
 
     if (requestedRole === 'ADVISOR') {
-      await this.resolveAssignedClassScope(actorId, 'ADVISOR', enrollment.class_id);
+      await this.resolveAssignedClassScope(actorId, 'ADVISOR', 'SINGLE_CLASS', enrollment.class_id);
       return;
     }
 

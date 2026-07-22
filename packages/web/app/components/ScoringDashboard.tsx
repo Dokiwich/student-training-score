@@ -228,8 +228,11 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
   const meta = ROLE_META[role];
   const searchParams = useSearchParams();
   const selectedStudentId = searchParams ? searchParams.get('studentId') : null;
+  const urlClassId = searchParams ? searchParams.get('classId') : null;
   const router = useRouter();
   const pathname = usePathname();
+
+  const [contextRequired, setContextRequired] = useState<{ message: string, classes: {id: string, name: string}[] } | null>(null);
 
   // Bulk state
   const bulkActionInProgressRef = useRef(false);
@@ -263,6 +266,7 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
     if (!customJwt) return false;
     setIsLoading(true);
     setFetchError(null);
+    setContextRequired(null);
     try {
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
@@ -271,6 +275,9 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
       let endpoint = `${API_BASE}/scoring/students`;
       if (role === 'CLASS_COMMITTEE') endpoint = `${API_BASE}/scoring/class-committee/students`;
       if (role === 'ADVISOR') endpoint = `${API_BASE}/scoring/advisor/students`;
+      if (urlClassId) {
+        endpoint += `?classId=${urlClassId}`;
+      }
       
       const res = await fetch(endpoint, { headers, credentials: 'include' });
       if (res.ok) {
@@ -284,7 +291,23 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
           setTimeout(() => { signOut({ callbackUrl: '/login' }); }, 1500);
           return false;
         }
-        const errText = await res.text().catch(() => '');
+        
+        let jsonError: any = null;
+        try {
+          jsonError = await res.json();
+        } catch (e) {
+          // not json
+        }
+        
+        if (res.status === 400 && jsonError?.code === 'CLASS_CONTEXT_REQUIRED') {
+          setContextRequired({
+            message: jsonError.message || 'Vui lòng chọn lớp',
+            classes: jsonError.classes || []
+          });
+          return false;
+        }
+        
+        const errText = jsonError?.message || await res.text().catch(() => '');
         setFetchError(`Lỗi ${res.status}: ${errText}`);
         return false;
       }
@@ -294,7 +317,7 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
     } finally {
       setIsLoading(false);
     }
-  }, [session]);
+  }, [session, role, urlClassId]);
 
   useEffect(() => {
     fetchStudents();
@@ -518,8 +541,34 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
   const validationStats = getBulkValidationStats();
   const isBulkDisabled = bulkRecoveryState !== 'idle';
 
+  if (contextRequired) {
+    return (
+      <div className="p-8 max-w-lg mx-auto mt-12 text-center bg-surface border border-border rounded-2xl shadow-sm">
+        <div className="w-16 h-16 bg-primary-light text-primary flex items-center justify-center rounded-full mx-auto mb-4">
+          <Users size={32} />
+        </div>
+        <h2 className="text-xl font-bold mb-2 text-foreground">{contextRequired.message}</h2>
+        <p className="text-sm text-muted-foreground mb-6">Bạn được phân công nhiều lớp. Vui lòng chọn một lớp để xem danh sách sinh viên.</p>
+        <div className="flex flex-col gap-3">
+          {contextRequired.classes.map((cls: any) => (
+            <button
+              key={cls.id}
+              className="p-4 border border-border rounded-xl hover:bg-primary-light hover:border-primary/30 transition-all text-left flex items-center justify-between group"
+              onClick={() => {
+                const params = new URLSearchParams(searchParams?.toString() || '');
+                params.set('classId', cls.id);
+                router.push(`${pathname}?${params.toString()}`);
+              }}
+            >
+              <span className="font-semibold text-foreground group-hover:text-primary transition-colors">{cls.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-return (
+  return (
     <div className={`flex flex-col overflow-hidden ${showHeader ? 'h-full min-h-[600px]' : ''}`}>
       <div className="flex-1 flex flex-col min-h-0 bg-background relative">
         

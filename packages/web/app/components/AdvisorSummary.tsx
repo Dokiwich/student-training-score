@@ -54,7 +54,7 @@ export function AdvisorSummary() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${customJwt}`,
         };
-        const res = await fetch(`${API_BASE}/scoring/advisor/students`, { headers, credentials: 'include' });
+        const res = await fetch(`${API_BASE}/scoring/advisor/students?mode=ALL_ASSIGNED_CLASSES`, { headers, credentials: 'include' });
         if (res.ok) { const json = await res.json(); setStudents(json.data || []); }
       } finally { setIsLoading(false); }
     };

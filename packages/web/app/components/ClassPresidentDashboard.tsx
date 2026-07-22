@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
 import { Users, FileText, CheckCircle, Clock } from 'lucide-react';
 import { DashboardLayout } from './DashboardLayout';
@@ -10,8 +11,14 @@ const API_BASE = '/proxy-api';
 
 export function ClassPresidentDashboard() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const urlClassId = searchParams ? searchParams.get('classId') : null;
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [contextRequired, setContextRequired] = useState<{ message: string, classes: {id: string, name: string}[] } | null>(null);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -19,13 +26,30 @@ export function ClassPresidentDashboard() {
     if (!customJwt) return;
 
     const fetchStudents = async () => {
+      setLoading(true);
+      setContextRequired(null);
       try {
-        const res = await fetch(`${API_BASE}/scoring/class-committee/students`, {
+        let endpoint = `${API_BASE}/scoring/class-committee/students`;
+        if (urlClassId) {
+          endpoint += `?classId=${urlClassId}`;
+        }
+        const res = await fetch(endpoint, {
           headers: { 'Authorization': `Bearer ${customJwt}` },
         });
         if (res.ok) {
           const data = await res.json();
           setStudents(data.data || []);
+        } else if (res.status === 400) {
+          let jsonError: any = null;
+          try {
+            jsonError = await res.json();
+          } catch (e) {}
+          if (jsonError?.code === 'CLASS_CONTEXT_REQUIRED') {
+            setContextRequired({
+              message: jsonError.message || 'Vui lòng chọn lớp',
+              classes: jsonError.classes || []
+            });
+          }
         }
       } catch (err) {
         console.error('Failed to fetch class students', err);
@@ -34,7 +58,7 @@ export function ClassPresidentDashboard() {
       }
     };
     fetchStudents();
-  }, [session]);
+  }, [session, urlClassId]);
 
   const stats = useMemo(() => {
     const total = students.length;
@@ -70,6 +94,33 @@ export function ClassPresidentDashboard() {
 
   if (loading) {
     return <div className="p-8 text-center text-muted-foreground">Đang tải dữ liệu...</div>;
+  }
+
+  if (contextRequired) {
+    return (
+      <div className="p-8 max-w-lg mx-auto mt-12 text-center bg-surface border border-border rounded-2xl shadow-sm">
+        <div className="w-16 h-16 bg-primary-light text-primary flex items-center justify-center rounded-full mx-auto mb-4">
+          <Users size={32} />
+        </div>
+        <h2 className="text-xl font-bold mb-2 text-foreground">{contextRequired.message}</h2>
+        <p className="text-sm text-muted-foreground mb-6">Bạn được phân công nhiều lớp. Vui lòng chọn một lớp để xem tổng quan.</p>
+        <div className="flex flex-col gap-3">
+          {contextRequired.classes.map((cls: any) => (
+            <button
+              key={cls.id}
+              className="p-4 border border-border rounded-xl hover:bg-primary-light hover:border-primary/30 transition-all text-left flex items-center justify-between group"
+              onClick={() => {
+                const params = new URLSearchParams(searchParams?.toString() || '');
+                params.set('classId', cls.id);
+                router.push(`${pathname}?${params.toString()}`);
+              }}
+            >
+              <span className="font-semibold text-foreground group-hover:text-primary transition-colors">{cls.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -14,15 +14,15 @@ export class ScoringController {
   }
 
   @Get('class-committee/students')
-  async getClassCommitteeStudents(@Req() req: any, @Query('classId') requestedClassId?: string) {
+  async getClassCommitteeStudents(@Req() req: any, @Query('classId') requestedClassId?: string, @Query('mode') mode?: 'SINGLE_CLASS' | 'ALL_ASSIGNED_CLASSES') {
     const userId = req.user?.id;
-    return this.scoringService.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE', requestedClassId);
+    return this.scoringService.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE', mode || 'SINGLE_CLASS', requestedClassId);
   }
 
   @Get('advisor/students')
-  async getAdvisorStudents(@Req() req: any, @Query('classId') requestedClassId?: string) {
+  async getAdvisorStudents(@Req() req: any, @Query('classId') requestedClassId?: string, @Query('mode') mode?: 'SINGLE_CLASS' | 'ALL_ASSIGNED_CLASSES') {
     const userId = req.user?.id;
-    return this.scoringService.getAuthorizedStudentList(userId, 'ADVISOR', requestedClassId);
+    return this.scoringService.getAuthorizedStudentList(userId, 'ADVISOR', mode || 'SINGLE_CLASS', requestedClassId);
   }
 
   @Get('criteria')
