@@ -20,7 +20,7 @@ export function ClassPresidentDashboard() {
 
     const fetchStudents = async () => {
       try {
-        const res = await fetch(`${API_BASE}/scoring-history?role=CLASS_COMMITTEE`, {
+        const res = await fetch(`${API_BASE}/scoring/students`, {
           headers: { 'Authorization': `Bearer ${customJwt}` },
         });
         if (res.ok) {
@@ -52,7 +52,7 @@ export function ClassPresidentDashboard() {
       if (s.status === 'STUDENT_SUBMITTED' || s.status === 'CLASS_REVIEWING') {
         pendingReview++;
       }
-      if (['CLASS_REVIEWED', 'ADVISOR_REVIEWING', 'ADVISOR_APPROVED', 'ADVISOR_REJECTED', 'SCHOOL_REVIEWING', 'SCHOOL_APPROVED', 'SCHOOL_REJECTED', 'FINALIZED'].includes(s.status)) {
+      if (['CLASS_REVIEWED', 'CLASS_REJECTED', 'ADVISOR_REVIEWING', 'ADVISOR_APPROVED', 'ADVISOR_REJECTED', 'SCHOOL_REVIEWING', 'SCHOOL_APPROVED', 'SCHOOL_REJECTED', 'FINALIZED'].includes(s.status)) {
         reviewed++;
       }
       if (s.status === 'FINALIZED') finalized++;
