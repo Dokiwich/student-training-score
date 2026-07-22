@@ -29,10 +29,104 @@ interface StudentRow {
   classification: string | null;
 }
 
+export type TabType = 'all' | 'pending' | 'unscored' | 'scored';
+export type RoleType = 'CLASS_COMMITTEE' | 'ADVISOR';
+
+export function matchesTab(
+  student: { status: string },
+  activeTab: TabType,
+  role: RoleType
+): boolean {
+  const { status } = student;
+
+  switch (activeTab) {
+    case 'all':
+      return true;
+
+    case 'pending':
+      return status === 'NO_SHEET' || status === 'DRAFT';
+
+    case 'unscored':
+      if (role === 'CLASS_COMMITTEE') {
+        return status === 'STUDENT_SUBMITTED' || status === 'CLASS_REVIEWING';
+      }
+      return status === 'CLASS_REVIEWED' || status === 'ADVISOR_REVIEWING';
+
+    case 'scored':
+      if (role === 'CLASS_COMMITTEE') {
+        return (
+          status === 'CLASS_REVIEWED' ||
+          status === 'CLASS_REJECTED' ||
+          status === 'ADVISOR_REVIEWING' ||
+          status === 'ADVISOR_APPROVED' ||
+          status === 'ADVISOR_REJECTED' ||
+          status === 'SCHOOL_REVIEWING' ||
+          status === 'SCHOOL_APPROVED' ||
+          status === 'SCHOOL_REJECTED' ||
+          status === 'FINALIZED'
+        );
+      }
+      return (
+        status === 'ADVISOR_APPROVED' ||
+        status === 'ADVISOR_REJECTED' ||
+        status === 'SCHOOL_REVIEWING' ||
+        status === 'SCHOOL_APPROVED' ||
+        status === 'SCHOOL_REJECTED' ||
+        status === 'FINALIZED'
+      );
+
+    default:
+      return false;
+  }
+}
+
+export function getEmptyStateMessage({
+  role,
+  activeTab,
+  searchTerm,
+}: {
+  role: RoleType;
+  activeTab: TabType;
+  searchTerm: string;
+}) {
+  if (searchTerm.trim() !== '') {
+    return {
+      title: 'Không tìm thấy sinh viên',
+      description: 'Không có sinh viên nào khớp với từ khóa tìm kiếm.',
+    };
+  }
+
+  const roleTitle = role === 'ADVISOR' ? 'Cố vấn học tập' : 'Ban cán sự';
+
+  switch (activeTab) {
+    case 'unscored':
+      return {
+        title: 'Không có phiếu cần chấm',
+        description: `Hiện không có phiếu nào đang chờ ${roleTitle} đánh giá.`,
+      };
+    case 'scored':
+      return {
+        title: 'Chưa có phiếu đã chấm',
+        description: `Chưa có phiếu nào được ${roleTitle} đánh giá.`,
+      };
+    case 'pending':
+      return {
+        title: 'Không có sinh viên chưa nộp',
+        description: 'Tất cả sinh viên đã có phiếu rèn luyện.',
+      };
+    case 'all':
+    default:
+      return {
+        title: 'Danh sách sinh viên trống',
+        description: 'Chưa có sinh viên trong danh sách.',
+      };
+  }
+}
+
 interface ScoringDashboardProps {
-  role: 'CLASS_COMMITTEE' | 'ADVISOR';
+  role: RoleType;
   showHeader?: boolean;
-  defaultTab?: 'all' | 'pending' | 'unscored' | 'scored';
+  defaultTab?: TabType;
 }
 
 // ── Bulk types ──────────────────────────────────────────────────
@@ -239,53 +333,28 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
   }, [isDrawerOpen, handleCloseDrawer]);
 
   const filtered = useMemo(() => {
-    let result = students;
-    if (search) {
-      result = result.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()) || (s.studentCode || '').includes(search));
-    }
+    let result = students.filter((s) => matchesTab(s, activeTab, role));
 
-    if (activeTab === 'scored') {
-      if (role === 'CLASS_COMMITTEE') {
-        result = result.filter(s => s.status === 'CLASS_REVIEWED' || s.status === 'FINALIZED' || s.status === 'ADVISOR_REVIEWING' || s.status === 'ADVISOR_APPROVED');
-      } else {
-        result = result.filter(s => s.status === 'ADVISOR_APPROVED' || s.status === 'FINALIZED');
-      }
-    } else if (activeTab === 'unscored') {
-      if (role === 'CLASS_COMMITTEE') {
-        result = result.filter(s => s.status === 'STUDENT_SUBMITTED' || s.status === 'CLASS_REVIEWING');
-      } else {
-        result = result.filter(s => s.status === 'CLASS_REVIEWED' || s.status === 'ADVISOR_REVIEWING');
-      }
-    } else if (activeTab === 'pending') {
-      result = result.filter(s => s.status === 'NO_SHEET' || s.status === 'DRAFT');
+    const trimmedSearch = search.trim().toLowerCase();
+    if (trimmedSearch) {
+      result = result.filter(
+        (s) =>
+          s.name.toLowerCase().includes(trimmedSearch) ||
+          (s.studentCode || '').toLowerCase().includes(trimmedSearch)
+      );
     }
 
     return result;
-  }, [students, search, activeTab, role]);
+  }, [students, activeTab, role, search]);
 
   const stats = useMemo(() => {
     const total = students.length;
-    const submitted = students.filter((s) => s.status !== 'NO_SHEET' && s.status !== 'DRAFT').length;
-    
-    // Calculate counts for tabs
-    let scoredCount = 0;
-    let unscoredCount = 0;
-    let pendingCount = 0;
-    
-    students.forEach(s => {
-      if (s.status === 'NO_SHEET' || s.status === 'DRAFT') {
-        pendingCount++;
-      } else {
-        if (role === 'CLASS_COMMITTEE') {
-          if (['CLASS_REVIEWED', 'FINALIZED', 'ADVISOR_REVIEWING', 'ADVISOR_APPROVED'].includes(s.status)) scoredCount++;
-          else unscoredCount++;
-        } else {
-          if (['ADVISOR_APPROVED', 'FINALIZED'].includes(s.status)) scoredCount++;
-          else unscoredCount++;
-        }
-      }
-    });
-    
+    const submitted = students.filter((s) => !matchesTab(s, 'pending', role)).length;
+
+    const unscoredCount = students.filter((s) => matchesTab(s, 'unscored', role)).length;
+    const scoredCount = students.filter((s) => matchesTab(s, 'scored', role)).length;
+    const pendingCount = students.filter((s) => matchesTab(s, 'pending', role)).length;
+
     return { total, submitted, scoredCount, unscoredCount, pendingCount };
   }, [students, role]);
 
@@ -558,11 +627,20 @@ return (
               description={fetchError}
             />
           ) : filtered.length === 0 ? (
-            <EmptyState
-              icon={Users}
-              title="Không tìm thấy sinh viên"
-              description="Không có sinh viên nào khớp với điều kiện tìm kiếm hiện tại."
-            />
+            (() => {
+              const emptyMsg = getEmptyStateMessage({
+                role,
+                activeTab,
+                searchTerm: search,
+              });
+              return (
+                <EmptyState
+                  icon={search.trim() ? Search : Users}
+                  title={emptyMsg.title}
+                  description={emptyMsg.description}
+                />
+              );
+            })()
           ) : (
             <Card className="overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
