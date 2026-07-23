@@ -48,7 +48,7 @@ export type InvalidClassIdPayload = {
 
 export type ScoringStudentRow = {
   id: string;
-  studentCode: string;
+  studentCode: string | null;
   name: string;
   email: string | null;
   className: string | null;
@@ -160,7 +160,7 @@ export function isScoringStudentRow(value: unknown): value is ScoringStudentRow 
   if (!isRecord(value)) return false;
   
   if (typeof value.id !== 'string') return false;
-  if (typeof value.studentCode !== 'string') return false;
+  if (value.studentCode !== null && typeof value.studentCode !== 'string') return false;
   if (typeof value.name !== 'string') return false;
   if (value.email !== null && typeof value.email !== 'string') return false;
   if (value.className !== null && typeof value.className !== 'string') return false;

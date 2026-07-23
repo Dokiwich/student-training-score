@@ -260,6 +260,16 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
     setSelectedIds([]);
   }, [activeTab, search]);
 
+  const replaceClassIdInUrl = useCallback(
+    (nextClassId: string) => {
+      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      params.set('classId', nextClassId);
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
   const fetchStudents = useCallback(async (): Promise<boolean> => {
     if (!session?.user) return false;
     const customJwt = session.customJwt;
@@ -282,7 +292,7 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
           if (classesRes.type === 'success') {
             if (classesRes.context.classes.length === 1 && classSelectorOwner === 'self') {
                // Auto-select the only class if this dashboard owns the selector
-               router.replace(`${pathname}?classId=${classesRes.context.classes[0].id}`);
+               replaceClassIdInUrl(classesRes.context.classes[0].id);
                return false;
             }
             setState({
@@ -511,12 +521,11 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
       // Refresh list (don't block result dialog on refresh failure)
       fetchStudents();
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       window.clearTimeout(bulkTimeoutRef.current!);
       bulkTimeoutRef.current = null;
 
-      // Network error / AbortError → unknown outcome
-      const isAbort = err.name === 'AbortError';
+      const isAbort = err instanceof Error && err.name === 'AbortError';
       const message = isAbort
         ? 'Yêu cầu đã quá thời gian chờ. Đang kiểm tra lại trạng thái...'
         : 'Mất kết nối mạng. Đang kiểm tra lại trạng thái...';
@@ -585,15 +594,11 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
         <h2 className="text-xl font-bold mb-2 text-foreground">{state.message}</h2>
         <p className="text-sm text-muted-foreground mb-6">Bạn được phân công nhiều lớp. Vui lòng chọn một lớp để xem danh sách sinh viên.</p>
         <div className="flex flex-col gap-3">
-          {state.classes.map((cls: any) => (
+          {state.classes.map((cls) => (
             <button
               key={cls.id}
               className="p-4 border border-border rounded-xl hover:bg-primary-light hover:border-primary/30 transition-all text-left flex items-center justify-between group"
-              onClick={() => {
-                const params = new URLSearchParams(searchParams?.toString() || '');
-                params.set('classId', cls.id);
-                router.push(`${pathname}?${params.toString()}`);
-              }}
+              onClick={() => replaceClassIdInUrl(cls.id)}
             >
               <span className="font-semibold text-foreground group-hover:text-primary transition-colors">{cls.name}</span>
             </button>
@@ -603,7 +608,19 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
     );
   }
 
-  if (state.status === 'forbidden') {
+  if (state.status === 'ambiguous-role-context') {
+    return (
+      <div className="p-8 max-w-lg mx-auto mt-12 text-center bg-surface border border-border rounded-2xl shadow-sm">
+        <div className="w-16 h-16 bg-warning-bg text-warning flex items-center justify-center rounded-full mx-auto mb-4">
+          <FileWarning size={32} />
+        </div>
+        <h2 className="text-xl font-bold mb-2 text-foreground">Không xác định được phạm vi vai trò</h2>
+        <p className="text-sm text-muted-foreground mb-6">Tài khoản có nhiều phạm vi vai trò. Vui lòng truy cập đúng khu vực chức năng dành cho vai trò cần sử dụng.</p>
+      </div>
+    );
+  }
+
+  if (state.status === 'error' || state.status === 'forbidden') {
     return (
       <div className="p-8 max-w-lg mx-auto mt-12 text-center bg-destructive/10 border border-destructive/20 rounded-2xl shadow-sm">
         <div className="w-16 h-16 bg-destructive text-destructive-foreground flex items-center justify-center rounded-full mx-auto mb-4">
@@ -720,12 +737,6 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
                 <div key={i} className="h-16 bg-surface-muted animate-pulse rounded-xl" />
               ))}
             </div>
-          ) : state.status === 'error' ? (
-            <EmptyState
-              icon={FileWarning}
-              title="Lỗi tải dữ liệu"
-              description={state.message}
-            />
           ) : state.status === 'empty-enrollment' ? (
             <EmptyState
               icon={Users}

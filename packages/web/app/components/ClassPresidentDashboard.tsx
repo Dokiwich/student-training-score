@@ -77,7 +77,7 @@ export function ClassPresidentDashboard() {
   }, [session, urlClassId]);
 
   const stats = useMemo(() => {
-    let students: any[] = [];
+    let students: import('../lib/scoring-types').ScoringStudentRow[] = [];
     if (state.status === 'ready') {
       students = state.data;
     } else if (state.status === 'empty-enrollment') {
