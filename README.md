@@ -1,240 +1,394 @@
 <div align="center">
-  <img src="packages/web/public/assets/login/logo.png" alt="MIT UNI Logo" width="120" />
+  <img src="packages/web/public/assets/dash/logom.png" alt="MIT UNI" width="96" />
 
   <h1>Cổng Chấm Điểm Rèn Luyện</h1>
 
+  <p><strong>Student Training Evaluation System</strong></p>
+
   <p>
-    Nền tảng quản lý và số hóa quy trình đánh giá điểm rèn luyện sinh viên theo nhiều cấp độ xử lý.
+    Nền tảng số hóa quy trình tự đánh giá, xét duyệt và quản lý<br/>
+    điểm rèn luyện sinh viên theo nhiều cấp xử lý.
   </p>
 
   <p>
-    <strong>Sinh viên → Ban cán sự → Cố vấn học tập → Khoa → Nhà trường</strong>
+    Sinh viên · Ban cán sự · Cố vấn học tập · Khoa · Nhà trường
   </p>
 
-  <!-- Badges -->
   <p>
-    <img src="https://img.shields.io/badge/Next.js-000000?style=flat-square&logo=nextdotjs&logoColor=white" alt="Next.js" />
-    <img src="https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
-    <img src="https://img.shields.io/badge/NestJS-E0234E?style=flat-square&logo=nestjs&logoColor=white" alt="NestJS" />
-    <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
-    <img src="https://img.shields.io/badge/Prisma-2D3748?style=flat-square&logo=prisma&logoColor=white" alt="Prisma" />
-    <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-    <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
+    <img src="https://img.shields.io/badge/Next.js_16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Next.js" />
+    <img src="https://img.shields.io/badge/React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
+    <img src="https://img.shields.io/badge/NestJS_11-E0234E?style=for-the-badge&logo=nestjs&logoColor=white" alt="NestJS" />
+    <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+    <img src="https://img.shields.io/badge/Prisma-2D3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma" />
+    <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+    <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
   </p>
 </div>
 
----
+<p align="center">
+  <a href="#tổng-quan">Tổng quan</a> ·
+  <a href="#tính-năng-nổi-bật">Tính năng</a> ·
+  <a href="#quy-trình-nghiệp-vụ">Quy trình</a> ·
+  <a href="#kiến-trúc-hệ-thống">Kiến trúc</a> ·
+  <a href="#bắt-đầu-nhanh">Bắt đầu nhanh</a> ·
+  <a href="#đóng-góp">Đóng góp</a>
+</p>
 
-## Mục lục
-- [Tổng quan](#tổng-quan)
-- [Điểm nổi bật](#điểm-nổi-bật)
-- [Quy trình nghiệp vụ](#quy-trình-nghiệp-vụ)
-- [Vai trò người dùng](#vai-trò-người-dùng)
-- [Kiến trúc hệ thống](#kiến-trúc-hệ-thống)
-- [Công nghệ sử dụng](#công-nghệ-sử-dụng)
-- [Cấu trúc thư mục](#cấu-trúc-thư-mục)
-- [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
-- [Bắt đầu nhanh](#bắt-đầu-nhanh)
-- [Cấu hình môi trường](#cấu-hình-môi-trường)
-- [Các lệnh hữu ích](#các-lệnh-hữu-ích)
-- [Trạng thái dự án](#trạng-thái-dự-án)
-- [Bảo mật](#bảo-mật)
-- [Đóng góp](#đóng-góp)
+> [!IMPORTANT]
+> Dự án đang trong quá trình phát triển và hoàn thiện.
+> API, giao diện và cấu trúc dữ liệu có thể tiếp tục thay đổi.
 
 ---
 
 ## Tổng quan
 
-**Cổng Chấm Điểm Rèn Luyện** là hệ thống web hỗ trợ số hóa toàn bộ quy trình tự đánh giá và phê duyệt điểm rèn luyện của sinh viên tại MIT UNI. Mỗi phiếu đánh giá được xử lý theo một luồng phân quyền rõ ràng, minh bạch từ sinh viên đến Ban cán sự, Cố vấn học tập, Khoa và Nhà trường.
+**Cổng Chấm Điểm Rèn Luyện** là hệ thống web hỗ trợ số hóa toàn bộ quy trình tự đánh giá và phê duyệt điểm rèn luyện của sinh viên. Mỗi phiếu đánh giá được xử lý theo một luồng phân quyền nhiều cấp — từ sinh viên tự chấm, qua Ban cán sự lớp, Cố vấn học tập, đến cấp Khoa và Nhà trường.
 
-Hệ thống được thiết kế theo kiến trúc **monorepo**, cho phép tách bạch rõ ràng giữa ứng dụng giao diện (Next.js) và dịch vụ xử lý nghiệp vụ backend (NestJS), đảm bảo tính nhất quán của workflow, khả năng lưu vết điều chỉnh, và phân giải phạm vi lớp an toàn ở cấp độ máy chủ.
+Hệ thống được tổ chức theo kiến trúc **monorepo**, cho phép frontend (Next.js), backend (NestJS), database (Prisma) và shared types cùng phát triển trong một repository duy nhất. Cơ chế phân giải phạm vi lớp được xử lý hoàn toàn phía server, đảm bảo mỗi người dùng chỉ truy cập được đúng dữ liệu trong phạm vi được phân công.
 
-## Điểm nổi bật
+### Bài toán
 
-- **Workflow đánh giá nhiều cấp:** Trạng thái phiếu thay đổi tuần tự từ `DRAFT` đến `FINALIZED`.
-- **Phân giải phạm vi lớp phía server:** Ngăn chặn tuyệt đối việc người dùng truy cập hoặc sửa điểm của lớp không được phân công.
-- **Bulk actions:** Ban cán sự và Cố vấn học tập có thể duyệt hàng loạt nhiều phiếu cùng lúc.
-- **Theo dõi tiến độ:** Từng trạng thái chấm điểm được cập nhật thời gian thực trên giao diện.
-- **Dark mode:** Giao diện hỗ trợ cả hai chế độ sáng tối với Next Themes.
-- **Export báo cáo:** Hỗ trợ xuất dữ liệu ra định dạng XLSX cho việc lưu trữ và thống kê.
-- **Dashboard chuyên biệt:** Giao diện hiển thị thống kê được thiết kế riêng cho từng cấp quản lý (Ban cán sự, CVHT, Khoa, Admin).
+Quy trình chấm điểm rèn luyện truyền thống thường dựa trên biểu mẫu giấy hoặc bảng tính, gây ra nhiều bất cập:
+
+- Khó theo dõi phiếu đang ở cấp xử lý nào.
+- Quyền xem và chấm điểm không được giới hạn rõ ràng theo lớp, khoa.
+- Thiếu lịch sử điều chỉnh khi có tranh chấp hoặc khiếu nại.
+- Tổng hợp kết quả theo lớp, khoa, học kỳ tốn nhiều công sức thủ công.
+
+Hệ thống này giải quyết các vấn đề trên bằng cách số hóa toàn bộ luồng xử lý, phân quyền chặt chẽ và lưu vết mọi thao tác.
+
+---
+
+## Tính năng nổi bật
+
+| Nhóm chức năng | Mô tả |
+| :--- | :--- |
+| **Quy trình nhiều cấp** | Phiếu đánh giá đi qua các trạng thái từ Nháp → Nộp → Duyệt BCS → Duyệt CVHT → Hoàn tất, có hỗ trợ xóa/reset để làm lại. |
+| **Dashboard theo vai trò** | Giao diện thống kê riêng cho Sinh viên, Ban cán sự, Cố vấn học tập, Khoa và Quản trị viên. |
+| **Phân quyền phạm vi lớp** | Backend xác định lớp được phân công dựa trên role assignment; client không thể tự chọn lớp ngoài phạm vi. |
+| **Duyệt hàng loạt** | Ban cán sự và Cố vấn học tập có thể thao tác bulk trên nhiều phiếu cùng lúc. |
+| **Quản lý học kỳ & tiêu chí** | Tạo học kỳ, thiết lập deadline, áp dụng bộ tiêu chí chấm điểm theo phiên bản. |
+| **Khiếu nại & phúc khảo** | Sinh viên có thể gửi khiếu nại sau khi phiếu được hoàn tất; hệ thống lưu audit log đầy đủ. |
+| **Thông báo** | Hệ thống thông báo nội bộ cho các sự kiện liên quan đến phiếu đánh giá. |
+| **Xuất báo cáo** | Hỗ trợ export dữ liệu ra định dạng XLSX phục vụ lưu trữ và thống kê. |
+| **Dark mode** | Giao diện hỗ trợ chuyển đổi sáng/tối thông qua `next-themes`. |
+| **Responsive** | Giao diện thích ứng nhiều kích thước màn hình với Tailwind CSS. |
+
+---
 
 ## Quy trình nghiệp vụ
 
-Luồng chuyển trạng thái chuẩn của một phiếu đánh giá rèn luyện:
+Luồng xử lý phiếu đánh giá dựa trên state machine được định nghĩa trong mã nguồn:
 
 ```mermaid
 flowchart LR
-    A[Sinh viên<br/>tự đánh giá]
-    B[Ban cán sự lớp<br/>kiểm tra]
-    C[Cố vấn học tập<br/>đánh giá]
-    D[Hoàn tất<br/>(Dự kiến)]
+    DRAFT["Nháp"]
+    SUBMITTED["Sinh viên<br/>đã nộp"]
+    CLASS_ING["Ban cán sự<br/>đang duyệt"]
+    CLASS_ED["Ban cán sự<br/>đã duyệt"]
+    ADV_ING["CVHT<br/>đang duyệt"]
+    ADV_ED["CVHT<br/>đã duyệt"]
+    SCH_ING["Nhà trường<br/>đang duyệt"]
+    FINAL["Hoàn tất"]
+    APPEAL["Khiếu nại"]
 
-    A -->|Nộp phiếu| B
-    B -->|Duyệt| C
-    B -.->|Trả lại| A
-    C -->|Duyệt| D
-    C -.->|Trả lại| B
+    DRAFT -->|Nộp| SUBMITTED
+    SUBMITTED -->|Bắt đầu duyệt| CLASS_ING
+    CLASS_ING -->|Duyệt| CLASS_ED
+    CLASS_ED -->|Bắt đầu duyệt| ADV_ING
+    ADV_ING -->|Duyệt| ADV_ED
+    ADV_ED -->|Bắt đầu duyệt| SCH_ING
+    SCH_ING -->|Duyệt| FINAL
+    FINAL -->|Khiếu nại| APPEAL
+    APPEAL -->|Giải quyết| FINAL
 ```
 
-- Phiếu chỉ được nộp trong thời hạn học kỳ.
-- Người dùng ở từng vai trò chỉ có thể can thiệp điểm khi trạng thái phiếu thuộc quyền xử lý của mình.
-- Khi phiếu bị trả lại (Reject), sinh viên hoặc cấp xử lý trước đó sẽ phải chỉnh sửa và nộp lại.
+- Ở mỗi giai đoạn, chỉ người dùng có vai trò tương ứng mới được thao tác.
+- Phiếu có thể bị xóa/reset bởi cấp có quyền để sinh viên tạo lại từ đầu (không có trạng thái "trả lại" trung gian).
+- Deadline học kỳ giới hạn thời gian sinh viên được phép nộp và chỉnh sửa phiếu.
+- Mọi thao tác chuyển trạng thái đều được ghi vào `audit_logs`.
+
+---
 
 ## Vai trò người dùng
 
-| Vai trò | Trách nhiệm chính |
-| :--- | :--- |
-| **Sinh viên** | Tự chấm điểm, nộp phiếu và theo dõi kết quả. Thực hiện khiếu nại nếu cần. |
-| **Ban cán sự** | *(Bao gồm Lớp trưởng, Lớp phó, Bí thư)*: Kiểm tra, duyệt hoặc điều chỉnh điểm cho sinh viên trong lớp được phân công. |
-| **Cố vấn học tập** | Đánh giá và chốt điểm cho các lớp mình quản lý (có thể quản lý nhiều lớp). |
-| **Khoa** | Quản lý tiến độ chấm điểm của Khoa, import sinh viên/lớp, theo dõi và tổng hợp dữ liệu. |
-| **Quản trị trường** | Thiết lập học kỳ, bộ tiêu chí, phân quyền người dùng và xuất báo cáo toàn trường. |
+| Vai trò | Phạm vi | Trách nhiệm chính |
+| :--- | :--- | :--- |
+| **Sinh viên** | Phiếu cá nhân | Tự chấm điểm theo tiêu chí, nộp phiếu, theo dõi tiến độ và gửi khiếu nại. |
+| **Ban cán sự** | Lớp được phân công | Rà soát và duyệt phiếu sinh viên trong lớp. Gồm các chức danh: Lớp trưởng, Lớp phó, Bí thư. |
+| **Cố vấn học tập** | Các lớp được phân công | Đánh giá và chốt điểm cho sinh viên các lớp mình quản lý (có thể phụ trách nhiều lớp). |
+| **Khoa** | Các lớp thuộc khoa | Import sinh viên/lớp, theo dõi tiến độ chấm điểm và quản lý nhân sự thuộc khoa. |
+| **Quản trị trường** | Toàn hệ thống | Thiết lập học kỳ, bộ tiêu chí, phân quyền người dùng, xuất báo cáo và phê duyệt cuối. |
+
+> **Phân giải phạm vi lớp phía server:** Quyền truy cập dữ liệu không được suy ra từ phía client. Backend xác định danh sách lớp của người dùng dựa trên bảng phân công, và mọi endpoint — từ danh sách, chi tiết đến thao tác đơn lẻ hay hàng loạt — đều áp dụng cùng nguyên tắc kiểm tra phạm vi.
+
+---
 
 ## Kiến trúc hệ thống
 
-Dự án được cấu trúc theo dạng Monorepo sử dụng npm workspaces.
+Dự án được tổ chức theo dạng monorepo với npm workspaces:
 
 ```mermaid
 flowchart TB
-    WEB[Next.js Web Application]
-    API[NestJS REST API]
-    SHARED[Shared Types & Validation]
-    DBPKG[Prisma Database Package]
-    POSTGRES[(PostgreSQL)]
+    USER(["Người dùng"])
+    WEB["<strong>packages/web</strong><br/>Next.js 16 · React 19"]
+    PROXY["Proxy Rewrite<br/>/proxy-api → API"]
+    API["<strong>packages/api</strong><br/>NestJS 11 · REST"]
+    SHARED["<strong>packages/shared</strong><br/>Types · Zod · Constants"]
+    DB["<strong>packages/database</strong><br/>Prisma ORM · Client"]
+    PG[("PostgreSQL")]
 
-    WEB --> API
-    WEB --> SHARED
-    API --> SHARED
-    API --> DBPKG
-    DBPKG --> POSTGRES
+    USER --> WEB
+    WEB --> PROXY
+    PROXY --> API
+    WEB -.-> SHARED
+    API -.-> SHARED
+    API --> DB
+    DB --> PG
 ```
+
+| Package | Vai trò |
+| :--- | :--- |
+| `packages/web` | Ứng dụng giao diện Next.js với App Router, NextAuth, Tailwind CSS và các dashboard chuyên biệt theo vai trò. |
+| `packages/api` | Dịch vụ backend NestJS xử lý toàn bộ logic nghiệp vụ, phân quyền, workflow và API endpoints. |
+| `packages/database` | Prisma schema, database client wrapper và migrations. Được cả Web và API sử dụng. |
+| `packages/shared` | Các kiểu dữ liệu, hằng số workflow và Zod schemas dùng chung để đảm bảo tính nhất quán. |
+
+---
 
 ## Công nghệ sử dụng
 
-| Lớp | Công nghệ |
-| :--- | :--- |
-| **Frontend** | Next.js (v16), React (v19), TypeScript, Tailwind CSS (v4) |
-| **Backend** | NestJS (v11), TypeScript |
-| **Authentication** | NextAuth, JWT, bcrypt |
-| **Database** | PostgreSQL, Prisma ORM |
-| **Validation** | class-validator, class-transformer |
-| **UI Components** | Lucide React, next-themes |
-| **Export/Import** | SheetJS (xlsx) |
-| **Tooling** | npm workspaces, dotenv-cli |
+| Lớp | Công nghệ | Vai trò |
+| :--- | :--- | :--- |
+| **Web** | Next.js 16, React 19, TypeScript | Giao diện với App Router và Server/Client Components |
+| **Styling** | Tailwind CSS 4, next-themes | Hệ thống thiết kế responsive, hỗ trợ dark mode |
+| **API** | NestJS 11, TypeScript | REST API với ValidationPipe, global exception filter |
+| **Authentication** | NextAuth, JWT, bcrypt | Xác thực phiên và mã hóa mật khẩu |
+| **Database** | PostgreSQL, Prisma ORM | Quản lý schema, truy vấn type-safe, migrations |
+| **Validation** | class-validator, Zod | Kiểm tra dữ liệu đầu vào phía server và shared schemas |
+| **Security** | Helmet, HPP, express-rate-limit | HTTP headers, chống tham số trùng, giới hạn request |
+| **Export** | SheetJS (xlsx) | Xuất dữ liệu báo cáo ra bảng tính |
+| **UI** | Lucide React | Bộ icon nhất quán |
+| **Tooling** | npm workspaces, dotenv-cli | Quản lý monorepo và biến môi trường |
+
+---
 
 ## Cấu trúc thư mục
 
 ```text
 student-training-score/
 ├── packages/
-│   ├── api/          # NestJS backend (REST API, logic nghiệp vụ, bảo mật)
-│   ├── web/          # Next.js frontend (Giao diện UI, client rendering)
-│   ├── database/     # Prisma schema, migrations và database client wrapper
-│   └── shared/       # Types, constants và schemas dùng chung cho cả FE & BE
-├── Dockerfile.api    # Dockerfile cho API Server
-├── Dockerfile.web    # Dockerfile cho Web App
-├── .env.example
-└── package.json      # Monorepo root
+│   ├── web/              # Next.js frontend
+│   │   ├── app/          # App Router: pages, API routes, components
+│   │   └── public/       # Static assets, logos
+│   ├── api/              # NestJS backend
+│   │   └── src/modules/  # auth, scoring, workflow, appeal, department
+│   ├── database/         # Prisma schema và client
+│   │   └── prisma/       # schema.prisma, migrations
+│   └── shared/           # Constants, validators, types dùng chung
+├── Dockerfile.api        # Multi-stage Docker build cho API
+├── Dockerfile.web        # Multi-stage Docker build cho Web
+├── .env.example          # Mẫu biến môi trường
+└── package.json          # Monorepo root với workspace scripts
 ```
+
+---
 
 ## Yêu cầu hệ thống
 
-- Node.js phiên bản LTS hiện đại (đáp ứng Next.js 16 và NestJS 11).
-- npm với hỗ trợ workspaces.
-- Cơ sở dữ liệu PostgreSQL.
+- **Node.js** 20 LTS (Dockerfiles sử dụng `node:20-bookworm-slim`)
+- **npm** có hỗ trợ workspaces
+- **PostgreSQL** đang chạy và có thể kết nối
+
+---
 
 ## Bắt đầu nhanh
 
-Để thiết lập môi trường phát triển trên máy cá nhân:
+### 1. Clone và cài đặt
 
-**Bước 1: Clone repository và cài đặt dependencies**
 ```bash
 git clone https://github.com/Dokiwich/student-training-score.git
 cd student-training-score
 npm install
 ```
 
-**Bước 2: Cấu hình biến môi trường**
-Trên Windows (PowerShell):
-```powershell
-Copy-Item .env.example .env
-```
-Trên MacOS/Linux:
+### 2. Cấu hình môi trường
+
+macOS / Linux:
+
 ```bash
 cp .env.example .env
 ```
-Mở tệp `.env` và cập nhật thông tin kết nối Database.
 
-**Bước 3: Khởi tạo cơ sở dữ liệu**
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Mở tệp `.env` và cập nhật các giá trị — đặc biệt là `DATABASE_URL`. Xem bảng [Biến môi trường](#biến-môi-trường) bên dưới.
+
+> [!WARNING]
+> Tệp `.env.example` mặc định `PORT=3000`, nhưng mã nguồn API thực tế mặc định cổng `3001` khi biến `PORT` không được đặt. Đồng thời Next.js cũng mặc định cổng `3000`. Khuyến nghị đặt `PORT=3001` trong `.env` để tránh xung đột.
+
+### 3. Khởi tạo cơ sở dữ liệu
+
 ```bash
 npm run db:generate
 npm run db:push
 ```
 
-**Bước 4: Chạy ứng dụng**
-Khởi chạy API backend ở Terminal 1:
+Lệnh `db:push` đồng bộ Prisma schema trực tiếp vào database — phù hợp cho môi trường phát triển.
+
+### 4. Chạy ứng dụng
+
+Mở hai terminal riêng biệt:
+
+**Terminal 1 — API Backend:**
+
 ```bash
 npm run dev:api
 ```
-Khởi chạy ứng dụng Web ở Terminal 2:
+
+**Terminal 2 — Web Frontend:**
+
 ```bash
 npm run dev:web
 ```
-Ứng dụng sẽ hoạt động tại `http://localhost:3000` (Web) và API tại cổng `3001` hoặc cổng do bạn cấu hình.
 
-## Cấu hình môi trường
+Sau khi khởi chạy:
 
-Tệp `.env` cần chứa các cấu hình quan trọng sau đây:
+- Web: `http://localhost:3000`
+- API: `http://localhost:3001` (hoặc cổng trong `PORT`)
 
-| Biến | Bắt buộc | Mô tả | Ví dụ |
+---
+
+## Biến môi trường
+
+| Biến | Bắt buộc | Package | Mô tả |
 | :--- | :---: | :--- | :--- |
-| `DATABASE_URL` | Có | Chuỗi kết nối đến PostgreSQL | `postgresql://user:pass@localhost:5432/dgrl_mit` |
-| `PORT` | Không | Cổng chạy API Backend (Mặc định: 3001) | `3001` |
-| `NEXT_PUBLIC_API_URL`| Không | URL kết nối API cho Frontend | `http://localhost:3001/api` |
-| `NEXTAUTH_SECRET` | Có | Chuỗi bí mật mã hóa Session/JWT | *(Tạo ngẫu nhiên)* |
-| `NEXTAUTH_URL` | Có | URL ứng dụng Next.js | `http://localhost:3000` |
-| `MAILEROO_API_KEY` | Không | API Key gửi thông báo qua email | *(Bảo mật)* |
-| `EMAIL_SENDER` | Không | Email người gửi hệ thống | `noreply@student.mit.vn` |
+| `DATABASE_URL` | Có | database, api | Chuỗi kết nối PostgreSQL. Ví dụ: `postgresql://user:pass@localhost:5432/dgrl_mit` |
+| `PORT` | Không | api | Cổng API. Mặc định trong code: `3001` |
+| `NEXTAUTH_SECRET` | Có | web, api | Chuỗi bí mật cho JWT/session. Tạo bằng `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | Có | web, api | URL ứng dụng Next.js. Ví dụ: `http://localhost:3000` |
+| `NEXT_PUBLIC_API_URL` | Không | web | URL gốc API cho proxy rewrite. Mặc định: `http://127.0.0.1:3001` |
+| `MAILEROO_API_KEY` | Không | api | API key dịch vụ gửi email (nếu sử dụng) |
+| `EMAIL_SENDER` | Không | api | Địa chỉ email người gửi hệ thống |
+
+---
 
 ## Các lệnh hữu ích
 
-Tại thư mục gốc, bạn có thể chạy các script sau:
+Chạy từ thư mục gốc repository:
 
 | Lệnh | Công dụng |
 | :--- | :--- |
-| `npm run dev:web` | Khởi chạy frontend ở chế độ development |
-| `npm run dev:api` | Khởi chạy backend ở chế độ development |
-| `npm run db:generate` | Tạo mới Prisma Client dựa trên schema |
-| `npm run db:push` | Đồng bộ Schema trực tiếp vào Database (Development) |
-| `npm run db:studio` | Mở Prisma Studio để xem và quản lý dữ liệu |
-| `npm run build --workspace=packages/api` | Build dự án Backend |
-| `npm run build --workspace=packages/web` | Build dự án Frontend |
+| `npm run dev:web` | Khởi chạy frontend development server |
+| `npm run dev:api` | Khởi chạy backend development server |
+| `npm run db:generate` | Tạo Prisma Client từ schema hiện tại |
+| `npm run db:push` | Đồng bộ schema vào database (development) |
+| `npm run db:studio` | Mở Prisma Studio — giao diện quản lý dữ liệu trực quan |
+| `npm run build --workspace=packages/web` | Build production cho frontend |
+| `npm run build --workspace=packages/api` | Build production cho backend |
+| `npm run lint --workspace=packages/web` | Kiểm tra lint cho frontend |
+
+---
+
+<details>
+<summary><strong>Docker</strong></summary>
+
+Repository cung cấp Dockerfile multi-stage riêng cho Web và API (sử dụng `node:20-bookworm-slim`). Hiện chưa có `docker-compose.yml`.
+
+**Build API:**
+
+```bash
+docker build -f Dockerfile.api -t student-score-api .
+```
+
+**Build Web:**
+
+```bash
+docker build \
+  -f Dockerfile.web \
+  --build-arg NEXT_PUBLIC_API_URL=http://your-api-host:3001 \
+  -t student-score-web .
+```
+
+**Chạy:**
+
+```bash
+# API (cần truyền biến môi trường)
+docker run -p 3001:3001 \
+  -e DATABASE_URL="postgresql://..." \
+  -e NEXTAUTH_SECRET="..." \
+  -e NEXTAUTH_URL="http://localhost:3000" \
+  student-score-api
+
+# Web
+docker run -p 3000:3000 student-score-web
+```
+
+</details>
+
+---
 
 ## Trạng thái dự án
 
-> [!IMPORTANT]
-> Dự án đang trong quá trình phát triển và hoàn thiện các module nghiệp vụ (Phase 5+). Cấu trúc Database schema, API route và giao diện Dashboard có thể tiếp tục thay đổi để đáp ứng thực tế.
+| Hạng mục | Trạng thái |
+| :--- | :--- |
+| Authentication & phân quyền | ✅ Đã triển khai |
+| Workflow chấm điểm nhiều cấp | ✅ Đã triển khai |
+| Dashboard theo vai trò | ✅ Đã triển khai |
+| Phân giải phạm vi lớp phía server | ✅ Đã triển khai |
+| Quản lý học kỳ & tiêu chí | ✅ Đã triển khai |
+| Khiếu nại & phúc khảo | ✅ Đã triển khai |
+| Export XLSX | ✅ Đã triển khai |
+| Thông báo | ✅ Đã triển khai |
+| Automated tests | ⚠️ Một phần |
+| Production deployment | Chưa công bố |
 
-Repository có cung cấp cấu hình `Dockerfile.web` và `Dockerfile.api` nhằm hỗ trợ đóng gói môi trường.
+---
 
 ## Bảo mật
 
-Hệ thống được thiết kế lưu tâm đến vấn đề an toàn:
-- Sử dụng các middleware bảo mật cơ bản phía Backend (`helmet`, `hpp`, `express-rate-limit`).
-- Token JWT được bảo vệ chặt chẽ và không lưu trữ mật khẩu plaintext.
-- **Lưu ý:** Tuyệt đối không commit tệp `.env` hay chia sẻ `NEXTAUTH_SECRET` vào mã nguồn chung. Báo cáo mọi lỗ hổng trực tiếp thông qua kênh nội bộ của team.
+- Không commit tệp `.env` hoặc chia sẻ `NEXTAUTH_SECRET`.
+- Backend sử dụng Helmet, HPP và rate limiting (100 request/15 phút).
+- Input validation qua `ValidationPipe` với `whitelist` và `forbidNonWhitelisted`.
+- Mật khẩu được hash bằng bcrypt, không lưu plaintext.
+- Thay đổi thông tin tài khoản seed trước khi triển khai.
+- Chỉ sử dụng dữ liệu giả trong quá trình phát triển.
+
+---
 
 ## Đóng góp
 
-Để tham gia đóng góp cho dự án:
 1. Fork repository.
-2. Tạo nhánh tính năng (`feature/them-chuc-nang` hoặc `fix/sua-loi`).
-3. Commit mã nguồn theo quy chuẩn Conventional Commits.
-4. Đảm bảo mã nguồn không có lỗi bằng cách chạy build cho cả `packages/web` và `packages/api`.
-5. Tạo Pull Request mô tả rõ vấn đề giải quyết.
+2. Tạo branch theo quy cách: `feature/...`, `fix/...`, `docs/...`
+3. Commit theo [Conventional Commits](https://www.conventionalcommits.org/):
+   ```text
+   feat(scoring): thêm chức năng duyệt hàng loạt
+   fix(auth): sửa lỗi hết hạn token
+   docs(readme): cập nhật hướng dẫn cài đặt
+   ```
+4. Chạy build để xác nhận không có lỗi:
+   ```bash
+   npm run build --workspace=packages/api
+   npm run build --workspace=packages/web
+   ```
+5. Tạo Pull Request kèm mô tả rõ ràng.
+
+---
+
+## Giấy phép
+
+Repository hiện chưa công bố giấy phép mã nguồn ở cấp dự án.
+Vui lòng liên hệ chủ sở hữu trước khi sử dụng lại hoặc phân phối.
+
+---
 
 <div align="center">
-  <br/>
-  <sub>Xây dựng nhằm minh bạch hóa và tự động hóa quy trình đánh giá chất lượng sinh viên.</sub>
+  <sub>
+    Xây dựng hướng tới một quy trình đánh giá rèn luyện
+    minh bạch, nhất quán và dễ theo dõi hơn.
+  </sub>
 </div>
