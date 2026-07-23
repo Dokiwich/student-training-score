@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
 import { StatusBadge } from './ui/StatusBadge';
 import { Input } from './ui/Input';
 import { EmptyState } from './ui/EmptyState';
+import { ScoringStudentRow } from '../lib/scoring-types';
 import { BulkActionModal } from './BulkActionModal';
 import { BulkResultDialog } from './BulkResultDialog';
 
@@ -15,19 +16,7 @@ import { Search, Users, CheckCircle, Clock, FileWarning, X, RefreshCw } from 'lu
 
 const API_BASE = '/proxy-api';
 
-interface StudentRow {
-  id: string;
-  studentCode: string | null;
-  name: string;
-  email: string;
-  formId: string | null;
-  status: string;
-  studentTotal: number | null;
-  classTotal: number | null;
-  advisorTotal: number | null;
-  finalTotal: number | null;
-  classification: string | null;
-}
+
 
 export type TabType = 'all' | 'pending' | 'unscored' | 'scored';
 export type RoleType = 'CLASS_COMMITTEE' | 'ADVISOR';
@@ -174,14 +163,14 @@ type BulkActionResponse = {
 type BulkRecoveryState = 'idle' | 'checking' | 'failed';
 
 // ── Eligibility helpers ─────────────────────────────────────────
-const canBulkApprove = (student: StudentRow, role: 'CLASS_COMMITTEE' | 'ADVISOR') => {
+const canBulkApprove = (student: ScoringStudentRow, role: 'CLASS_COMMITTEE' | 'ADVISOR') => {
   if (!student.formId) return false;
   if (role === 'CLASS_COMMITTEE' && student.status === 'STUDENT_SUBMITTED') return true;
   if (role === 'ADVISOR' && student.status === 'CLASS_REVIEWED') return true;
   return false;
 };
 
-const canBulkReject = (student: StudentRow, role: 'CLASS_COMMITTEE' | 'ADVISOR') => {
+const canBulkReject = (student: ScoringStudentRow, role: 'CLASS_COMMITTEE' | 'ADVISOR') => {
   if (!student.formId) return false;
   if (role === 'CLASS_COMMITTEE' && ['STUDENT_SUBMITTED', 'CLASS_REVIEWING'].includes(student.status)) return true;
   if (role === 'ADVISOR' && ['STUDENT_SUBMITTED', 'CLASS_REVIEWING', 'CLASS_REVIEWED', 'ADVISOR_REVIEWING', 'ADVISOR_APPROVED'].includes(student.status)) return true;
@@ -227,7 +216,7 @@ const BULK_TIMEOUT_MS = 45_000;
 export function ScoringDashboard(props: ScoringDashboardProps) {
   const { showHeader = true, defaultTab = 'all', classSelectorOwner, scopeContext: role } = props;
   const { data: session } = useSession();
-  const [state, setState] = useState<import('../lib/scoring-types').ClassDataState<StudentRow>>({ status: 'loading' });
+  const [state, setState] = useState<import('../lib/scoring-types').ClassDataState<import('../lib/scoring-types').ScoringStudentRow>>({ status: 'loading' });
   
   const [search, setSearch] = useState('');
   
@@ -281,26 +270,28 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
     let endpoint = `${API_BASE}/scoring/students`;
     if (role === 'CLASS_COMMITTEE') {
       endpoint = `${API_BASE}/scoring/class-committee/students`;
+      if (urlClassId) endpoint += `?classId=${urlClassId}`;
     } else if (role === 'ADVISOR') {
       if (props.scopeMode === 'SINGLE_CLASS') {
-        endpoint = `${API_BASE}/scoring/advisor/classes/students`;
+        endpoint = urlClassId 
+          ? `${API_BASE}/scoring/advisor/classes/${urlClassId}/students`
+          : `${API_BASE}/scoring/advisor/classes/students`;
       } else {
         endpoint = `${API_BASE}/scoring/advisor/students`;
       }
     }
-    
-    if (props.scopeMode === 'SINGLE_CLASS' && urlClassId) {
-      endpoint += `?classId=${urlClassId}`;
-    }
 
     const { fetchClassScopedStudents } = await import('../lib/fetch-helpers');
-    const res = await fetchClassScopedStudents<StudentRow>(endpoint, customJwt);
+    const res = await fetchClassScopedStudents<import('../lib/scoring-types').ScoringStudentRow>(endpoint, customJwt);
     
     if (res.type === 'success') {
       if (res.context.reason === 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER') {
         setState({
           status: 'empty-enrollment',
-          message: 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại',
+          title: 'Danh sách sinh viên trống',
+          message: role === 'ADVISOR' && props.scopeMode === 'ALL_ASSIGNED_CLASSES' 
+            ? 'Các lớp được phân công chưa có danh sách sinh viên trong học kỳ hiện tại.' 
+            : 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại.',
           context: res.context
         });
         return false;
@@ -711,7 +702,7 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
           ) : state.status === 'empty-enrollment' ? (
             <EmptyState
               icon={Users}
-              title="Lớp trống"
+              title="Chưa có danh sách sinh viên"
               description={state.message}
             />
           ) : filtered.length === 0 ? (

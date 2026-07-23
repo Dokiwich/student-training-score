@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
-
 const API_BASE = '/proxy-api';
+import { fetchClassScopedStudents } from '../lib/fetch-helpers';
 
 interface StudentSummary {
   id: string;
@@ -38,7 +38,7 @@ const CLS_COLORS: Record<string, { bg: string; color: string }> = {
 
 export function AdvisorSummary() {
   const { data: session } = useSession();
-  const [state, setState] = useState<import('../lib/scoring-types').ClassDataState<StudentSummary>>({ status: 'loading' });
+  const [state, setState] = useState<import('../lib/scoring-types').ClassDataState<import('../lib/scoring-types').ScoringStudentRow>>({ status: 'loading' });
   const [notes, setNotes] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -48,8 +48,8 @@ export function AdvisorSummary() {
 
     const fetchData = async () => {
       setState({ status: 'loading' });
-      const { fetchClassScopedStudents } = await import('../lib/fetch-helpers');
-      const res = await fetchClassScopedStudents<StudentSummary>(`${API_BASE}/scoring/advisor/students`, customJwt);
+      const customJwt = (session as any)?.customJwt;
+      const res = await fetchClassScopedStudents<import('../lib/scoring-types').ScoringStudentRow>(`${API_BASE}/scoring/advisor/students`, customJwt);
       if (res.type === 'success') {
         if (res.context.reason === 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER') {
           setState({
@@ -107,6 +107,18 @@ export function AdvisorSummary() {
 
   if (state.status === 'error' || state.status === 'forbidden') {
     return <div className="p-4 bg-danger-bg text-danger-foreground rounded-lg">Lỗi: {state.message}</div>;
+  }
+
+  if (state.status === 'empty-enrollment') {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl shadow-sm border border-gray-100 text-center">
+        <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có danh sách sinh viên</h3>
+        <p className="text-gray-500 max-w-md">Các lớp được phân công chưa có danh sách sinh viên trong học kỳ hiện tại.</p>
+      </div>
+    );
   }
 
   return (

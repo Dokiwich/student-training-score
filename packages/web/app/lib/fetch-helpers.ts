@@ -1,4 +1,4 @@
-import { AssignedClass, StudentListContext } from './scoring-types';
+import { AssignedClass, StudentListContext, isClassContextRequiredPayload, isClassScopeForbiddenPayload, isStudentListResponse } from './scoring-types';
 
 export type FetchClassScopedStudentsResult<T> =
   | {
@@ -34,7 +34,7 @@ export async function fetchClassScopedStudents<T>(
     const res = await fetch(endpoint, options);
     
     // Attempt to parse JSON regardless of status, as our API should return JSON errors.
-    let json: any = null;
+    let json: unknown = null;
     let text = '';
     try {
       text = await res.text();
@@ -48,7 +48,7 @@ export async function fetchClassScopedStudents<T>(
     }
 
     if (!res.ok) {
-      if (json?.code === 'CLASS_CONTEXT_REQUIRED') {
+      if (isClassContextRequiredPayload(json)) {
         return {
           type: 'class-context-required',
           message: json.message || 'Yêu cầu chọn lớp học',
@@ -56,36 +56,37 @@ export async function fetchClassScopedStudents<T>(
         };
       }
 
-      if (json?.code === 'CLASS_SCOPE_FORBIDDEN' || res.status === 403) {
+      if (isClassScopeForbiddenPayload(json) || res.status === 403) {
         return {
           type: 'forbidden',
-          message: json?.message || 'Tài khoản chưa được phân công quản lý lớp này.',
+          message: isClassScopeForbiddenPayload(json) ? json.message : 'Tài khoản chưa được phân công quản lý lớp này.',
         };
       }
 
+      const errorMsg = (typeof json === 'object' && json !== null && 'message' in json) ? (json as any).message : `Lỗi máy chủ (${res.status})`;
       return {
         type: 'error',
-        message: json?.message || `Lỗi máy chủ (${res.status})`,
+        message: errorMsg,
       };
     }
 
     // Success case (HTTP 20x)
-    if (!json?.data || !json?.context) {
+    if (!isStudentListResponse(json)) {
        return { type: 'error', message: 'Dữ liệu trả về không đúng định dạng.' };
     }
 
     return {
       type: 'success',
-      data: json.data,
-      context: json.context,
+      data: (json as any).data,
+      context: (json as any).context,
     };
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
       return { type: 'error', message: 'Yêu cầu bị hủy.' };
     }
     return {
       type: 'error',
-      message: error.message || 'Lỗi mạng hoặc không thể kết nối đến máy chủ.',
+      message: error instanceof Error ? error.message : 'Lỗi mạng hoặc không thể kết nối đến máy chủ.',
     };
   }
 }

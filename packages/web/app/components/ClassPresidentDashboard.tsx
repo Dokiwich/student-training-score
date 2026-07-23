@@ -17,11 +17,11 @@ export function ClassPresidentDashboard() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [state, setState] = useState<ClassDataState<any>>({ status: 'loading' });
+  const [state, setState] = useState<ClassDataState<import('../lib/scoring-types').ScoringStudentRow>>({ status: 'loading' });
 
   const fetchStudents = async () => {
     if (!session?.user) return;
-    const customJwt = (session as any)?.customJwt;
+    const customJwt = (session as { customJwt?: string })?.customJwt;
     if (!customJwt) return;
 
     setState({ status: 'loading' });
@@ -30,13 +30,14 @@ export function ClassPresidentDashboard() {
       endpoint += `?classId=${urlClassId}`;
     }
 
-    const res = await fetchClassScopedStudents<any>(endpoint, customJwt);
+    const res = await fetchClassScopedStudents<import('../lib/scoring-types').ScoringStudentRow>(endpoint, customJwt);
     
     if (res.type === 'success') {
       if (res.context.reason === 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER') {
         setState({
           status: 'empty-enrollment',
-          message: 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại',
+          title: 'Danh sách sinh viên trống',
+          message: 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại.',
           context: res.context
         });
       } else {
@@ -123,7 +124,7 @@ export function ClassPresidentDashboard() {
         <h2 className="text-xl font-bold mb-2 text-foreground">{state.message}</h2>
         <p className="text-sm text-muted-foreground mb-6">Bạn được phân công nhiều lớp. Vui lòng chọn một lớp để xem tổng quan.</p>
         <div className="flex flex-col gap-3">
-          {state.classes.map((cls: any) => (
+          {state.classes.map((cls) => (
             <button
               key={cls.id}
               className="p-4 border border-border rounded-xl hover:bg-primary-light hover:border-primary/30 transition-all text-left flex items-center justify-between group"
@@ -168,17 +169,22 @@ export function ClassPresidentDashboard() {
     );
   }
 
+  if (state.status === 'empty-enrollment') {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 bg-surface rounded-xl shadow-sm border border-border text-center">
+        <div className="w-16 h-16 bg-muted flex items-center justify-center rounded-full mb-4">
+          <Users size={32} className="text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold text-foreground mb-2">{state.title || 'Danh sách sinh viên trống'}</h3>
+        <p className="text-muted-foreground max-w-md">{state.message}</p>
+      </div>
+    );
+  }
+
   if (!stats) return null;
 
   return (
     <div className="space-y-6">
-      {state.status === 'empty-enrollment' && (
-        <div className="p-4 mb-4 bg-info-bg text-info rounded-lg border border-info-bg/50">
-          <AlertCircle className="inline mr-2" size={20} />
-          {state.message}
-        </div>
-      )}
-      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="shadow-sm border-border">
           <CardContent className="p-6 flex items-center gap-4">

@@ -2,6 +2,16 @@ import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/com
 import { prisma } from '@student-score/database';
 import { randomUUID } from 'crypto';
 
+
+const ASSIGNED_ROLE_CODES = {
+  CLASS_COMMITTEE: [
+    'MONITOR',
+    'VICE_MONITOR',
+    'SECRETARY',
+  ],
+  ADVISOR: ['ADVISOR'],
+};
+
 export type SubmissionValidationError = {
   criterionId: number | null;
   code:
@@ -437,8 +447,8 @@ export class ScoringService {
     }
 
     const roleCodes = roleContext === 'CLASS_COMMITTEE' 
-      ? ['MONITOR', 'VICE_MONITOR', 'SECRETARY'] 
-      : ['ADVISOR'];
+      ? ASSIGNED_ROLE_CODES.CLASS_COMMITTEE 
+      : ASSIGNED_ROLE_CODES.ADVISOR;
 
     const userRoles = await prisma.user_roles.findMany({
       where: {
@@ -671,8 +681,10 @@ export class ScoringService {
     if (!user) throw new ForbiddenException('Tài khoản không tồn tại.');
     
     const isDept = user.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
-    const isAdvisor = user.user_roles.some(ur => ur.roles.code === 'ADVISOR' && ur.is_active === 1);
-    const isClassCommittee = user.user_roles.some(ur => ur.roles.code === 'CLASS_COMMITTEE' && ur.is_active === 1);
+    const isAdvisor = user.user_roles.some(ur => ASSIGNED_ROLE_CODES.ADVISOR.includes(ur.roles.code as any) && ur.is_active === 1);
+    const isClassCommittee = user.user_roles.some(ur => 
+      ASSIGNED_ROLE_CODES.CLASS_COMMITTEE.includes(ur.roles.code as any) && ur.is_active === 1
+    );
     
     const activeRolesCount = [isDept, isAdvisor, isClassCommittee].filter(Boolean).length;
     
@@ -1265,9 +1277,9 @@ export class ScoringService {
       include: { roles: true }
     });
     
-    const monitorRoleCodes = ['MONITOR', 'VICE_MONITOR', 'SECRETARY'];
-    const monitorIds = new Set(classRoles.filter(r => monitorRoleCodes.includes(r.roles.code)).map(r => r.user_id));
-    const advisorIds = new Set(classRoles.filter(r => r.roles.code === 'ADVISOR').map(r => r.user_id));
+    const monitorRoleCodes = ASSIGNED_ROLE_CODES.CLASS_COMMITTEE;
+    const monitorIds = new Set(classRoles.filter(r => monitorRoleCodes.includes(r.roles.code as any)).map(r => r.user_id));
+    const advisorIds = new Set(classRoles.filter(r => ASSIGNED_ROLE_CODES.ADVISOR.includes(r.roles.code as any)).map(r => r.user_id));
 
     const inferActorRole = (aId: string) => {
       if (aId === form.semester_enrollments.user_id) return 'STUDENT';
