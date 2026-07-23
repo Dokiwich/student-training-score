@@ -1,8 +1,0 @@
-fix(scoring): close final phase 5.5 frontend state gaps
-
-- Fix remaining `any` types in ScoringDashboard and ClassPresidentDashboard
-- Create `replaceClassIdInUrl` helper to maintain search/tab params when switching classId
-- Add dedicated empty state for `ambiguous-role-context`
-- Ensure `studentCode` is `string | null` everywhere
-- Prevent auto-select loop when `classSelectorOwner` is 'parent' or `!urlClassId` is false
-- Remove dead code for `error` falling through in ScoringDashboard body
