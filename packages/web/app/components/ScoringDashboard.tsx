@@ -123,11 +123,24 @@ export function getEmptyStateMessage({
   }
 }
 
-interface ScoringDashboardProps {
-  role: RoleType;
+export type ScoringDashboardProps = (
+  | {
+      scopeContext: 'CLASS_COMMITTEE';
+      scopeMode: 'SINGLE_CLASS';
+    }
+  | {
+      scopeContext: 'ADVISOR';
+      scopeMode: 'ALL_ASSIGNED_CLASSES';
+    }
+  | {
+      scopeContext: 'ADVISOR';
+      scopeMode: 'SINGLE_CLASS';
+    }
+) & {
   showHeader?: boolean;
   defaultTab?: TabType;
-}
+  classSelectorOwner: 'self' | 'parent' | 'none';
+};
 
 // ── Bulk types ──────────────────────────────────────────────────
 type BulkActionWarning = {
@@ -211,12 +224,12 @@ function useCountUp(end: number, duration: number = 1000) {
 
 const BULK_TIMEOUT_MS = 45_000;
 
-export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }: ScoringDashboardProps) {
+export function ScoringDashboard(props: ScoringDashboardProps) {
+  const { showHeader = true, defaultTab = 'all', classSelectorOwner, scopeContext: role } = props;
   const { data: session } = useSession();
-  const [students, setStudents] = useState<StudentRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [state, setState] = useState<import('../lib/scoring-types').ClassDataState<StudentRow>>({ status: 'loading' });
+  
   const [search, setSearch] = useState('');
-  const [fetchError, setFetchError] = useState<string | null>(null);
   
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'unscored' | 'scored'>(defaultTab);
 
@@ -231,8 +244,6 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
   const urlClassId = searchParams ? searchParams.get('classId') : null;
   const router = useRouter();
   const pathname = usePathname();
-
-  const [contextRequired, setContextRequired] = useState<{ message: string, classes: {id: string, name: string}[] } | null>(null);
 
   // Bulk state
   const bulkActionInProgressRef = useRef(false);
@@ -264,60 +275,63 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
     if (!session?.user) return false;
     const customJwt = (session as any)?.customJwt;
     if (!customJwt) return false;
-    setIsLoading(true);
-    setFetchError(null);
-    setContextRequired(null);
-    try {
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${customJwt}`,
-      };
-      let endpoint = `${API_BASE}/scoring/students`;
-      if (role === 'CLASS_COMMITTEE') endpoint = `${API_BASE}/scoring/class-committee/students`;
-      if (role === 'ADVISOR') endpoint = `${API_BASE}/scoring/advisor/students`;
-      if (urlClassId) {
-        endpoint += `?classId=${urlClassId}`;
-      }
-      
-      const res = await fetch(endpoint, { headers, credentials: 'include' });
-      if (res.ok) {
-        const json = await res.json();
-        setStudents(json.data || []);
-        return true;
+    
+    setState({ status: 'loading' });
+    
+    let endpoint = `${API_BASE}/scoring/students`;
+    if (role === 'CLASS_COMMITTEE') {
+      endpoint = `${API_BASE}/scoring/class-committee/students`;
+    } else if (role === 'ADVISOR') {
+      if (props.scopeMode === 'SINGLE_CLASS') {
+        endpoint = `${API_BASE}/scoring/advisor/classes/students`;
       } else {
-        if (res.status === 401) {
-          setFetchError('Phiên đăng nhập hết hạn. Đang tải lại...');
-          const { signOut } = await import('next-auth/react');
-          setTimeout(() => { signOut({ callbackUrl: '/login' }); }, 1500);
-          return false;
-        }
-        
-        let jsonError: any = null;
-        try {
-          jsonError = await res.json();
-        } catch (e) {
-          // not json
-        }
-        
-        if (res.status === 400 && jsonError?.code === 'CLASS_CONTEXT_REQUIRED') {
-          setContextRequired({
-            message: jsonError.message || 'Vui lòng chọn lớp',
-            classes: jsonError.classes || []
-          });
-          return false;
-        }
-        
-        const errText = jsonError?.message || await res.text().catch(() => '');
-        setFetchError(`Lỗi ${res.status}: ${errText}`);
+        endpoint = `${API_BASE}/scoring/advisor/students`;
+      }
+    }
+    
+    if (props.scopeMode === 'SINGLE_CLASS' && urlClassId) {
+      endpoint += `?classId=${urlClassId}`;
+    }
+
+    const { fetchClassScopedStudents } = await import('../lib/fetch-helpers');
+    const res = await fetchClassScopedStudents<StudentRow>(endpoint, customJwt);
+    
+    if (res.type === 'success') {
+      if (res.context.reason === 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER') {
+        setState({
+          status: 'empty-enrollment',
+          message: 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại',
+          context: res.context
+        });
         return false;
       }
-    } catch {
-      setFetchError('Không thể kết nối đến máy chủ.');
+      setState({
+        status: 'ready',
+        data: res.data,
+        context: res.context
+      });
+      return true;
+    } else if (res.type === 'class-context-required') {
+      setState({
+        status: 'class-context-required',
+        message: res.message,
+        classes: res.classes
+      });
       return false;
-    } finally {
-      setIsLoading(false);
+    } else if (res.type === 'forbidden') {
+      setState({
+        status: 'forbidden',
+        message: res.message
+      });
+      return false;
+    } else {
+      setState({
+        status: 'error',
+        message: res.message
+      });
+      return false;
     }
-  }, [session, role, urlClassId]);
+  }, [session, props, urlClassId, role]);
 
   useEffect(() => {
     fetchStudents();
@@ -360,7 +374,9 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
   }, [isDrawerOpen, handleCloseDrawer]);
 
   const filtered = useMemo(() => {
-    let result = students.filter((s) => matchesTab(s, activeTab, role));
+    let result = state.status === 'ready' ? state.data : [];
+
+    result = result.filter((s) => matchesTab(s, activeTab, role));
 
     const trimmedSearch = search.trim().toLowerCase();
     if (trimmedSearch) {
@@ -372,23 +388,25 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
     }
 
     return result;
-  }, [students, activeTab, role, search]);
+  }, [state, activeTab, role, search]);
 
   const stats = useMemo(() => {
-    const total = students.length;
-    const submitted = students.filter((s) => !matchesTab(s, 'pending', role)).length;
+    const currentStudents = state.status === 'ready' ? state.data : [];
+    const total = currentStudents.length;
+    const submitted = currentStudents.filter((s) => !matchesTab(s, 'pending', role)).length;
 
-    const unscoredCount = students.filter((s) => matchesTab(s, 'unscored', role)).length;
-    const scoredCount = students.filter((s) => matchesTab(s, 'scored', role)).length;
-    const pendingCount = students.filter((s) => matchesTab(s, 'pending', role)).length;
+    const unscoredCount = currentStudents.filter((s) => matchesTab(s, 'unscored', role)).length;
+    const scoredCount = currentStudents.filter((s) => matchesTab(s, 'scored', role)).length;
+    const pendingCount = currentStudents.filter((s) => matchesTab(s, 'pending', role)).length;
 
     return { total, submitted, scoredCount, unscoredCount, pendingCount };
-  }, [students, role]);
+  }, [state, role]);
 
   const animatedTotal = useCountUp(stats.total);
   const animatedSubmitted = useCountUp(stats.submitted);
 
-  const selectedStudent = students.find((s) => s.id === selectedStudentId);
+  const currentStudents = state.status === 'ready' ? state.data : [];
+  const selectedStudent = currentStudents.find((s) => s.id === selectedStudentId);
 
   const tabs = [
     { id: 'all', label: 'Tất cả sinh viên', count: stats.total, icon: Users },
@@ -402,7 +420,8 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
     if (bulkActionInProgressRef.current) return;
     if (selectedIds.length === 0) return;
 
-    const selectedStudents = students.filter(s => selectedIds.includes(s.id));
+    const currentStudents = state.status === 'ready' ? state.data : [];
+    const selectedStudents = currentStudents.filter(s => selectedIds.includes(s.id));
     const eligibleStudents = bulkActionType === 'APPROVE'
       ? selectedStudents.filter(s => canBulkApprove(s, role))
       : selectedStudents.filter(s => canBulkReject(s, role));
@@ -465,12 +484,10 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
       // Deselect succeeded items
       if (data.results) {
         const successFormIds = new Set(data.results.filter(r => r.success).map(r => r.formId));
-        const successStudentIds = new Set(
-          students
-            .filter(s => s.formId && successFormIds.has(s.formId))
-            .map(s => s.id)
-        );
-        setSelectedIds(prev => prev.filter(id => !successStudentIds.has(id)));
+        const successStudentIds = currentStudents
+          .filter(s => s.formId && successFormIds.has(s.formId))
+          .map(s => s.id);
+        setSelectedIds(prev => prev.filter(id => !successStudentIds.includes(id)));
       }
 
       // Refresh list (don't block result dialog on refresh failure)
@@ -519,8 +536,9 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
     }
   };
 
-  const getBulkValidationStats = () => {
-    const selectedStudents = students.filter(s => selectedIds.includes(s.id));
+  const validationStats = useMemo(() => {
+    const currentStudents = state.status === 'ready' ? state.data : [];
+    const selectedStudents = currentStudents.filter(s => selectedIds.includes(s.id));
     const eligibleStudents = bulkActionType === 'APPROVE'
       ? selectedStudents.filter(s => canBulkApprove(s, role))
       : selectedStudents.filter(s => canBulkReject(s, role));
@@ -536,21 +554,20 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
       })),
       invalidReason: bulkActionType === 'APPROVE' ? 'Trạng thái hiện tại của phiếu không cho phép duyệt tiếp.' : 'Trạng thái hiện tại của phiếu không thể trả lại.'
     };
-  };
+  }, [selectedIds, bulkActionType, role, state]);
 
-  const validationStats = getBulkValidationStats();
   const isBulkDisabled = bulkRecoveryState !== 'idle';
 
-  if (contextRequired) {
+  if (state.status === 'class-context-required') {
     return (
       <div className="p-8 max-w-lg mx-auto mt-12 text-center bg-surface border border-border rounded-2xl shadow-sm">
         <div className="w-16 h-16 bg-primary-light text-primary flex items-center justify-center rounded-full mx-auto mb-4">
           <Users size={32} />
         </div>
-        <h2 className="text-xl font-bold mb-2 text-foreground">{contextRequired.message}</h2>
+        <h2 className="text-xl font-bold mb-2 text-foreground">{state.message}</h2>
         <p className="text-sm text-muted-foreground mb-6">Bạn được phân công nhiều lớp. Vui lòng chọn một lớp để xem danh sách sinh viên.</p>
         <div className="flex flex-col gap-3">
-          {contextRequired.classes.map((cls: any) => (
+          {state.classes.map((cls: any) => (
             <button
               key={cls.id}
               className="p-4 border border-border rounded-xl hover:bg-primary-light hover:border-primary/30 transition-all text-left flex items-center justify-between group"
@@ -564,6 +581,18 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
             </button>
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (state.status === 'forbidden') {
+    return (
+      <div className="p-8 max-w-lg mx-auto mt-12 text-center bg-destructive/10 border border-destructive/20 rounded-2xl shadow-sm">
+        <div className="w-16 h-16 bg-destructive text-destructive-foreground flex items-center justify-center rounded-full mx-auto mb-4">
+          <FileWarning size={32} />
+        </div>
+        <h2 className="text-xl font-bold mb-2 text-destructive">Không có quyền truy cập</h2>
+        <p className="text-sm text-muted-foreground mb-6">{state.message}</p>
       </div>
     );
   }
@@ -667,17 +696,23 @@ export function ScoringDashboard({ role, showHeader = true, defaultTab = 'all' }
 
         {/* Content Section */}
         <div className="flex-1 overflow-y-auto px-6 md:px-8 pb-8">
-          {isLoading ? (
+          {state.status === 'loading' ? (
             <div className="space-y-3">
               {[1, 2, 3, 4, 5].map(i => (
                 <div key={i} className="h-16 bg-surface-muted animate-pulse rounded-xl" />
               ))}
             </div>
-          ) : fetchError ? (
+          ) : state.status === 'error' ? (
             <EmptyState
               icon={FileWarning}
               title="Lỗi tải dữ liệu"
-              description={fetchError}
+              description={state.message}
+            />
+          ) : state.status === 'empty-enrollment' ? (
+            <EmptyState
+              icon={Users}
+              title="Lớp trống"
+              description={state.message}
             />
           ) : filtered.length === 0 ? (
             (() => {

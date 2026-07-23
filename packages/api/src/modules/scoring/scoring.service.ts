@@ -461,11 +461,19 @@ export class ScoringService {
     }
 
     if (classIds.length === 0) {
-      throw new ForbiddenException(`Tài khoản không được phân công vai trò ${roleContext} cho bất kỳ lớp nào.`);
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'CLASS_SCOPE_FORBIDDEN',
+        message: `Tài khoản chưa được phân công quản lý lớp này.`
+      });
     }
 
     if (requestedClassId && !classIds.includes(requestedClassId)) {
-      throw new ForbiddenException('Bạn không có quyền thao tác trên lớp này.');
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'CLASS_SCOPE_FORBIDDEN',
+        message: 'Tài khoản chưa được phân công quản lý lớp này.'
+      });
     }
 
     if (mode === 'SINGLE_CLASS') {
@@ -475,6 +483,7 @@ export class ScoringService {
           selectedClassId = requestedClassId;
         } else {
           throw new BadRequestException({
+            statusCode: 400,
             code: 'CLASS_CONTEXT_REQUIRED',
             message: 'Tài khoản được phân công nhiều lớp. Vui lòng chọn lớp.',
             classes: validClasses
@@ -485,7 +494,7 @@ export class ScoringService {
         semesterId: activeSemester.id,
         classIds: [selectedClassId],
         selectedClassId,
-        classes: validClasses.filter(c => c.id === selectedClassId)
+        classes: validClasses
       };
     } else {
       const finalClassIds = requestedClassId ? [requestedClassId] : classIds;
@@ -493,7 +502,7 @@ export class ScoringService {
         semesterId: activeSemester.id,
         classIds: finalClassIds,
         selectedClassId: requestedClassId || null,
-        classes: requestedClassId ? validClasses.filter(c => c.id === requestedClassId) : validClasses
+        classes: validClasses
       };
     }
   }
@@ -599,8 +608,10 @@ export class ScoringService {
       return {
         message: 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại',
         data: [],
-        reason: 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER',
-        context: contextPayload
+        context: {
+          ...contextPayload,
+          reason: 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER'
+        }
       };
     }
 
@@ -658,12 +669,25 @@ export class ScoringService {
       include: { user_roles: { include: { roles: true } } }
     });
     if (!user) throw new ForbiddenException('Tài khoản không tồn tại.');
+    
     const isDept = user.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
-    if (isDept) return this.getAuthorizedStudentList(userId, 'DEPARTMENT');
     const isAdvisor = user.user_roles.some(ur => ur.roles.code === 'ADVISOR' && ur.is_active === 1);
-    // Backward compatibility: use ALL_ASSIGNED_CLASSES for Advisor, SINGLE_CLASS for Class Committee
-    if (isAdvisor) return this.getAuthorizedStudentList(userId, 'ADVISOR');
-    return this.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE');
+    const isClassCommittee = user.user_roles.some(ur => ur.roles.code === 'CLASS_COMMITTEE' && ur.is_active === 1);
+    
+    const activeRolesCount = [isDept, isAdvisor, isClassCommittee].filter(Boolean).length;
+    
+    if (activeRolesCount > 1) {
+      throw new BadRequestException({
+        code: 'AMBIGUOUS_ROLE_CONTEXT',
+        message: 'Tài khoản có nhiều vai trò. Vui lòng sử dụng endpoint dành riêng cho từng vai trò.'
+      });
+    }
+
+    if (isDept) return this.getAuthorizedStudentList(userId, 'DEPARTMENT');
+    if (isAdvisor) return this.getAuthorizedStudentList(userId, 'ADVISOR', 'ALL_ASSIGNED_CLASSES');
+    if (isClassCommittee) return this.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE', 'SINGLE_CLASS');
+    
+    throw new ForbiddenException('Tài khoản không có quyền xem danh sách sinh viên.');
   }
 
   // =============================================

@@ -10,7 +10,12 @@ export default function AdvisorClassesPage() {
       breadcrumbs={[{ label: 'Danh sách lớp' }]}
     >
       <Suspense fallback={<p style={{ padding: 20 }}>Đang tải...</p>}>
-        <ScoringDashboard role="ADVISOR" defaultTab="all" />
+        <ScoringDashboard
+          scopeContext="ADVISOR"
+          scopeMode="SINGLE_CLASS"
+          classSelectorOwner="self"
+          defaultTab="all"
+        />
       </Suspense>
     </DashboardLayout>
   );

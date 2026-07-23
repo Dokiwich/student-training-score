@@ -14,15 +14,27 @@ export class ScoringController {
   }
 
   @Get('class-committee/students')
-  async getClassCommitteeStudents(@Req() req: any, @Query('classId') requestedClassId?: string, @Query('mode') mode?: 'SINGLE_CLASS' | 'ALL_ASSIGNED_CLASSES') {
+  async getClassCommitteeStudents(@Req() req: any, @Query('classId') requestedClassId?: string) {
     const userId = req.user?.id;
-    return this.scoringService.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE', mode || 'SINGLE_CLASS', requestedClassId);
+    return this.scoringService.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE', 'SINGLE_CLASS', requestedClassId);
   }
 
   @Get('advisor/students')
-  async getAdvisorStudents(@Req() req: any, @Query('classId') requestedClassId?: string, @Query('mode') mode?: 'SINGLE_CLASS' | 'ALL_ASSIGNED_CLASSES') {
+  async getAdvisorStudents(@Req() req: any) {
     const userId = req.user?.id;
-    return this.scoringService.getAuthorizedStudentList(userId, 'ADVISOR', mode || 'SINGLE_CLASS', requestedClassId);
+    return this.scoringService.getAuthorizedStudentList(userId, 'ADVISOR', 'ALL_ASSIGNED_CLASSES');
+  }
+
+  @Get('advisor/classes/students')
+  async getAdvisorStudentsSingleClass(@Req() req: any, @Query('classId') requestedClassId?: string) {
+    const userId = req.user?.id;
+    return this.scoringService.getAuthorizedStudentList(userId, 'ADVISOR', 'SINGLE_CLASS', requestedClassId);
+  }
+
+  @Get('advisor/classes/:classId/students')
+  async getAdvisorStudentsByClass(@Req() req: any, @Param('classId') classId: string) {
+    const userId = req.user?.id;
+    return this.scoringService.getAuthorizedStudentList(userId, 'ADVISOR', 'SINGLE_CLASS', classId);
   }
 
   @Get('criteria')

@@ -38,30 +38,45 @@ const CLS_COLORS: Record<string, { bg: string; color: string }> = {
 
 export function AdvisorSummary() {
   const { data: session } = useSession();
-  const [students, setStudents] = useState<StudentSummary[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [state, setState] = useState<import('../lib/scoring-types').ClassDataState<StudentSummary>>({ status: 'loading' });
   const [notes, setNotes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!session?.user) return;
     const customJwt = (session as any)?.customJwt;
-    if (!customJwt) return; // Chờ cho đến khi có JWT
+    if (!customJwt) return;
 
     const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${customJwt}`,
-        };
-        const res = await fetch(`${API_BASE}/scoring/advisor/students?mode=ALL_ASSIGNED_CLASSES`, { headers, credentials: 'include' });
-        if (res.ok) { const json = await res.json(); setStudents(json.data || []); }
-      } finally { setIsLoading(false); }
+      setState({ status: 'loading' });
+      const { fetchClassScopedStudents } = await import('../lib/fetch-helpers');
+      const res = await fetchClassScopedStudents<StudentSummary>(`${API_BASE}/scoring/advisor/students`, customJwt);
+      if (res.type === 'success') {
+        if (res.context.reason === 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER') {
+          setState({
+            status: 'empty-enrollment',
+            message: 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại',
+            context: res.context
+          });
+        } else {
+          setState({
+            status: 'ready',
+            data: res.data,
+            context: res.context
+          });
+        }
+      } else if (res.type === 'class-context-required') {
+        setState({ status: 'class-context-required', message: res.message, classes: res.classes });
+      } else if (res.type === 'forbidden') {
+        setState({ status: 'forbidden', message: res.message });
+      } else {
+        setState({ status: 'error', message: res.message });
+      }
     };
     fetchData();
   }, [session]);
 
   const stats = useMemo(() => {
+    const students = state.status === 'ready' ? state.data : [];
     const total = students.length;
     const submitted = students.filter(s => s.status !== 'NO_SHEET' && s.status !== 'DRAFT').length;
     const unsubmitted = total - submitted;
@@ -76,8 +91,8 @@ export function AdvisorSummary() {
       : '0';
     
     return { total, submitted, unsubmitted, submittedPct, byClass, avgScore };
-  }, [students]);
-  if (isLoading) {
+  }, [state]);
+  if (state.status === 'loading') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
@@ -88,6 +103,10 @@ export function AdvisorSummary() {
         <div className="skeleton" style={{ height: 400, borderRadius: 12 }} />
       </div>
     );
+  }
+
+  if (state.status === 'error' || state.status === 'forbidden') {
+    return <div className="p-4 bg-danger-bg text-danger-foreground rounded-lg">Lỗi: {state.message}</div>;
   }
 
   return (
@@ -130,9 +149,9 @@ export function AdvisorSummary() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {students.length === 0 ? (
+              {(state.status === 'ready' ? state.data : []).length === 0 ? (
                 <tr><td colSpan={9} className="text-center text-muted-foreground p-8">Chưa có dữ liệu sinh viên</td></tr>
-              ) : students.map((student, index) => {
+              ) : (state.status === 'ready' ? state.data : []).map((student, index) => {
                 const clsLabel = student.classification ? CLASSIFICATION_LABELS[student.classification] || '' : '';
                 const clsColor = CLS_COLORS[student.classification || ''] || { bg: '#f3f4f6', color: '#6b7280' };
                 return (

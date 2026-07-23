@@ -10,7 +10,12 @@ export default function AdvisorReviewsPage() {
       breadcrumbs={[{ label: 'Phiếu chờ duyệt' }]}
     >
       <Suspense fallback={<p style={{ padding: 20 }}>Đang tải...</p>}>
-        <ScoringDashboard role="ADVISOR" defaultTab="unscored" />
+        <ScoringDashboard
+          scopeContext="ADVISOR"
+          scopeMode="ALL_ASSIGNED_CLASSES"
+          classSelectorOwner="none"
+          defaultTab="unscored"
+        />
       </Suspense>
     </DashboardLayout>
   );

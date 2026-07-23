@@ -4,8 +4,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
-import { Users, FileText, CheckCircle, Clock } from 'lucide-react';
-import { DashboardLayout } from './DashboardLayout';
+import { Users, FileText, CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
+import { fetchClassScopedStudents } from '../lib/fetch-helpers';
+import { ClassDataState } from '../lib/scoring-types';
 
 const API_BASE = '/proxy-api';
 
@@ -16,51 +17,68 @@ export function ClassPresidentDashboard() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [students, setStudents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [contextRequired, setContextRequired] = useState<{ message: string, classes: {id: string, name: string}[] } | null>(null);
+  const [state, setState] = useState<ClassDataState<any>>({ status: 'loading' });
 
-  useEffect(() => {
+  const fetchStudents = async () => {
     if (!session?.user) return;
     const customJwt = (session as any)?.customJwt;
     if (!customJwt) return;
 
-    const fetchStudents = async () => {
-      setLoading(true);
-      setContextRequired(null);
-      try {
-        let endpoint = `${API_BASE}/scoring/class-committee/students`;
-        if (urlClassId) {
-          endpoint += `?classId=${urlClassId}`;
-        }
-        const res = await fetch(endpoint, {
-          headers: { 'Authorization': `Bearer ${customJwt}` },
+    setState({ status: 'loading' });
+    let endpoint = `${API_BASE}/scoring/class-committee/students`;
+    if (urlClassId) {
+      endpoint += `?classId=${urlClassId}`;
+    }
+
+    const res = await fetchClassScopedStudents<any>(endpoint, customJwt);
+    
+    if (res.type === 'success') {
+      if (res.context.reason === 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER') {
+        setState({
+          status: 'empty-enrollment',
+          message: 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại',
+          context: res.context
         });
-        if (res.ok) {
-          const data = await res.json();
-          setStudents(data.data || []);
-        } else if (res.status === 400) {
-          let jsonError: any = null;
-          try {
-            jsonError = await res.json();
-          } catch (e) {}
-          if (jsonError?.code === 'CLASS_CONTEXT_REQUIRED') {
-            setContextRequired({
-              message: jsonError.message || 'Vui lòng chọn lớp',
-              classes: jsonError.classes || []
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch class students', err);
-      } finally {
-        setLoading(false);
+      } else {
+        setState({
+          status: 'ready',
+          data: res.data,
+          context: res.context
+        });
       }
-    };
+    } else if (res.type === 'class-context-required') {
+      setState({
+        status: 'class-context-required',
+        message: res.message,
+        classes: res.classes
+      });
+    } else if (res.type === 'forbidden') {
+      setState({
+        status: 'forbidden',
+        message: res.message
+      });
+    } else {
+      setState({
+        status: 'error',
+        message: res.message
+      });
+    }
+  };
+
+  useEffect(() => {
     fetchStudents();
   }, [session, urlClassId]);
 
   const stats = useMemo(() => {
+    let students: any[] = [];
+    if (state.status === 'ready') {
+      students = state.data;
+    } else if (state.status === 'empty-enrollment') {
+      students = [];
+    } else {
+      return null;
+    }
+
     const total = students.length;
     let submitted = 0;
     let pendingReview = 0;
@@ -90,22 +108,22 @@ export function ClassPresidentDashboard() {
     const avgScore = scoreCount > 0 ? (scoreSum / scoreCount).toFixed(1) : 0;
 
     return { total, submitted, pendingReview, reviewed, finalized, avgScore };
-  }, [students]);
+  }, [state]);
 
-  if (loading) {
-    return <div className="p-8 text-center text-muted-foreground">Đang tải dữ liệu...</div>;
+  if (state.status === 'loading') {
+    return <div className="p-8 text-center text-muted-foreground flex flex-col items-center gap-2"><RefreshCw className="animate-spin" /> Đang tải dữ liệu...</div>;
   }
 
-  if (contextRequired) {
+  if (state.status === 'class-context-required') {
     return (
       <div className="p-8 max-w-lg mx-auto mt-12 text-center bg-surface border border-border rounded-2xl shadow-sm">
         <div className="w-16 h-16 bg-primary-light text-primary flex items-center justify-center rounded-full mx-auto mb-4">
           <Users size={32} />
         </div>
-        <h2 className="text-xl font-bold mb-2 text-foreground">{contextRequired.message}</h2>
+        <h2 className="text-xl font-bold mb-2 text-foreground">{state.message}</h2>
         <p className="text-sm text-muted-foreground mb-6">Bạn được phân công nhiều lớp. Vui lòng chọn một lớp để xem tổng quan.</p>
         <div className="flex flex-col gap-3">
-          {contextRequired.classes.map((cls: any) => (
+          {state.classes.map((cls: any) => (
             <button
               key={cls.id}
               className="p-4 border border-border rounded-xl hover:bg-primary-light hover:border-primary/30 transition-all text-left flex items-center justify-between group"
@@ -123,8 +141,44 @@ export function ClassPresidentDashboard() {
     );
   }
 
+  if (state.status === 'forbidden') {
+    return (
+      <div className="p-8 max-w-lg mx-auto mt-12 text-center bg-destructive/10 border border-destructive/20 rounded-2xl shadow-sm">
+        <div className="w-16 h-16 bg-destructive text-destructive-foreground flex items-center justify-center rounded-full mx-auto mb-4">
+          <AlertCircle size={32} />
+        </div>
+        <h2 className="text-xl font-bold mb-2 text-destructive">Không có quyền truy cập</h2>
+        <p className="text-sm text-muted-foreground mb-6">{state.message}</p>
+      </div>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="p-8 max-w-lg mx-auto mt-12 text-center bg-surface border border-border rounded-2xl shadow-sm">
+        <div className="w-16 h-16 bg-destructive/10 text-destructive flex items-center justify-center rounded-full mx-auto mb-4">
+          <AlertCircle size={32} />
+        </div>
+        <h2 className="text-xl font-bold mb-2 text-foreground">Đã có lỗi xảy ra</h2>
+        <p className="text-sm text-muted-foreground mb-6">{state.message}</p>
+        <button onClick={fetchStudents} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2 mx-auto">
+          <RefreshCw size={16} /> Thử lại
+        </button>
+      </div>
+    );
+  }
+
+  if (!stats) return null;
+
   return (
     <div className="space-y-6">
+      {state.status === 'empty-enrollment' && (
+        <div className="p-4 mb-4 bg-info-bg text-info rounded-lg border border-info-bg/50">
+          <AlertCircle className="inline mr-2" size={20} />
+          {state.message}
+        </div>
+      )}
+      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="shadow-sm border-border">
           <CardContent className="p-6 flex items-center gap-4">
