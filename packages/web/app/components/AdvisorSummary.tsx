@@ -5,18 +5,6 @@ import { useSession } from 'next-auth/react';
 const API_BASE = '/proxy-api';
 import { fetchClassScopedStudents } from '../lib/fetch-helpers';
 
-interface StudentSummary {
-  id: string;
-  studentCode: string | null;
-  name: string;
-  className?: string;
-  status: string;
-  studentTotal: number | null;
-  classTotal: number | null;
-  advisorTotal: number | null;
-  finalTotal: number | null;
-  classification: string | null;
-}
 
 const CLASSIFICATION_LABELS: Record<string, string> = {
   EXCELLENT: 'Xuất sắc',
@@ -43,13 +31,17 @@ export function AdvisorSummary() {
 
   useEffect(() => {
     if (!session?.user) return;
-    const customJwt = (session as any)?.customJwt;
+    const customJwt = session.customJwt;
     if (!customJwt) return;
 
     const fetchData = async () => {
       setState({ status: 'loading' });
-      const customJwt = (session as any)?.customJwt;
-      const res = await fetchClassScopedStudents<import('../lib/scoring-types').ScoringStudentRow>(`${API_BASE}/scoring/advisor/students`, customJwt);
+      const { isScoringStudentRow } = await import('../lib/scoring-types');
+      const res = await fetchClassScopedStudents<import('../lib/scoring-types').ScoringStudentRow>(
+        `${API_BASE}/scoring/advisor/students`, 
+        customJwt,
+        isScoringStudentRow
+      );
       if (res.type === 'success') {
         if (res.context.reason === 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER') {
           setState({
@@ -68,6 +60,8 @@ export function AdvisorSummary() {
         setState({ status: 'class-context-required', message: res.message, classes: res.classes });
       } else if (res.type === 'forbidden') {
         setState({ status: 'forbidden', message: res.message });
+      } else if (res.type === 'ambiguous-role-context') {
+        setState({ status: 'ambiguous-role-context', message: res.message });
       } else {
         setState({ status: 'error', message: res.message });
       }

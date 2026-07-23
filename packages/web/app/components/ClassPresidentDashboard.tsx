@@ -21,7 +21,7 @@ export function ClassPresidentDashboard() {
 
   const fetchStudents = async () => {
     if (!session?.user) return;
-    const customJwt = (session as { customJwt?: string })?.customJwt;
+    const customJwt = session.customJwt;
     if (!customJwt) return;
 
     setState({ status: 'loading' });
@@ -30,7 +30,8 @@ export function ClassPresidentDashboard() {
       endpoint += `?classId=${urlClassId}`;
     }
 
-    const res = await fetchClassScopedStudents<import('../lib/scoring-types').ScoringStudentRow>(endpoint, customJwt);
+    const { isScoringStudentRow } = await import('../lib/scoring-types');
+    const res = await fetchClassScopedStudents<import('../lib/scoring-types').ScoringStudentRow>(endpoint, customJwt, isScoringStudentRow);
     
     if (res.type === 'success') {
       if (res.context.reason === 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER') {
@@ -56,6 +57,11 @@ export function ClassPresidentDashboard() {
     } else if (res.type === 'forbidden') {
       setState({
         status: 'forbidden',
+        message: res.message
+      });
+    } else if (res.type === 'ambiguous-role-context') {
+      setState({
+        status: 'ambiguous-role-context',
         message: res.message
       });
     } else {

@@ -3,14 +3,64 @@ import { prisma } from '@student-score/database';
 import { randomUUID } from 'crypto';
 
 
-const ASSIGNED_ROLE_CODES = {
+export const ASSIGNED_ROLE_CODES = {
   CLASS_COMMITTEE: [
     'MONITOR',
     'VICE_MONITOR',
     'SECRETARY',
   ],
   ADVISOR: ['ADVISOR'],
-};
+} as const;
+
+export type AssignedRoleContext = keyof typeof ASSIGNED_ROLE_CODES;
+export type AssignedRoleCode = typeof ASSIGNED_ROLE_CODES[AssignedRoleContext][number];
+
+export function isAssignedRoleCodeForContext(roleCode: string, context: AssignedRoleContext): roleCode is AssignedRoleCode {
+  return (ASSIGNED_ROLE_CODES[context] as readonly string[]).includes(roleCode);
+}
+
+import { HttpException, HttpStatus } from '@nestjs/common';
+
+export function throwAmbiguousRoleContext(): never {
+  throw new HttpException({
+    statusCode: 400,
+    code: 'AMBIGUOUS_ROLE_CONTEXT',
+    message: 'Tài khoản có nhiều phạm vi vai trò. Vui lòng sử dụng endpoint theo vai trò.'
+  }, HttpStatus.BAD_REQUEST);
+}
+
+export function throwClassContextRequired(classes: { id: string; name: string }[]): never {
+  throw new HttpException({
+    statusCode: 400,
+    code: 'CLASS_CONTEXT_REQUIRED',
+    message: 'Tài khoản được phân công nhiều lớp. Vui lòng chọn lớp.',
+    classes
+  }, HttpStatus.BAD_REQUEST);
+}
+
+export function throwClassScopeForbidden(): never {
+  throw new HttpException({
+    statusCode: 403,
+    code: 'CLASS_SCOPE_FORBIDDEN',
+    message: 'Tài khoản chưa được phân công quản lý lớp này.'
+  }, HttpStatus.FORBIDDEN);
+}
+
+export function throwInvalidClassId(): never {
+  throw new HttpException({
+    statusCode: 400,
+    code: 'INVALID_CLASS_ID',
+    message: 'Mã lớp không hợp lệ.'
+  }, HttpStatus.BAD_REQUEST);
+}
+
+export function throwNoActiveSemester(): never {
+  throw new HttpException({
+    statusCode: 409,
+    code: 'NO_ACTIVE_SEMESTER',
+    message: 'Không có học kỳ đang hoạt động.'
+  }, HttpStatus.CONFLICT);
+}
 
 export type SubmissionValidationError = {
   criterionId: number | null;
@@ -439,11 +489,11 @@ export class ScoringService {
   ) {
     const activeSemester = await this.resolveCurrentScoringSemester();
     if (!activeSemester) {
-      throw new BadRequestException('Không có học kỳ nào đang hoạt động.');
+      throwNoActiveSemester();
     }
 
     if (requestedClassId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedClassId)) {
-      throw new BadRequestException('ID lớp không hợp lệ.');
+      throwInvalidClassId();
     }
 
     const roleCodes = roleContext === 'CLASS_COMMITTEE' 
@@ -454,7 +504,7 @@ export class ScoringService {
       where: {
         user_id: actorId,
         is_active: 1,
-        roles: { code: { in: roleCodes } }
+        roles: { code: { in: [...roleCodes] } }
       },
       select: { entity_id: true }
     });
@@ -471,19 +521,11 @@ export class ScoringService {
     }
 
     if (classIds.length === 0) {
-      throw new ForbiddenException({
-        statusCode: 403,
-        code: 'CLASS_SCOPE_FORBIDDEN',
-        message: `Tài khoản chưa được phân công quản lý lớp này.`
-      });
+      throwClassScopeForbidden();
     }
 
     if (requestedClassId && !classIds.includes(requestedClassId)) {
-      throw new ForbiddenException({
-        statusCode: 403,
-        code: 'CLASS_SCOPE_FORBIDDEN',
-        message: 'Tài khoản chưa được phân công quản lý lớp này.'
-      });
+      throwClassScopeForbidden();
     }
 
     if (mode === 'SINGLE_CLASS') {
@@ -492,12 +534,7 @@ export class ScoringService {
         if (requestedClassId) {
           selectedClassId = requestedClassId;
         } else {
-          throw new BadRequestException({
-            statusCode: 400,
-            code: 'CLASS_CONTEXT_REQUIRED',
-            message: 'Tài khoản được phân công nhiều lớp. Vui lòng chọn lớp.',
-            classes: validClasses
-          });
+          throwClassContextRequired(validClasses);
         }
       }
       return {
@@ -610,8 +647,8 @@ export class ScoringService {
     const contextPayload = {
       semesterId: scope.semesterId,
       classIds: scope.classIds,
-      selectedClassId: (scope as any).selectedClassId || scope.classIds[0] || null,
-      classes: (scope as any).classes || []
+      selectedClassId: scope.selectedClassId || scope.classIds[0] || null,
+      classes: scope.classes || []
     };
 
     if (enrollments.length === 0) {
@@ -671,6 +708,21 @@ export class ScoringService {
   }
 
   // =============================================
+  // HELPER: Lấy danh sách lớp được phân công cho Advisor
+  // =============================================
+  async getAdvisorClasses(userId: string) {
+    const scope = await this.resolveAssignedClassScope(userId, 'ADVISOR', 'ALL_ASSIGNED_CLASSES');
+    
+    return {
+      message: 'Lấy danh sách lớp thành công',
+      data: scope.classes, // Only { id, name }
+      context: {
+        semesterId: scope.semesterId
+      }
+    };
+  }
+
+  // =============================================
   // CŨ: GIỮ LẠI ĐỂ TRÁNH LỖI BACKWARD COMPATIBILITY
   // =============================================
   async getStudentListByUser(userId: string) {
@@ -681,18 +733,15 @@ export class ScoringService {
     if (!user) throw new ForbiddenException('Tài khoản không tồn tại.');
     
     const isDept = user.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
-    const isAdvisor = user.user_roles.some(ur => ASSIGNED_ROLE_CODES.ADVISOR.includes(ur.roles.code as any) && ur.is_active === 1);
+    const isAdvisor = user.user_roles.some(ur => isAssignedRoleCodeForContext(ur.roles.code, 'ADVISOR') && ur.is_active === 1);
     const isClassCommittee = user.user_roles.some(ur => 
-      ASSIGNED_ROLE_CODES.CLASS_COMMITTEE.includes(ur.roles.code as any) && ur.is_active === 1
+      isAssignedRoleCodeForContext(ur.roles.code, 'CLASS_COMMITTEE') && ur.is_active === 1
     );
     
     const activeRolesCount = [isDept, isAdvisor, isClassCommittee].filter(Boolean).length;
     
     if (activeRolesCount > 1) {
-      throw new BadRequestException({
-        code: 'AMBIGUOUS_ROLE_CONTEXT',
-        message: 'Tài khoản có nhiều vai trò. Vui lòng sử dụng endpoint dành riêng cho từng vai trò.'
-      });
+      throwAmbiguousRoleContext();
     }
 
     if (isDept) return this.getAuthorizedStudentList(userId, 'DEPARTMENT');

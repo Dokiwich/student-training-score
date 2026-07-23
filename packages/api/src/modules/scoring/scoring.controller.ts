@@ -25,10 +25,10 @@ export class ScoringController {
     return this.scoringService.getAuthorizedStudentList(userId, 'ADVISOR', 'ALL_ASSIGNED_CLASSES');
   }
 
-  @Get('advisor/classes/students')
-  async getAdvisorStudentsSingleClass(@Req() req: any, @Query('classId') requestedClassId?: string) {
+  @Get('advisor/classes')
+  async getAdvisorClasses(@Req() req: any) {
     const userId = req.user?.id;
-    return this.scoringService.getAuthorizedStudentList(userId, 'ADVISOR', 'SINGLE_CLASS', requestedClassId);
+    return this.scoringService.getAdvisorClasses(userId);
   }
 
   @Get('advisor/classes/:classId/students')

@@ -262,10 +262,13 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
 
   const fetchStudents = useCallback(async (): Promise<boolean> => {
     if (!session?.user) return false;
-    const customJwt = (session as any)?.customJwt;
+    const customJwt = session.customJwt;
     if (!customJwt) return false;
     
     setState({ status: 'loading' });
+    
+    const { fetchClassScopedStudents, fetchAssignedClasses } = await import('../lib/fetch-helpers');
+    const { isScoringStudentRow } = await import('../lib/scoring-types');
     
     let endpoint = `${API_BASE}/scoring/students`;
     if (role === 'CLASS_COMMITTEE') {
@@ -273,22 +276,46 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
       if (urlClassId) endpoint += `?classId=${urlClassId}`;
     } else if (role === 'ADVISOR') {
       if (props.scopeMode === 'SINGLE_CLASS') {
-        endpoint = urlClassId 
-          ? `${API_BASE}/scoring/advisor/classes/${urlClassId}/students`
-          : `${API_BASE}/scoring/advisor/classes/students`;
+        if (!urlClassId) {
+          // Advisor SINGLE_CLASS without a classId in URL => fetch classes, don't purposefully fail on /students.
+          const classesRes = await fetchAssignedClasses(`${API_BASE}/scoring/advisor/classes`, customJwt);
+          if (classesRes.type === 'success') {
+            if (classesRes.context.classes.length === 1 && classSelectorOwner === 'self') {
+               // Auto-select the only class if this dashboard owns the selector
+               router.replace(`${pathname}?classId=${classesRes.context.classes[0].id}`);
+               return false;
+            }
+            setState({
+              status: 'class-context-required',
+              message: 'Tài khoản được phân công nhiều lớp. Vui lòng chọn lớp.',
+              classes: classesRes.context.classes
+            });
+            return false;
+          }
+          if (classesRes.type === 'class-context-required') {
+            setState({ status: 'class-context-required', message: classesRes.message, classes: classesRes.classes });
+          } else if (classesRes.type === 'forbidden') {
+            setState({ status: 'forbidden', message: classesRes.message });
+          } else if (classesRes.type === 'ambiguous-role-context') {
+            setState({ status: 'ambiguous-role-context', message: classesRes.message });
+          } else {
+            setState({ status: 'error', message: classesRes.message });
+          }
+          return false;
+        }
+        endpoint = `${API_BASE}/scoring/advisor/classes/${urlClassId}/students`;
       } else {
         endpoint = `${API_BASE}/scoring/advisor/students`;
       }
     }
 
-    const { fetchClassScopedStudents } = await import('../lib/fetch-helpers');
-    const res = await fetchClassScopedStudents<import('../lib/scoring-types').ScoringStudentRow>(endpoint, customJwt);
+    const res = await fetchClassScopedStudents<import('../lib/scoring-types').ScoringStudentRow>(endpoint, customJwt, isScoringStudentRow);
     
     if (res.type === 'success') {
       if (res.context.reason === 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER') {
         setState({
           status: 'empty-enrollment',
-          title: 'Danh sách sinh viên trống',
+          title: 'Chưa có danh sách sinh viên',
           message: role === 'ADVISOR' && props.scopeMode === 'ALL_ASSIGNED_CLASSES' 
             ? 'Các lớp được phân công chưa có danh sách sinh viên trong học kỳ hiện tại.' 
             : 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại.',
@@ -423,7 +450,7 @@ export function ScoringDashboard(props: ScoringDashboardProps) {
 
     if (formIdsToProcess.length === 0) return;
 
-    const customJwt = (session as any)?.customJwt;
+    const customJwt = session?.customJwt;
     if (!customJwt) return;
 
     setIsBulkSubmitting(true);
