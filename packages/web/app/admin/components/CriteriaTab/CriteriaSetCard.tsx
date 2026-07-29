@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { MoreVertical, Eye, Lock, CheckCircle2, Trash2 } from 'lucide-react';
+import { MoreVertical, MoreHorizontal, Eye, Lock, CheckCircle2, Trash2 } from 'lucide-react';
 import { ConfirmActionDialog } from './ConfirmActionDialog';
 import type { CriteriaVersion, ToggleVersionPayload } from './types';
 
@@ -93,61 +93,57 @@ export function CriteriaSetCard({ version, onOpen, onUpdate }: CriteriaSetCardPr
     <>
       <div 
         onClick={onOpen}
-        className={`relative flex flex-col p-5 bg-white border ${isActive ? 'border-[#10B981]' : 'border-[#E5E7EB]'} rounded-[12px] cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:-translate-y-[2px] transition-all group`}
+        className={`relative h-full flex flex-col p-5 bg-surface border ${isActive ? 'border-success' : 'border-border'} rounded-[12px] hover:shadow-sm hover:-translate-y-0.5 transition-all group`}
       >
         {/* Header */}
         <div className="flex justify-between items-start mb-3">
           <div className="flex items-center gap-2">
             {isActive ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-[#ECFDF5] text-[#10B981] border border-[#A7F3D0] text-[11px] font-[590]">
-                <CheckCircle2 className="w-3 h-3" strokeWidth={2.5} />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-success/10 text-success border border-success/30 text-[11px] font-[590]">
+                <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={2.5} />
                 ĐANG ÁP DỤNG
               </span>
             ) : (
-              <span className="inline-flex px-2.5 py-1 rounded-[4px] bg-[#F1F5F9] text-[#64748B] border border-[#E2E8F0] text-[11px] font-[590]">
-                BẢN NHÁP
+              <span className="inline-flex px-2.5 py-1 rounded-[4px] bg-surface-muted text-muted-foreground border border-border text-[11px] font-[590]">
+                <Lock className="w-3.5 h-3.5 mr-1" strokeWidth={2.5} /> BẢN NHÁP
               </span>
             )}
           </div>
           
           <div className="relative" ref={menuRef}>
             <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(!showMenu);
-              }}
-              className="p-1 rounded-[4px] hover:bg-[#F1F5F9] text-[#8a8f98] transition-colors"
+              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+              className="p-1 rounded-[4px] hover:bg-surface-hover text-muted-foreground transition-colors"
             >
-              <MoreVertical className="w-[18px] h-[18px]" strokeWidth={2} />
+              <MoreHorizontal className="w-5 h-5" strokeWidth={1.5} />
             </button>
             
             {showMenu && (
               <div 
-                className="absolute right-0 top-[28px] w-48 bg-white border border-[#E5E7EB] rounded-[8px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] z-10 overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
+                className="absolute right-0 top-[28px] w-48 bg-surface border border-border rounded-[8px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] z-10 overflow-hidden"
               >
                 <div className="flex flex-col py-1">
-                  <button onClick={() => { setShowMenu(false); onOpen(); }} className="flex items-center gap-2 px-3 py-2 hover:bg-[#F8FAFC] text-[13px] font-[510] text-[#1F2937] text-left">
-                    <Eye className="w-4 h-4 text-[#64748B]" strokeWidth={1.5} /> Xem chi tiết
+                  <button onClick={() => { setShowMenu(false); onOpen(); }} className="flex items-center gap-2 px-3 py-2 hover:bg-surface-hover text-[13px] font-[510] text-foreground text-left">
+                    <Eye className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} /> Xem chi tiết
                   </button>
-                  <button onClick={() => { setShowMenu(false); setShowStatusDialog(true); }} className="flex items-center gap-2 px-3 py-2 hover:bg-[#F8FAFC] text-[13px] font-[510] text-[#1F2937] text-left">
-                    {isActive ? <Lock className="w-4 h-4 text-[#64748B]" strokeWidth={1.5} /> : <CheckCircle2 className="w-4 h-4 text-[#64748B]" strokeWidth={1.5} />}
-                    {actionName}
+                  <button onClick={() => { setShowMenu(false); setShowStatusDialog(true); }} className="flex items-center gap-2 px-3 py-2 hover:bg-surface-hover text-[13px] font-[510] text-foreground text-left">
+                    {isActive ? <Lock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} /> : <CheckCircle2 className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />}
+                    {isActive ? 'Ngừng áp dụng' : 'Áp dụng bộ tiêu chí'}
                   </button>
-                  
                   {isActive ? (
-                    <div 
+                    <button 
+                      disabled
                       title="Không thể xóa bộ tiêu chí đang áp dụng"
-                      className="flex items-center gap-2 px-3 py-2 text-[13px] font-[510] text-[#9CA3AF] cursor-not-allowed text-left border-t border-[#F1F5F9] mt-1 pt-2"
+                      className="flex items-center gap-2 px-3 py-2 text-[13px] font-[510] text-muted-foreground cursor-not-allowed text-left border-t border-border mt-1 pt-2"
                     >
-                      <Trash2 className="w-4 h-4 text-[#9CA3AF]" strokeWidth={1.5} /> Xóa bộ tiêu chí
-                    </div>
+                      <Trash2 className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} /> Xóa bộ tiêu chí
+                    </button>
                   ) : (
                     <button 
                       onClick={() => { setShowMenu(false); setShowDeleteDialog(true); }} 
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-[#FEF2F2] text-[13px] font-[510] text-[#DC2626] text-left border-t border-[#F1F5F9] mt-1 pt-2"
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-danger/10 text-[13px] font-[510] text-danger text-left border-t border-border mt-1 pt-2"
                     >
-                      <Trash2 className="w-4 h-4 text-[#DC2626]" strokeWidth={1.5} /> Xóa bộ tiêu chí
+                      <Trash2 className="w-4 h-4 text-danger" strokeWidth={1.5} /> Xóa bộ tiêu chí
                     </button>
                   )}
                 </div>
@@ -156,23 +152,22 @@ export function CriteriaSetCard({ version, onOpen, onUpdate }: CriteriaSetCardPr
           </div>
         </div>
 
-        {/* Content */}
-        <h4 className="text-[18px] font-[590] text-[#1F2937] leading-[1.3] mb-1 pr-4 truncate">
-          {version.name || version.semesters?.code || 'Bộ tiêu chí chưa đặt tên'}
-        </h4>
-        
-        <p className="text-[14px] text-[#64748B] font-[400] mb-4">
-          {version.semester_id ? `Phiên bản ${version.version} — ${version.semesters?.code || ''}` : 'Bản mẫu'}
-        </p>
+        <div className="flex flex-col mt-3 min-w-0" onClick={onOpen}>
+          <h4 className="text-[18px] font-[590] text-foreground leading-[1.3] mb-1 pr-4 truncate">
+            {version.name || 'Chưa đặt tên'}
+          </h4>
+          
+          <p className="text-[14px] text-muted-foreground font-[400] mb-4">
+            Học kỳ: {version.semesters?.name || 'Không xác định'}
+          </p>
 
-        {/* Footer info */}
-        <div className="mt-auto pt-4 border-t border-[#F1F5F9] flex justify-between items-center text-[13px] text-[#8a8f98]">
-          <span className="font-[510]">
-            {version.semesters?.name || 'Mẫu hệ thống'}
-          </span>
-          <span className="text-[12px]">
-            {new Date(version.created_at).toLocaleDateString('vi-VN')}
-          </span>
+          <div className="mt-auto pt-4 border-t border-border flex justify-between items-center text-[13px] text-muted-foreground">
+            <span className="font-[510]">{version.totalCategories || 0} Nhóm</span>
+            <span className="flex items-center gap-2">
+              <span className="w-1 h-1 rounded-full bg-muted-foreground/30"></span>
+              {new Date(version.created_at).toLocaleDateString('vi-VN')}
+            </span>
+          </div>
         </div>
       </div>
 

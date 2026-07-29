@@ -2,6 +2,117 @@ import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/com
 import { prisma } from '@student-score/database';
 import { randomUUID } from 'crypto';
 
+
+export const ASSIGNED_ROLE_CODES = {
+  CLASS_COMMITTEE: [
+    'MONITOR',
+    'VICE_MONITOR',
+    'SECRETARY',
+  ],
+  ADVISOR: ['ADVISOR'],
+} as const;
+
+export type AssignedRoleContext = keyof typeof ASSIGNED_ROLE_CODES;
+export type AssignedRoleCode = typeof ASSIGNED_ROLE_CODES[AssignedRoleContext][number];
+
+export function isAssignedRoleCodeForContext(roleCode: string, context: AssignedRoleContext): roleCode is AssignedRoleCode {
+  return (ASSIGNED_ROLE_CODES[context] as readonly string[]).includes(roleCode);
+}
+
+import { HttpException, HttpStatus } from '@nestjs/common';
+
+export function throwAmbiguousRoleContext(): never {
+  throw new HttpException({
+    statusCode: 400,
+    code: 'AMBIGUOUS_ROLE_CONTEXT',
+    message: 'Tài khoản có nhiều phạm vi vai trò. Vui lòng sử dụng endpoint theo vai trò.'
+  }, HttpStatus.BAD_REQUEST);
+}
+
+export function throwClassContextRequired(classes: { id: string; name: string }[]): never {
+  throw new HttpException({
+    statusCode: 400,
+    code: 'CLASS_CONTEXT_REQUIRED',
+    message: 'Tài khoản được phân công nhiều lớp. Vui lòng chọn lớp.',
+    classes
+  }, HttpStatus.BAD_REQUEST);
+}
+
+export function throwClassScopeForbidden(): never {
+  throw new HttpException({
+    statusCode: 403,
+    code: 'CLASS_SCOPE_FORBIDDEN',
+    message: 'Tài khoản chưa được phân công quản lý lớp này.'
+  }, HttpStatus.FORBIDDEN);
+}
+
+export function throwInvalidClassId(): never {
+  throw new HttpException({
+    statusCode: 400,
+    code: 'INVALID_CLASS_ID',
+    message: 'Mã lớp không hợp lệ.'
+  }, HttpStatus.BAD_REQUEST);
+}
+
+export function throwNoActiveSemester(): never {
+  throw new HttpException({
+    statusCode: 409,
+    code: 'NO_ACTIVE_SEMESTER',
+    message: 'Không có học kỳ đang hoạt động.'
+  }, HttpStatus.CONFLICT);
+}
+
+export type SubmissionValidationError = {
+  criterionId: number | null;
+  code:
+    | 'EVIDENCE_REQUIRED'
+    | 'CRITERION_INACTIVE'
+    | 'CRITERION_VERSION_MISMATCH'
+    | 'SCORE_OUT_OF_RANGE'
+    | 'INVALID_SCORE_DIRECTION'
+    | 'QUANTITY_EXCEEDED'
+    | 'MUTUALLY_EXCLUSIVE_OPTIONS'
+    | 'INVALID_FORM_STATE'
+    | 'DEADLINE_EXPIRED'
+    | 'FORBIDDEN'
+    | 'FORM_NOT_FOUND';
+  message: string;
+};
+
+export type ScoringTimelineEvent = {
+  id: string;
+  eventType:
+    | 'CREATED'
+    | 'SAVED'
+    | 'SUBMITTED'
+    | 'RESUBMITTED'
+    | 'APPROVED'
+    | 'RETURNED'
+    | 'SCORE_ADJUSTED'
+    | 'COMMENTED'
+    | 'FINALIZED';
+
+  actorId: string | null;
+  actorName: string;
+  actorRole: string | null;
+  actorRoleLabel: string;
+
+  createdAt: Date;
+
+  previousStatus: string | null;
+  newStatus: string | null;
+
+  previousScore: number | null;
+  newScore: number | null;
+
+  comment: string | null;
+  reason: string | null;
+
+  criterionId: number | null;
+  criterionCode: string | null;
+  criterionName: string | null;
+};
+
 // =============================================
 // WORKFLOW STATUS CONSTANTS (Thay cho enum import)
 // Map với cả 2 hệ thống: chi tiết (12 bước) & đơn giản (4 bước)
@@ -16,8 +127,9 @@ const WorkflowStatus = {
 
 // ✅ MA TRẬN CHUYỂN TRẠNG THÁI (State Machine)
 // Key: Role → Value: { requiredStatus, nextStatus }
-// ⚠️ SYNC OBLIGATION: timestampField values are denormalized on scoring_sheets
-// (duplicated from review_actions.created_at). Any new transition MUST update both.
+// ⚠️ SYNC OBLIGATION: timestampField values are denormalized on scoring_sheets.
+// (historically duplicated from review_actions.created_at). 
+// Lưu ý (Phase 3): review_actions không còn là nguồn timeline chính, timeline chuẩn lấy từ audit_logs.
 const STATE_TRANSITIONS: Record<string, {
   requiredStatus: string | string[];
   nextStatus: string;
@@ -50,16 +162,63 @@ const SCORING_PERMISSIONS: Record<string, string | string[]> = {
   ADVISOR: WorkflowStatus.CLASS_APPROVED,
 };
 
-// ✅ 3NF: current_step is derived from status at runtime
-const STEP_MAP: Record<string, number> = {
-  DRAFT: 1,
-  STUDENT_SUBMITTED: 2, CLASS_REVIEWING: 2, CLASS_REJECTED: 2,
-  CLASS_REVIEWED: 3, ADVISOR_REVIEWING: 3, ADVISOR_REJECTED: 3,
-  ADVISOR_APPROVED: 4, SCHOOL_REVIEWING: 4, SCHOOL_APPROVED: 4, FINALIZED: 4,
-  APPEALING: 4,
+export type ScoringWorkflowState = {
+  currentStage: 'STUDENT' | 'CLASS_COMMITTEE' | 'ADVISOR' | 'DEPARTMENT';
+  currentStep: 1 | 2 | 3 | 4;
+  currentHandler: 'STUDENT' | 'CLASS_COMMITTEE' | 'ADVISOR' | 'DEPARTMENT' | null;
+  isReturned: boolean;
+  returnedToStage: 'STUDENT' | 'CLASS_COMMITTEE' | 'ADVISOR' | 'DEPARTMENT' | null;
+  statusLabel: string;
 };
-function getStepFromStatus(status: string): number {
-  return STEP_MAP[status] ?? 1;
+
+export function getScoringWorkflowState(status: string): ScoringWorkflowState {
+  switch (status) {
+    case 'DRAFT':
+      return { currentStage: 'STUDENT', currentStep: 1, currentHandler: 'STUDENT', isReturned: false, returnedToStage: null, statusLabel: 'Bản nháp' };
+    case 'CLASS_REJECTED':
+      return { currentStage: 'STUDENT', currentStep: 1, currentHandler: 'STUDENT', isReturned: true, returnedToStage: 'STUDENT', statusLabel: 'Cần chỉnh sửa theo yêu cầu của Ban cán sự lớp' };
+    case 'ADVISOR_REJECTED':
+      return { currentStage: 'STUDENT', currentStep: 1, currentHandler: 'STUDENT', isReturned: true, returnedToStage: 'STUDENT', statusLabel: 'Cần chỉnh sửa theo yêu cầu của Cố vấn học tập' };
+      
+    case 'STUDENT_SUBMITTED':
+      return { currentStage: 'CLASS_COMMITTEE', currentStep: 2, currentHandler: 'CLASS_COMMITTEE', isReturned: false, returnedToStage: null, statusLabel: 'Đã nộp cho BCS' };
+    case 'CLASS_REVIEWING':
+      return { currentStage: 'CLASS_COMMITTEE', currentStep: 2, currentHandler: 'CLASS_COMMITTEE', isReturned: false, returnedToStage: null, statusLabel: 'BCS đang xét duyệt' };
+      
+    case 'CLASS_REVIEWED':
+      return { currentStage: 'ADVISOR', currentStep: 3, currentHandler: 'ADVISOR', isReturned: false, returnedToStage: null, statusLabel: 'BCS đã duyệt' };
+    case 'ADVISOR_REVIEWING':
+      return { currentStage: 'ADVISOR', currentStep: 3, currentHandler: 'ADVISOR', isReturned: false, returnedToStage: null, statusLabel: 'CVHT đang xét duyệt' };
+      
+    case 'ADVISOR_APPROVED':
+      return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: 'DEPARTMENT', isReturned: false, returnedToStage: null, statusLabel: 'CVHT đã duyệt' };
+    case 'SCHOOL_REVIEWING':
+      return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: 'DEPARTMENT', isReturned: false, returnedToStage: null, statusLabel: 'Khoa đang xét duyệt' };
+
+    case 'SCHOOL_APPROVED':
+      return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: 'DEPARTMENT', isReturned: false, returnedToStage: null, statusLabel: 'Khoa đã duyệt' };
+      
+    case 'SCHOOL_REJECTED':
+      return { currentStage: 'ADVISOR', currentStep: 3, currentHandler: 'ADVISOR', isReturned: true, returnedToStage: 'ADVISOR', statusLabel: 'Bị Khoa trả lại' };
+
+    case 'FINALIZED':
+    case 'COMPLETED':
+      return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: null, isReturned: false, returnedToStage: null, statusLabel: 'Hoàn tất' };
+      
+    case 'APPEALING':
+      return { currentStage: 'DEPARTMENT', currentStep: 4, currentHandler: 'DEPARTMENT', isReturned: false, returnedToStage: null, statusLabel: 'Đang khiếu nại' };
+
+    default:
+      console.warn(`[getScoringWorkflowState] Trạng thái không nhận diện được: ${status}`);
+      return { 
+        currentStage: 'STUDENT', 
+        currentStep: 1, 
+        currentHandler: null, 
+        isReturned: false, 
+        returnedToStage: null, 
+        statusLabel: 'Trạng thái chưa được hỗ trợ' 
+      };
+  }
 }
 
 
@@ -89,7 +248,7 @@ export class ScoringService {
   private async findSheetByStudent(studentId: string, semesterId?: string) {
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       targetSemesterId = activeSemester?.id;
     }
 
@@ -106,39 +265,48 @@ export class ScoringService {
   }
 
   // =============================================
-  // HELPER: Lấy active semester
+  // HELPER: Lấy active semester (Deterministic)
   // =============================================
-  private async getActiveSemester(): Promise<{ id: string } | null> {
-    return prisma.semesters.findFirst({
+  async resolveCurrentScoringSemester() {
+    const activeSemesters = await prisma.semesters.findMany({
       where: { is_active: 1 },
-      orderBy: { created_at: 'desc' },
-      select: { id: true },
+      orderBy: [
+        { start_date: 'desc' },
+        { created_at: 'desc' }
+      ],
+      select: {
+        id: true,
+        student_deadline: true,
+        class_committee_deadline: true,
+        advisor_deadline: true,
+        school_deadline: true,
+      }
     });
+
+    if (activeSemesters.length > 1) {
+      console.warn(`[WARNING] Multiple active semesters found. Using ${activeSemesters[0].id} deterministically.`);
+    }
+
+    return activeSemesters.length > 0 ? activeSemesters[0] : null;
   }
 
   // =============================================
   // HELPER: Lấy semester kèm thông tin deadline
   // =============================================
   private async getSemesterWithDeadlines(semesterId?: string) {
-    const selectFields = {
-      id: true,
-      student_deadline: true,
-      class_committee_deadline: true,
-      advisor_deadline: true,
-      school_deadline: true,
-    };
-
     if (semesterId) {
       return prisma.semesters.findUnique({
         where: { id: semesterId },
-        select: selectFields,
+        select: {
+          id: true,
+          student_deadline: true,
+          class_committee_deadline: true,
+          advisor_deadline: true,
+          school_deadline: true,
+        },
       });
     }
-    return prisma.semesters.findFirst({
-      where: { is_active: 1 },
-      orderBy: { created_at: 'desc' },
-      select: selectFields,
-    });
+    return this.resolveCurrentScoringSemester();
   }
 
   // =============================================
@@ -199,20 +367,16 @@ export class ScoringService {
     tx: any = prisma,
   ) {
     if (oldScore === newScore) return;
-    try {
-      await tx.score_adjustment_logs.create({
-        data: {
-          id: randomUUID(),
-          score_detail_id: scoreDetailId,
-          adjusted_by_id: adjustedById,
-          old_score: oldScore,
-          new_score: newScore,
-          reason: reason || null,
-        },
-      });
-    } catch (err) {
-      console.warn('Lỗi khi ghi log điều chỉnh điểm:', err);
-    }
+    await tx.score_adjustment_logs.create({
+      data: {
+        id: randomUUID(),
+        score_detail_id: scoreDetailId,
+        adjusted_by_id: adjustedById,
+        old_score: oldScore,
+        new_score: newScore,
+        reason: reason || null,
+      },
+    });
   }
 
   // =============================================
@@ -245,6 +409,31 @@ export class ScoringService {
   }
 
   // =============================================
+  // HELPER: Ghi audit log quan trọng (Không bắt lỗi, nằm trong transaction)
+  // =============================================
+  private async logCriticalAudit(
+    actorId: string,
+    action: string,
+    entityType: string,
+    entityId: string,
+    oldValue?: any,
+    newValue?: any,
+    tx: any = prisma,
+  ) {
+    await tx.audit_logs.create({
+      data: {
+        id: randomUUID(),
+        actor_id: actorId,
+        action,
+        entity_type: entityType,
+        entity_id: entityId,
+        old_value: oldValue != null ? oldValue : undefined,
+        new_value: newValue != null ? newValue : undefined,
+      },
+    });
+  }
+
+  // =============================================
   // HELPER: Tìm hoặc tự động tạo phiếu DRAFT cho sinh viên
   // ✅ FIX: Gom logic trùng lặp từ 3 hàm về 1 nơi duy nhất
   //    + Xử lý Race Condition an toàn bằng try-catch P2002
@@ -257,7 +446,7 @@ export class ScoringService {
     // Bước 2: Xác định semester
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       targetSemesterId = activeSemester?.id;
     }
     if (!targetSemesterId) {
@@ -290,58 +479,120 @@ export class ScoringService {
   }
 
   // =============================================
-  // 0. LẤY DANH SÁCH SINH VIÊN CÙNG LỚP
+  // HELPER: Phân giải phạm vi lớp học (Class Scope) cho BCS / CVHT
   // =============================================
-  async getStudentListByUser(userId: string) {
-    // Tìm user đang đăng nhập
-    const currentUser = await prisma.users.findFirst({
-      where: { id: userId },
-      include: { user_roles: { include: { roles: true } } },
-    });
-
-    if (!currentUser) {
-      return { message: 'Không tìm thấy người dùng', data: [] };
+  async resolveAssignedClassScope(
+    actorId: string,
+    roleContext: 'CLASS_COMMITTEE' | 'ADVISOR',
+    mode: 'SINGLE_CLASS' | 'ALL_ASSIGNED_CLASSES',
+    requestedClassId?: string
+  ) {
+    const activeSemester = await this.resolveCurrentScoringSemester();
+    if (!activeSemester) {
+      throwNoActiveSemester();
     }
 
-    // Xác định class_id qua semester_enrollments hoặc class_roles
-    let classIds: string[] = [];
-    const activeSemester = await this.getActiveSemester();
+    if (requestedClassId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedClassId)) {
+      throwInvalidClassId();
+    }
 
-    const isDept = currentUser.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
-    if (isDept && currentUser.department_id) {
-      const deptClasses = await prisma.classes.findMany({
-        where: { department_id: currentUser.department_id },
-        select: { id: true },
+    const roleCodes = roleContext === 'CLASS_COMMITTEE' 
+      ? ASSIGNED_ROLE_CODES.CLASS_COMMITTEE 
+      : ASSIGNED_ROLE_CODES.ADVISOR;
+
+    const userRoles = await prisma.user_roles.findMany({
+      where: {
+        user_id: actorId,
+        is_active: 1,
+        roles: { code: { in: [...roleCodes] } }
+      },
+      select: { entity_id: true }
+    });
+
+    let classIds = userRoles.map(r => r.entity_id).filter((id): id is string => Boolean(id));
+    
+    let validClasses: { id: string; name: string }[] = [];
+    if (classIds.length > 0) {
+      validClasses = await prisma.classes.findMany({
+        where: { id: { in: classIds }, is_active: 1 },
+        select: { id: true, name: true }
       });
-      classIds = deptClasses.map((c) => c.id);
-    } else {
-      if (activeSemester) {
-        const enrollment = await prisma.semester_enrollments.findUnique({
-          where: {
-            user_id_semester_id: {
-              user_id: currentUser.id,
-              semester_id: activeSemester.id,
-            },
-          },
-          select: { class_id: true },
-        });
-        if (enrollment) {
-          classIds = [enrollment.class_id];
-        }
-      }
-
-      // Fallback: user_roles (cho ADVISOR)
-      if (classIds.length === 0) {
-        const userRoles = await prisma.user_roles.findMany({
-          where: { user_id: currentUser.id, is_active: 1 },
-          select: { entity_id: true },
-        });
-        classIds = userRoles.map((cr) => cr.entity_id as string).filter(Boolean);
-      }
+      classIds = validClasses.map(c => c.id);
     }
 
     if (classIds.length === 0) {
-      return { message: 'Không tìm thấy lớp phụ trách', data: [] };
+      throwClassScopeForbidden();
+    }
+
+    if (requestedClassId && !classIds.includes(requestedClassId)) {
+      throwClassScopeForbidden();
+    }
+
+    if (mode === 'SINGLE_CLASS') {
+      let selectedClassId = classIds[0];
+      if (classIds.length > 1) {
+        if (requestedClassId) {
+          selectedClassId = requestedClassId;
+        } else {
+          throwClassContextRequired(validClasses);
+        }
+      }
+      return {
+        semesterId: activeSemester.id,
+        classIds: [selectedClassId],
+        selectedClassId,
+        classes: validClasses
+      };
+    } else {
+      const finalClassIds = requestedClassId ? [requestedClassId] : classIds;
+      return {
+        semesterId: activeSemester.id,
+        classIds: finalClassIds,
+        selectedClassId: requestedClassId || null,
+        classes: validClasses
+      };
+    }
+  }
+
+  // =============================================
+  // HELPER: Phân giải phạm vi lớp học cho DEPARTMENT
+  // =============================================
+  async resolveDepartmentClassScope(actorId: string) {
+    const activeSemester = await this.resolveCurrentScoringSemester();
+    if (!activeSemester) {
+      throw new BadRequestException('Không có học kỳ nào đang hoạt động.');
+    }
+
+    const user = await prisma.users.findUnique({
+      where: { id: actorId },
+      include: { user_roles: { include: { roles: true } } }
+    });
+
+    const isDept = user?.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
+    if (!isDept || !user?.department_id) {
+      throw new ForbiddenException('Tài khoản không có quyền cấp Khoa.');
+    }
+
+    const deptClasses = await prisma.classes.findMany({
+      where: { department_id: user.department_id },
+      select: { id: true }
+    });
+
+    return {
+      semesterId: activeSemester.id,
+      classIds: deptClasses.map(c => c.id)
+    };
+  }
+
+  // =============================================
+  // API: LẤY DANH SÁCH SINH VIÊN (DÙNG CHUNG / MỚI)
+  // =============================================
+  async getAuthorizedStudentList(actorId: string, roleContext: 'CLASS_COMMITTEE' | 'ADVISOR' | 'DEPARTMENT', mode: 'SINGLE_CLASS' | 'ALL_ASSIGNED_CLASSES' = 'SINGLE_CLASS', requestedClassId?: string) {
+    let scope;
+    if (roleContext === 'DEPARTMENT') {
+      scope = await this.resolveDepartmentClassScope(actorId);
+    } else {
+      scope = await this.resolveAssignedClassScope(actorId, roleContext, mode, requestedClassId);
     }
 
     // ✅ PONYTAIL: Lấy toàn bộ danh mục và tiêu chí 1 lần duy nhất (tránh N+1 query)
@@ -353,8 +604,8 @@ export class ScoringService {
     // Lấy tất cả sinh viên cùng lớp qua semester_enrollments
     const enrollments = await prisma.semester_enrollments.findMany({
       where: {
-        class_id: { in: classIds },
-        ...(activeSemester ? { semester_id: activeSemester.id } : {}),
+        class_id: { in: scope.classIds },
+        semester_id: scope.semesterId,
         is_active: 1,
         users: {
           is_active: 1,
@@ -392,6 +643,24 @@ export class ScoringService {
       },
       orderBy: { users: { full_name: 'asc' } },
     });
+
+    const contextPayload = {
+      semesterId: scope.semesterId,
+      classIds: scope.classIds,
+      selectedClassId: scope.selectedClassId || scope.classIds[0] || null,
+      classes: scope.classes || []
+    };
+
+    if (enrollments.length === 0) {
+      return {
+        message: 'Lớp chưa có danh sách sinh viên trong học kỳ hiện tại',
+        data: [],
+        context: {
+          ...contextPayload,
+          reason: 'NO_ENROLLMENTS_FOR_CURRENT_SEMESTER'
+        }
+      };
+    }
 
     // Map dữ liệu gọn cho frontend
     const data = enrollments.map((e) => {
@@ -434,8 +703,52 @@ export class ScoringService {
     return {
       message: 'Lấy danh sách sinh viên thành công',
       data,
-      classId: classIds.length === 1 ? classIds[0] : classIds.join(','),
+      context: contextPayload
     };
+  }
+
+  // =============================================
+  // HELPER: Lấy danh sách lớp được phân công cho Advisor
+  // =============================================
+  async getAdvisorClasses(userId: string) {
+    const scope = await this.resolveAssignedClassScope(userId, 'ADVISOR', 'ALL_ASSIGNED_CLASSES');
+    
+    return {
+      message: 'Lấy danh sách lớp thành công',
+      data: scope.classes, // Only { id, name }
+      context: {
+        semesterId: scope.semesterId
+      }
+    };
+  }
+
+  // =============================================
+  // CŨ: GIỮ LẠI ĐỂ TRÁNH LỖI BACKWARD COMPATIBILITY
+  // =============================================
+  async getStudentListByUser(userId: string) {
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      include: { user_roles: { include: { roles: true } } }
+    });
+    if (!user) throw new ForbiddenException('Tài khoản không tồn tại.');
+    
+    const isDept = user.user_roles.some(ur => ur.roles.code === 'DEPARTMENT' && ur.is_active === 1);
+    const isAdvisor = user.user_roles.some(ur => isAssignedRoleCodeForContext(ur.roles.code, 'ADVISOR') && ur.is_active === 1);
+    const isClassCommittee = user.user_roles.some(ur => 
+      isAssignedRoleCodeForContext(ur.roles.code, 'CLASS_COMMITTEE') && ur.is_active === 1
+    );
+    
+    const activeRolesCount = [isDept, isAdvisor, isClassCommittee].filter(Boolean).length;
+    
+    if (activeRolesCount > 1) {
+      throwAmbiguousRoleContext();
+    }
+
+    if (isDept) return this.getAuthorizedStudentList(userId, 'DEPARTMENT');
+    if (isAdvisor) return this.getAuthorizedStudentList(userId, 'ADVISOR', 'ALL_ASSIGNED_CLASSES');
+    if (isClassCommittee) return this.getAuthorizedStudentList(userId, 'CLASS_COMMITTEE', 'SINGLE_CLASS');
+    
+    throw new ForbiddenException('Tài khoản không có quyền xem danh sách sinh viên.');
   }
 
   // =============================================
@@ -444,7 +757,7 @@ export class ScoringService {
   async getAllCriteria(semesterId?: string) {
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       if (!activeSemester) {
         return {
           message: 'Không có học kỳ nào đang hoạt động',
@@ -515,13 +828,15 @@ export class ScoringService {
     if (targetSemesterId) {
       const enrollment = await this.resolveEnrollment(studentId, targetSemesterId);
       if (enrollment && enrollment.class_id) {
-        const isClassRole = actorRoles.some(r => 
-          ['MONITOR', 'VICE_MONITOR', 'SECRETARY', 'ADVISOR'].includes(r.roles.code) && 
-          r.entity_id === enrollment.class_id
-        );
-        if (isClassRole) {
+        try {
+          await this.resolveAssignedClassScope(actorId, 'CLASS_COMMITTEE', 'SINGLE_CLASS', enrollment.class_id);
           return;
-        }
+        } catch { /* not a committee member for this class */ }
+        
+        try {
+          await this.resolveAssignedClassScope(actorId, 'ADVISOR', 'SINGLE_CLASS', enrollment.class_id);
+          return;
+        } catch { /* not an advisor for this class */ }
       }
     }
 
@@ -535,7 +850,7 @@ export class ScoringService {
   async getScoresByFormId(formId: string, studentId: string, actorId: string, semesterId?: string) {
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       targetSemesterId = activeSemester.id;
     }
@@ -576,21 +891,7 @@ export class ScoringService {
       }),
     ]);
 
-    const workflowStepMap: Record<string, string> = {
-      DRAFT: 'DRAFT',
-      STUDENT_SUBMITTED: 'SUBMITTED',
-      CLASS_REVIEWING: 'SUBMITTED',
-      CLASS_REVIEWED: 'CLASS_APPROVED',
-      ADVISOR_REVIEWING: 'CLASS_APPROVED',
-      ADVISOR_APPROVED: 'ADVISOR_APPROVED',
-      SCHOOL_REVIEWING: 'ADVISOR_APPROVED',
-      SCHOOL_APPROVED: 'ADVISOR_APPROVED',
-      FINALIZED: 'ADVISOR_APPROVED',
-      CLASS_REJECTED: 'REJECTED',
-      ADVISOR_REJECTED: 'REJECTED',
-    };
-
-    const formStatus = workflowStepMap[form.status] || 'DRAFT';
+    const workflowState = getScoringWorkflowState(form.status);
 
     // ponytail: tính totals từ data đã có, không gọi calculateTotals (tránh re-query score_details)
     const totals = this.computeTotalsPure(scores as any[], categories, allCriteria);
@@ -606,9 +907,14 @@ export class ScoringService {
       message: 'Lấy danh sách điểm thành công',
       data: scores,
       formId: form.id,
-      formStatus,
+      formStatus: form.status,
       formStatusDetail: form.status,
-      currentStep: getStepFromStatus(form.status),
+      currentStep: workflowState.currentStep,
+      currentStage: workflowState.currentStage,
+      currentHandler: workflowState.currentHandler,
+      isReturned: workflowState.isReturned,
+      returnedToStage: workflowState.returnedToStage,
+      statusLabel: workflowState.statusLabel,
       rejectionReason: form.rejection_reason || null,
       studentInfo,
       semesterName: enrollmentData?.semesters ? `Học kỳ ${enrollmentData.semesters.name} - Năm học ${enrollmentData.semesters.academic_year}` : '',
@@ -638,7 +944,7 @@ export class ScoringService {
       return;
     }
 
-    // 2. Nếu là CLASS_COMMITTEE hoặc ADVISOR, kiểm tra trong bảng class_roles
+    // 2. Nếu là CLASS_COMMITTEE hoặc ADVISOR, kiểm tra qua role assignment mới
     if (!targetSemesterId) {
       throw new BadRequestException('Không tìm thấy học kỳ hoạt động.');
     }
@@ -648,28 +954,13 @@ export class ScoringService {
       throw new BadRequestException('Không tìm thấy thông tin lớp học của sinh viên.');
     }
 
-    const classRoles = await prisma.user_roles.findMany({
-      where: {
-        user_id: actorId,
-        entity_id: enrollment.class_id,
-        is_active: 1,
-      },
-      include: { roles: true },
-    });
-
     if (requestedRole === 'CLASS_COMMITTEE') {
-      const isCommittee = classRoles.some(r => ['MONITOR', 'VICE_MONITOR', 'SECRETARY'].includes(r.roles.code));
-      if (!isCommittee) {
-        throw new ForbiddenException('Bạn không có quyền Ban cán sự tại lớp của sinh viên này.');
-      }
+      await this.resolveAssignedClassScope(actorId, 'CLASS_COMMITTEE', 'SINGLE_CLASS', enrollment.class_id);
       return;
     }
 
     if (requestedRole === 'ADVISOR') {
-      const isAdvisor = classRoles.some(r => r.roles.code === 'ADVISOR');
-      if (!isAdvisor) {
-        throw new ForbiddenException('Bạn không phải là Cố vấn học tập của lớp này.');
-      }
+      await this.resolveAssignedClassScope(actorId, 'ADVISOR', 'SINGLE_CLASS', enrollment.class_id);
       return;
     }
 
@@ -945,7 +1236,7 @@ export class ScoringService {
       }
 
       // ✅ Ghi audit log
-      await this.logAudit(studentId, 'SCORE_CRITERIA', 'score_details', savedDetail.id,
+      await this.logCriticalAudit(studentId, 'SCORE_CRITERIA', 'score_details', savedDetail.id,
         { criteria_id: criteriaId, old_score: oldStudentScore },
         { criteria_id: criteriaId, new_score: score, role: 'STUDENT' },
         tx
@@ -964,7 +1255,560 @@ export class ScoringService {
   // 5. CHẤM ĐIỂM THEO ROLE (Tổng quát cho cả 3 vai trò)
   //    ✅ MỚI: Validate quyền theo Role + Status
   // =============================================
+  
+  // =============================================
+  // GET NORMALIZED SCORING HISTORY
+  // =============================================
+  async getNormalizedScoringHistory(formId: string, actorId: string): Promise<ScoringTimelineEvent[]> {
+    // Auth check via sheet
+    const form = await prisma.scoring_sheets.findUnique({
+      where: { id: formId },
+      include: { semester_enrollments: true },
+    });
+    if (!form) return [];
+
+    await this.verifyReadPermission(actorId, form.semester_enrollments.user_id, form.semester_enrollments.semester_id);
+
+    const scoreDetails = await prisma.score_details.findMany({
+      where: { scoring_sheet_id: formId },
+      include: { criteria: true },
+    });
+    const detailIds = scoreDetails.map(d => d.id);
+    const detailMap = new Map(scoreDetails.map(d => [d.id, d]));
+
+    const scoreEntries = await prisma.score_entries.findMany({
+      where: { score_detail_id: { in: detailIds } },
+    });
+    const entryIds = scoreEntries.map(e => e.id);
+    const entryToDetailMap = new Map(scoreEntries.map(e => [e.id, e.score_detail_id]));
+
+    const [auditLogs, adjustLogs] = await Promise.all([
+      prisma.audit_logs.findMany({
+        where: {
+          OR: [
+            { entity_type: 'scoring_sheets', entity_id: formId },
+            { entity_type: 'score_details', entity_id: { in: detailIds } },
+            { entity_type: 'score_entries', entity_id: { in: entryIds } },
+          ]
+        },
+        include: { users: { select: { full_name: true } } },
+        orderBy: { created_at: 'asc' },
+      }),
+      prisma.score_adjustment_logs.findMany({
+        where: { score_detail_id: { in: detailIds } },
+        include: { users: { select: { full_name: true } }, score_details: { include: { criteria: true } } },
+        orderBy: { created_at: 'asc' },
+      }),
+    ]);
+
+    const events: ScoringTimelineEvent[] = [];
+    const ROLE_MAP: Record<string, string> = {
+      STUDENT: 'Sinh viên',
+      CLASS_COMMITTEE: 'Ban cán sự lớp',
+      ADVISOR: 'Cố vấn học tập',
+      SCHOOL: 'Khoa',
+      SYSTEM: 'Hệ thống'
+    };
+
+    // Helper: Map Audit action to EventType
+    const mapActionToEvent = (action: string): ScoringTimelineEvent['eventType'] | null => {
+      if (action === 'SUBMIT_FORM') return 'SUBMITTED';
+      if (action === 'APPROVE_FORM') return 'APPROVED';
+      if (action === 'REJECT_FORM') return 'RETURNED';
+      if (action === 'FINALIZE_FORM') return 'FINALIZED';
+      if (action === 'CREATE_FORM') return 'CREATED';
+      return null;
+    };
+
+    // Lấy thông tin lớp để suy diễn vai trò
+    const classRoles = await prisma.user_roles.findMany({
+      where: { entity_id: form.semester_enrollments.class_id, is_active: 1 },
+      include: { roles: true }
+    });
+    
+    const monitorRoleCodes = ASSIGNED_ROLE_CODES.CLASS_COMMITTEE;
+    const monitorIds = new Set(classRoles.filter(r => monitorRoleCodes.includes(r.roles.code as any)).map(r => r.user_id));
+    const advisorIds = new Set(classRoles.filter(r => ASSIGNED_ROLE_CODES.ADVISOR.includes(r.roles.code as any)).map(r => r.user_id));
+
+    const inferActorRole = (aId: string) => {
+      if (aId === form.semester_enrollments.user_id) return 'STUDENT';
+      if (monitorIds.has(aId)) return 'CLASS_COMMITTEE';
+      if (advisorIds.has(aId)) return 'ADVISOR';
+      return null;
+    };
+
+    const normalizeScoreValue = (value: unknown): number | null => {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      const numericValue = Number(value);
+      return Number.isFinite(numericValue) ? numericValue : null;
+    };
+
+    const matchedAdjustmentIds = new Set<string>();
+
+    const findMatchingAdjustment = (detailId: string, actorId: string, oldScore: number | null, newScore: number | null, logTime: number) => {
+       return adjustLogs.find(adj => {
+           if (matchedAdjustmentIds.has(adj.id)) return false;
+
+           const timeDiff = Math.abs(adj.created_at.getTime() - logTime);
+           return adj.score_detail_id === detailId 
+               && adj.adjusted_by_id === actorId
+               && normalizeScoreValue(adj.old_score) === oldScore
+               && normalizeScoreValue(adj.new_score) === newScore
+               && timeDiff <= 5000; // within 5 seconds
+       });
+    };
+
+    // 1. Map score adjustments
+    for (const adj of adjustLogs) {
+      const actorRole = inferActorRole(adj.adjusted_by_id);
+      
+      events.push({
+        id: `adj-${adj.id}`,
+        eventType: 'SCORE_ADJUSTED',
+        actorId: adj.adjusted_by_id,
+        actorName: adj.users?.full_name || 'Không xác định',
+        actorRole: actorRole,
+        actorRoleLabel: actorRole ? ROLE_MAP[actorRole] : 'Người dùng',
+        createdAt: adj.created_at,
+        previousStatus: null,
+        newStatus: null,
+        previousScore: normalizeScoreValue(adj.old_score),
+        newScore: normalizeScoreValue(adj.new_score),
+        comment: null,
+        reason: adj.reason,
+        criterionId: adj.score_details.criteria.id,
+        criterionCode: adj.score_details.criteria.code,
+        criterionName: adj.score_details.criteria.content,
+      });
+    }
+
+    // 2. Map audit logs
+    for (const log of auditLogs) {
+      const oldVal: any = log.old_value || {};
+      const newVal: any = log.new_value || {};
+
+      if (log.action === 'SCORE_CRITERIA' || log.action === 'DELETE_CRITERIA_SCORE') {
+         let detailId = log.entity_type === 'score_details' ? log.entity_id : null;
+         
+         if (log.entity_type === 'score_entries') {
+            const critId = oldVal.criteria_id || newVal.criteria_id;
+            if (critId) {
+                const foundDetail = Array.from(detailMap.values()).find(d => d.criteria_id === critId);
+                if (foundDetail) detailId = foundDetail.id;
+            } else {
+                const mappedDetailId = entryToDetailMap.get(log.entity_id);
+                if (mappedDetailId) detailId = mappedDetailId;
+            }
+         }
+
+         if (detailId) {
+            const detail = detailMap.get(detailId);
+            if (detail) {
+                const oldScore = normalizeScoreValue(oldVal.old_score);
+                const newScore = normalizeScoreValue(newVal.new_score);
+                
+                // Check if this audit log has a matching score adjustment log
+                const matchingAdj = findMatchingAdjustment(detailId, log.actor_id, oldScore, newScore, log.created_at.getTime());
+                
+                if (matchingAdj) {
+                    matchedAdjustmentIds.add(matchingAdj.id);
+                } else {
+                    const actorRole = newVal.actor_role || newVal.role || inferActorRole(log.actor_id);
+                    events.push({
+                      id: `audit-${log.id}`,
+                      eventType: 'SCORE_ADJUSTED',
+                      actorId: log.actor_id,
+                      actorName: log.users?.full_name || 'Hệ thống',
+                      actorRole: actorRole,
+                      actorRoleLabel: actorRole ? ROLE_MAP[actorRole] : 'Hệ thống',
+                      createdAt: log.created_at,
+                      previousStatus: null,
+                      newStatus: null,
+                      previousScore: oldScore,
+                      newScore: newScore,
+                      comment: null,
+                      reason: null,
+                      criterionId: detail.criteria.id,
+                      criterionCode: detail.criteria.code,
+                      criterionName: detail.criteria.content,
+                    });
+                }
+            }
+         }
+         continue;
+      }
+
+      let eventType = mapActionToEvent(log.action);
+      if (!eventType) continue;
+      
+      if (eventType === 'SUBMITTED' && oldVal.status && oldVal.status.includes('REJECTED')) {
+        eventType = 'RESUBMITTED';
+      }
+
+      const role = newVal.role || inferActorRole(log.actor_id);
+
+      events.push({
+        id: `audit-${log.id}`,
+        eventType,
+        actorId: log.actor_id,
+        actorName: log.users?.full_name || 'Hệ thống',
+        actorRole: role,
+        actorRoleLabel: role ? ROLE_MAP[role] : 'Hệ thống',
+        createdAt: log.created_at,
+        previousStatus: oldVal.status || null,
+        newStatus: newVal.status || null,
+        previousScore: null,
+        newScore: null,
+        comment: null,
+        reason: newVal.reason || null,
+        criterionId: null,
+        criterionCode: null,
+        criterionName: null,
+      });
+    }
+
+    // Sort all events by createdAt ascending
+    events.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    return events;
+  }
+
+  // =============================================
+  // GET SCORING PROGRESS (TIMELINE)
+  // =============================================
+  
+  // =============================================
+  // 6.2 BULK ACTIONS
+  // =============================================
+  
+  private mapBulkActionError(err: any): { code: string; message: string } {
+    const response = err.response || {};
+    const resMsg: string = (typeof response.message === 'string' ? response.message : err.message) || '';
+
+    if (err.name === 'ForbiddenException' || err.status === 403) {
+      return { code: 'FORBIDDEN', message: 'Bạn không có quyền xử lý phiếu này.' };
+    }
+
+    if (err.name === 'NotFoundException' || err.status === 404) {
+      return { code: 'NOT_FOUND', message: 'Không tìm thấy phiếu.' };
+    }
+
+    if (err.name === 'BadRequestException' || err.status === 400) {
+      if (resMsg === 'STALE_STATUS') {
+        return { code: 'STALE_STATUS', message: 'Trạng thái phiếu đã thay đổi, vui lòng tải lại trang.' };
+      }
+      if (resMsg.includes('quá thời hạn') || resMsg.includes('hết hạn')) {
+        return { code: 'DEADLINE_EXPIRED', message: resMsg };
+      }
+      if (resMsg.includes('Không tìm thấy')) {
+        return { code: 'NOT_FOUND', message: 'Không tìm thấy phiếu.' };
+      }
+      if (resMsg.includes('quyền')) {
+        return { code: 'FORBIDDEN', message: 'Bạn không có quyền xử lý phiếu này.' };
+      }
+      if (resMsg.includes('trạng thái') || resMsg.includes('chỉ được')) {
+        return { code: 'INVALID_STATUS', message: resMsg };
+      }
+      if (response.errors && Array.isArray(response.errors)) {
+        return { code: 'VALIDATION_FAILED', message: response.errors[0] };
+      }
+      return { code: 'VALIDATION_FAILED', message: resMsg };
+    }
+
+    return { code: 'UNKNOWN_ERROR', message: 'Lỗi không xác định khi xử lý phiếu.' };
+  }
+
+  private isAuthorizationError(code: string): boolean {
+    return code === 'FORBIDDEN' || code === 'NOT_FOUND';
+  }
+
+  private async mapWithConcurrency<T, R>(
+    items: T[],
+    concurrency: number,
+    worker: (item: T, index: number) => Promise<R>,
+  ): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    let currentIndex = 0;
+    
+    const next = async (): Promise<void> => {
+      while (currentIndex < items.length) {
+        const index = currentIndex++;
+        results[index] = await worker(items[index], index);
+      }
+    };
+    
+    const workers = Array(Math.min(concurrency, items.length)).fill(null).map(() => next());
+    await Promise.all(workers);
+    return results;
+  }
+
+  private validateBulkRequestAndGetUUIDs(formIds: any[]): string[] {
+    if (!Array.isArray(formIds) || formIds.length === 0) {
+      throw new BadRequestException('Danh sách phiếu không hợp lệ hoặc trống.');
+    }
+
+    if (formIds.length > 50) {
+      throw new BadRequestException('Chỉ hỗ trợ tối đa 50 phiếu mỗi lần.');
+    }
+    
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const invalidFormat = formIds.some(id => typeof id !== 'string' || !uuidRegex.test(id.trim()));
+    if (invalidFormat) {
+      throw new BadRequestException('Định dạng ID phiếu không hợp lệ.');
+    }
+    
+    const uniqueIds = [...new Set(formIds.map(id => id.trim()))];
+    return uniqueIds;
+  }
+
+  private async getFormsMetadata(formIds: string[]) {
+    const formsMeta = await prisma.scoring_sheets.findMany({
+      where: { id: { in: formIds } },
+      include: {
+        semester_enrollments: {
+          include: {
+            users: true
+          }
+        }
+      }
+    });
+    
+    const metaMap = new Map();
+    for (const f of formsMeta) {
+      metaMap.set(f.id, {
+        studentId: f.semester_enrollments?.users?.id || null,
+        studentCode: f.semester_enrollments?.users?.student_id || null,
+        studentName: f.semester_enrollments?.users?.full_name || null,
+        previousStatus: f.status
+      });
+    }
+    return metaMap;
+  }
+
+  async bulkApprove(formIds: any[], role: string, actorId: string) {
+    const uniqueIds = this.validateBulkRequestAndGetUUIDs(formIds);
+    let succeeded = 0;
+    let failed = 0;
+
+    const metaMap = await this.getFormsMetadata(uniqueIds);
+    const nullMeta = { studentId: null, studentCode: null, studentName: null, previousStatus: null };
+
+    const results = await this.mapWithConcurrency(uniqueIds, 5, async (formId) => {
+      const meta = metaMap.get(formId) || nullMeta;
+      try {
+        const { warnings, transition } = await this.approveSingleFormInternal(formId, role, actorId);
+        succeeded++;
+        return {
+          formId,
+          ...meta,
+          success: true as const,
+          newStatus: transition.nextStatus,
+          warnings: warnings && warnings.length > 0 ? warnings : undefined
+        };
+      } catch (err: any) {
+        failed++;
+        const mappedError = this.mapBulkActionError(err);
+        const safeMeta = this.isAuthorizationError(mappedError.code) ? nullMeta : meta;
+        return {
+          formId,
+          ...safeMeta,
+          success: false as const,
+          code: mappedError.code,
+          message: mappedError.message
+        };
+      }
+    });
+
+    return {
+      summary: {
+        requested: formIds.length,
+        unique: uniqueIds.length,
+        succeeded,
+        failed
+      },
+      results
+    };
+  }
+
+  async bulkReject(formIds: any[], role: string, actorId: string, reason: string) {
+    const uniqueIds = this.validateBulkRequestAndGetUUIDs(formIds);
+    
+    if (typeof reason !== 'string') {
+      throw new BadRequestException('Lý do phải là chuỗi văn bản.');
+    }
+    const cleanReason = reason.trim();
+    if (cleanReason.length < 5 || cleanReason.length > 500) {
+      throw new BadRequestException('Lý do trả lại phải từ 5 đến 500 ký tự.');
+    }
+
+    let succeeded = 0;
+    let failed = 0;
+
+    const metaMap = await this.getFormsMetadata(uniqueIds);
+    const nullMeta = { studentId: null, studentCode: null, studentName: null, previousStatus: null };
+
+    const results = await this.mapWithConcurrency(uniqueIds, 5, async (formId) => {
+      const meta = metaMap.get(formId) || nullMeta;
+      try {
+        const { warnings } = await this.rejectSingleFormInternal(formId, role, actorId, cleanReason);
+        succeeded++;
+        return {
+          formId,
+          ...meta,
+          success: true as const,
+          newStatus: role === 'CLASS_COMMITTEE' ? 'CLASS_REJECTED' : 'ADVISOR_REJECTED',
+          warnings: warnings && warnings.length > 0 ? warnings : undefined
+        };
+      } catch (err: any) {
+        failed++;
+        const mappedError = this.mapBulkActionError(err);
+        const safeMeta = this.isAuthorizationError(mappedError.code) ? nullMeta : meta;
+        return {
+          formId,
+          ...safeMeta,
+          success: false as const,
+          code: mappedError.code,
+          message: mappedError.message
+        };
+      }
+    });
+
+    return {
+      summary: {
+        requested: formIds.length,
+        unique: uniqueIds.length,
+        succeeded,
+        failed
+      },
+      results
+    };
+  }
+
+  async getScoringProgress(studentId: string, actorId: string, sheetId?: string, semesterId?: string) {
+    let targetSemesterId = semesterId;
+    if (!targetSemesterId && !sheetId) {
+      const activeSemester = await this.resolveCurrentScoringSemester();
+      if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ hoạt động');
+      targetSemesterId = activeSemester.id;
+    }
+
+    let form;
+    if (sheetId) {
+      form = await prisma.scoring_sheets.findUnique({
+        where: { id: sheetId },
+        include: {
+          semester_enrollments: { include: { classes: true, semesters: true, users: true } },
+        }
+      });
+    } else {
+      form = await prisma.scoring_sheets.findFirst({
+        where: {
+          semester_enrollments: {
+            user_id: studentId,
+            semester_id: targetSemesterId
+          }
+        },
+        include: {
+          semester_enrollments: { include: { classes: true, semesters: true, users: true } },
+        }
+      });
+    }
+
+    if (!form) {
+      return { 
+        statusInfo: { dbStatus: 'NO_SHEET', statusLabel: 'Chưa khởi tạo', isLocked: false, isCompleted: false }, 
+        progress: { currentStageIndex: 1, totalStages: 4, isReturned: false }, 
+        scores: { studentScore: 0, classCommitteeScore: 0, advisorScore: 0, finalScore: 0 }, 
+        stages: [] 
+      };
+    }
+    
+    // Auth check
+    await this.verifyReadPermission(actorId, form.semester_enrollments.user_id, form.semester_enrollments.semester_id);
+
+    const history = await this.getNormalizedScoringHistory(form.id, actorId);
+
+    const semester = form.semester_enrollments.semesters;
+
+    const [scoreDetails, categories, allCriteria] = await Promise.all([
+      prisma.score_details.findMany({
+        where: { scoring_sheet_id: form.id },
+        include: { score_entries: true }
+      }),
+      prisma.criteria_categories.findMany({ select: { id: true, max_score: true } }),
+      prisma.criteria.findMany({ where: { is_active: 1 } })
+    ]);
+
+    const totals = this.computeTotalsPure(scoreDetails as any[], categories, allCriteria);
+
+    const workflowState = getScoringWorkflowState(form.status);
+
+    const stages = [
+      {
+        stageIndex: 1,
+        roleLabel: 'Sinh viên',
+        deadline: semester?.student_deadline,
+      },
+      {
+        stageIndex: 2,
+        roleLabel: 'Ban cán sự lớp',
+        deadline: semester?.class_committee_deadline,
+      },
+      {
+        stageIndex: 3,
+        roleLabel: 'Cố vấn học tập',
+        deadline: semester?.advisor_deadline,
+      },
+      {
+        stageIndex: 4,
+        roleLabel: 'Khoa',
+        deadline: semester?.school_deadline,
+      }
+    ];
+
+    const roleMap: Record<string, string> = {
+       STUDENT: 'Sinh viên',
+       CLASS_COMMITTEE: 'Ban cán sự lớp',
+       ADVISOR: 'Cố vấn học tập',
+       SCHOOL: 'Khoa'
+    };
+
+    return {
+      sheetId: form.id,
+      semesterInfo: { id: semester?.id, name: semester?.name, academicYear: semester?.academic_year },
+      statusInfo: {
+        dbStatus: form.status,
+        statusLabel: workflowState.statusLabel,
+        isLocked: ['FINALIZED', 'APPEALING'].includes(form.status),
+        isCompleted: form.status === 'FINALIZED' || form.status === 'COMPLETED'
+      },
+      progress: {
+        currentStep: workflowState.currentStep,
+        currentStage: workflowState.currentStage,
+        currentStageIndex: workflowState.currentStep,
+        totalStages: 4,
+        isReturned: workflowState.isReturned,
+        returnedToStage: workflowState.returnedToStage,
+        currentHandler: {
+          role: workflowState.currentHandler,
+          roleLabel: workflowState.currentHandler ? roleMap[workflowState.currentHandler] : null,
+          organizationName: form.semester_enrollments.classes?.name
+        }
+      },
+      scores: {
+        studentScore: totals.studentTotal,
+        classCommitteeScore: totals.classTotal,
+        advisorScore: totals.advisorTotal,
+        finalScore: totals.advisorTotal 
+      },
+      stages,
+      history
+    };
+  }
+
   async submitCriteria(
+
     formId: string,
     criteriaId: number,
     score: number,
@@ -981,7 +1825,7 @@ export class ScoringService {
 
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       targetSemesterId = activeSemester.id;
     }
@@ -1086,7 +1930,7 @@ export class ScoringService {
       }
 
       // ✅ Ghi audit log
-      await this.logAudit(actorId, 'SCORE_CRITERIA', 'score_details', dbScore.id,
+      await this.logCriticalAudit(actorId, 'SCORE_CRITERIA', 'score_details', dbScore.id,
         { criteria_id: criteriaId, old_score: oldScore },
         { criteria_id: criteriaId, new_score: score, role },
         tx
@@ -1117,7 +1961,7 @@ export class ScoringService {
 
     let targetSemesterId = semesterId;
     if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
+      const activeSemester = await this.resolveCurrentScoringSemester();
       if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
       targetSemesterId = activeSemester.id;
     }
@@ -1136,7 +1980,10 @@ export class ScoringService {
     
     const existingScoreDetail = await prisma.score_details.findUnique({
       where: { scoring_sheet_id_criteria_id: { scoring_sheet_id: scoreRecord.id, criteria_id: criteriaId } },
-      include: { score_entries: { where: { scorer_role: role as any } } },
+      include: { 
+        score_entries: { where: { scorer_role: role as any } },
+        criteria: true
+      },
     });
     
     const entry = existingScoreDetail?.score_entries?.[0];
@@ -1150,9 +1997,28 @@ export class ScoringService {
       });
       
       await this.logScoreAdjustment(existingScoreDetail.id, actorId, Number(entry.score), 0, `Xóa điểm bởi ${role}`, tx);
-      await this.logAudit(actorId, 'DELETE_CRITERIA_SCORE', 'score_entries', entry.id,
-        { criteria_id: criteriaId, old_score: Number(entry.score) },
-        { criteria_id: criteriaId, new_score: 0, role, deleted: true },
+      await this.logCriticalAudit(actorId, 'DELETE_CRITERIA_SCORE', 'score_details', existingScoreDetail.id,
+        {
+          scoring_sheet_id: scoreRecord.id,
+          score_detail_id: existingScoreDetail.id,
+          score_entry_id: entry.id,
+          criterion_id: criteriaId,
+          criterion_code: existingScoreDetail.criteria.code,
+          criterion_name: existingScoreDetail.criteria.content,
+          old_score: entry.score != null ? Number(entry.score) : null,
+          actor_role: role,
+        },
+        {
+          scoring_sheet_id: scoreRecord.id,
+          score_detail_id: existingScoreDetail.id,
+          score_entry_id: entry.id,
+          criterion_id: criteriaId,
+          criterion_code: existingScoreDetail.criteria.code,
+          criterion_name: existingScoreDetail.criteria.content,
+          new_score: 0,
+          actor_role: role,
+          deleted: true,
+        },
         tx
       );
     });
@@ -1160,43 +2026,46 @@ export class ScoringService {
     return { message: `Xóa điểm thành công (${role})`, success: true };
   }
 
-  // =============================================
-  // 6. ✅ CHUYỂN TRẠNG THÁI PHIẾU (State Machine)
-  //    Gộp từ cả 2 phiên bản: NestJS exceptions + Role-based transitions
-  //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
-  // =============================================
-  async submitForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string) {
-    let targetSemesterId = semesterId;
-    if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
-      if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
-      targetSemesterId = activeSemester.id;
+  async validateFormForSubmission(formId: string, actorId: string, role: string) {
+    const form = await prisma.scoring_sheets.findUnique({
+      where: { id: formId },
+      include: {
+        semester_enrollments: {
+          include: { semesters: true }
+        },
+        score_details: {
+          include: {
+            criteria: {
+              include: { criteria_categories: true }
+            },
+            score_entries: true
+          }
+        }
+      }
+    });
+
+    if (!form || !form.semester_enrollments) {
+      throw new BadRequestException('Không tìm thấy phiếu điểm hợp lệ.');
     }
 
-    // 6a-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
+    const studentId = form.semester_enrollments.user_id;
+    const targetSemesterId = form.semester_enrollments.semester_id;
+    const semester = form.semester_enrollments.semesters;
+
+    // 1. Xác thực quyền
     await this.verifyActorRole(actorId, studentId, role, targetSemesterId);
 
-    // 6a. ✅ PONYTAIL: Gộp 2 truy vấn độc lập
-    const [form, semester] = await Promise.all([
-      this.getOrCreateDraftSheet(studentId, targetSemesterId),
-      this.getSemesterWithDeadlines(targetSemesterId)
-    ]);
-
-    // 6a-2. ✅ KIỂM TRA HẠN CHÓT TRƯỚC KHI CHUYỂN TRẠNG THÁI
+    // 2. Kiểm tra hạn chót
     if (semester) {
       this.checkDeadline(role, semester);
     }
 
-    // 6b. Lấy cấu hình chuyển trạng thái cho Role này
+    // 3. Kiểm tra trạng thái
     const transition = STATE_TRANSITIONS[role];
-
     if (!transition) {
-      throw new BadRequestException(
-        `Vai trò "${role}" không hợp lệ. Chỉ chấp nhận: STUDENT, CLASS_COMMITTEE, ADVISOR`,
-      );
+      throw new BadRequestException(`Vai trò "${role}" không hợp lệ. Chỉ chấp nhận: STUDENT, CLASS_COMMITTEE, ADVISOR`);
     }
 
-    // 6c. ✅ KIỂM TRA STATE MACHINE NGHIÊM NGẶT
     const isAllowed = Array.isArray(transition.requiredStatus)
       ? transition.requiredStatus.includes(form.status)
       : form.status === transition.requiredStatus;
@@ -1205,17 +2074,152 @@ export class ScoringService {
       throw new BadRequestException(transition.errorMessage);
     }
 
-    // 6d. (Đã gỡ bỏ ràng buộc "phải chấm ít nhất 1 điểm")
-    // Cho phép nộp phiếu trống → tổng điểm = 0
+    const activeVersion = await prisma.criteria_versions.findFirst({
+      where: { semester_id: targetSemesterId, is_active: 1 },
+      orderBy: { created_at: 'desc' },
+    });
 
-    // 6e. ✅ 3NF: Không ghi totals/classification vào DB — tính runtime khi cần
+    // 4. Validate từng tiêu chí (chỉ validate các tiêu chí có điểm != 0 do role hiện tại chấm)
+    const parentMap = new Map<number, number[]>();
+    const errors: SubmissionValidationError[] = [];
+    
+    for (const detail of form.score_details) {
+      const criteria = detail.criteria;
+      if (!criteria) continue;
 
-    // 6f. ✅ CẬP NHẬT DATABASE (Status + Timestamp)
+      const entry = detail.score_entries.find(e => e.scorer_role === role);
+      const score = entry ? Number(entry.score) : 0;
+
+      if (score !== 0) {
+        if (criteria.require_evidence === 1 && (!detail.proof_url || detail.proof_url.trim() === '')) {
+          errors.push({
+            criterionId: criteria.id,
+            code: 'EVIDENCE_REQUIRED',
+            message: `Tiêu chí "${criteria.code}" bắt buộc phải có link minh chứng!`,
+          });
+        }
+        
+        if (!criteria.is_active) {
+          errors.push({
+            criterionId: criteria.id,
+            code: 'CRITERION_INACTIVE',
+            message: `Tiêu chí "${criteria.code}" đã bị vô hiệu hóa!`,
+          });
+        }
+
+        if (activeVersion && criteria.criteria_categories?.criteria_version_id !== activeVersion.id) {
+          errors.push({
+            criterionId: criteria.id,
+            code: 'CRITERION_VERSION_MISMATCH',
+            message: `Tiêu chí "${criteria.code}" không thuộc học kỳ hiện tại!`,
+          });
+        }
+        
+        const QUANTITY_MULTIPLIERS: Record<string, number> = {
+          '1.2.1': 1, '3.2.1': 1,
+          '1.2.2': 1, '3.2.2': 1, '4.2.1': 1,
+          '1.2.3': 2, '3.2.3': 2, '4.2.2': 2, '5.3.1': 2,
+          '1.2.4': 3, '3.2.4': 3, '5.2.2': 3,
+          '1.2.5': 4,
+          '5.3.4': 5,
+          '1.1.3': -2, '1.2.7': -2, '2.3': -2, '3.1.2': -2, '3.3': -2, '4.3': -2
+        };
+        const isQuantityBased = criteria.code in QUANTITY_MULTIPLIERS;
+        
+        if (isQuantityBased) {
+          const multiplier = QUANTITY_MULTIPLIERS[criteria.code];
+          const absMultiplier = Math.abs(multiplier);
+          const inputQuantity = Math.abs(score) / absMultiplier;
+          const isDeduction = criteria.score_type === 'DEDUCTION' || criteria.point < 0;
+          const maxQuantity = isDeduction ? 40 : 30;
+          
+          if (inputQuantity > maxQuantity) {
+            errors.push({
+              criterionId: criteria.id,
+              code: 'QUANTITY_EXCEEDED',
+              message: `Số lượng không được vượt quá ${maxQuantity} lần (tiêu chí "${criteria.code}")`,
+            });
+          }
+        } else if (criteria.score_type === 'DEDUCTION' || criteria.point < 0) {
+          if (score < criteria.point) {
+            errors.push({
+              criterionId: criteria.id,
+              code: 'SCORE_OUT_OF_RANGE',
+              message: `Điểm không được thấp hơn ${criteria.point} (tiêu chí "${criteria.code}")`,
+            });
+          }
+          if (score > 0) {
+            errors.push({
+              criterionId: criteria.id,
+              code: 'INVALID_SCORE_DIRECTION',
+              message: `Điểm không được vượt quá 0 (tiêu chí "${criteria.code}")`,
+            });
+          }
+        } else {
+          if (score < 0) {
+            errors.push({
+              criterionId: criteria.id,
+              code: 'INVALID_SCORE_DIRECTION',
+              message: `Điểm không được thấp hơn 0 (tiêu chí "${criteria.code}")`,
+            });
+          }
+          if (criteria.point > 0 && score > criteria.point) {
+            errors.push({
+              criterionId: criteria.id,
+              code: 'SCORE_OUT_OF_RANGE',
+              message: `Điểm không được vượt quá ${criteria.point} (tiêu chí "${criteria.code}")`,
+            });
+          }
+        }
+
+        if (criteria.parent_id) {
+          if (!parentMap.has(criteria.parent_id)) parentMap.set(criteria.parent_id, []);
+          parentMap.get(criteria.parent_id)!.push(criteria.id);
+        }
+      }
+    }
+
+    if (parentMap.size > 0) {
+      const parentIds = Array.from(parentMap.keys());
+      const parents = await prisma.criteria.findMany({
+        where: { id: { in: parentIds } }
+      });
+      for (const parent of parents) {
+        if (parent.score_type === 'OPTIONS' || (parent.score_type as string) === 'RADIO') {
+           const scoredChildren = parentMap.get(parent.id) || [];
+           if (scoredChildren.length > 1) {
+             errors.push({
+               criterionId: parent.id,
+               code: 'MUTUALLY_EXCLUSIVE_OPTIONS',
+               message: `Mục "${parent.code}" chỉ cho phép chọn 1 tiêu chí, nhưng đang có nhiều hơn 1 tiêu chí có điểm.`,
+             });
+           }
+        }
+      }
+    }
+
+    return { form, transition, studentId, errors };
+  }
+
+  // =============================================
+  // 6. ✅ CHUYỂN TRẠNG THÁI PHIẾU (State Machine)
+  //    Gộp từ cả 2 phiên bản: NestJS exceptions + Role-based transitions
+  //    Frontend gửi: POST /scoring/:formId/submit  { role: 'STUDENT' }
+  // =============================================
+  async approveSingleFormInternal(formId: string, role: string, actorId: string, _semesterId?: string) {
+    const { form, transition, studentId, errors } = await this.validateFormForSubmission(formId, actorId, role);
+
+    if (errors && errors.length > 0) {
+      throw new BadRequestException({
+        message: 'Phiếu chưa hợp lệ.',
+        errors: errors,
+      });
+    }
+
     const updateData: Record<string, any> = {
       status: transition.nextStatus,
       updated_at: new Date(),
       [transition.timestampField]: new Date(),
-      // Clear rejection info when resubmitting
       rejection_reason: null,
     };
 
@@ -1223,17 +2227,16 @@ export class ScoringService {
       const up = await tx.scoring_sheets.updateMany({
         where: { 
           id: form.id,
-          status: form.status // CHỐNG LỖI CONCURRENCY (Race Condition): Chỉ update nếu trạng thái chưa bị thay đổi bởi request khác
+          status: form.status
         },
         data: updateData,
       });
 
       if (up.count === 0) {
-        throw new BadRequestException('Phiếu này đã được xử lý bởi một thao tác khác (hoặc bạn đã click đúp). Vui lòng tải lại trang.');
+        throw new BadRequestException('STALE_STATUS');
       }
 
-      // ✅ Ghi audit log cho việc chuyển trạng thái phiếu
-      await this.logAudit(actorId, 'SUBMIT_FORM', 'scoring_sheets', form.id,
+      await this.logCriticalAudit(actorId, 'SUBMIT_FORM', 'scoring_sheets', form.id,
         { status: form.status },
         { status: transition.nextStatus, role },
         tx
@@ -1242,24 +2245,15 @@ export class ScoringService {
       return up;
     });
 
-    // BẮN THÔNG BÁO CHO NGƯỜI NHẬN TIẾP THEO (LỚP TRƯỞNG / CỐ VẤN)
+    const warnings: any[] = [];
     try {
       if (role === 'STUDENT') {
-        // Lấy thông tin sinh viên + class_id qua enrollment
         const sheetWithEnrollment = await prisma.scoring_sheets.findUnique({
           where: { id: form.id },
-          select: {
-            semester_enrollments: {
-              select: {
-                class_id: true,
-                users: { select: { full_name: true } },
-              },
-            },
-          },
+          select: { semester_enrollments: { select: { class_id: true, users: { select: { full_name: true } } } } },
         });
         const enrollInfo = sheetWithEnrollment?.semester_enrollments;
         if (enrollInfo) {
-          // ✅ FIX: Chỉ dùng class_roles (Single Source of Truth), loại bỏ fallback lỏng lẻo
           const classMonitorRoles = await prisma.user_roles.findMany({
             where: { entity_id: enrollInfo.class_id, is_active: 1, roles: { code: 'MONITOR' } },
             select: { user_id: true },
@@ -1274,27 +2268,18 @@ export class ScoringService {
                 title: 'Có phiếu rèn luyện mới gửi lên',
                 content: `Sinh viên ${enrollInfo.users.full_name} đã nộp tự đánh giá điểm rèn luyện. Vui lòng chấm duyệt.`,
                 is_read: 0,
+                data: { resourceType: 'SCORING', scoringSheetId: form.id, studentId },
               })),
             });
           }
         }
       } else if (role === 'CLASS_COMMITTEE') {
-        // Lấy thông tin sinh viên + class_id qua enrollment
         const sheetWithEnrollment = await prisma.scoring_sheets.findUnique({
           where: { id: form.id },
-          select: {
-            semester_enrollments: {
-              select: {
-                class_id: true,
-                user_id: true,
-                users: { select: { full_name: true } },
-              },
-            },
-          },
+          select: { semester_enrollments: { select: { class_id: true, user_id: true, users: { select: { full_name: true } } } } },
         });
         const enrollInfo = sheetWithEnrollment?.semester_enrollments;
         if (enrollInfo) {
-          // 1. Thông báo cho sinh viên: BCS đã duyệt
           await prisma.notifications.create({
             data: {
               id: randomUUID(),
@@ -1303,10 +2288,9 @@ export class ScoringService {
               title: 'Phiếu rèn luyện đã được Ban cán sự duyệt',
               content: 'Phiếu tự đánh giá của bạn đã được Ban cán sự lớp duyệt và chuyển cho Cố vấn học tập.',
               is_read: 0,
+              data: { resourceType: 'SCORING', scoringSheetId: form.id, studentId: enrollInfo.user_id },
             },
           });
-
-          // 2. Thông báo cho Cố vấn học tập
           const advisorRoles = await prisma.user_roles.findMany({
             where: { entity_id: enrollInfo.class_id, is_active: 1, roles: { code: 'ADVISOR' } },
             select: { user_id: true },
@@ -1321,12 +2305,12 @@ export class ScoringService {
                 title: 'Có phiếu rèn luyện chờ phê duyệt',
                 content: `Phiếu của sinh viên ${enrollInfo.users.full_name} đã được BCS duyệt. Vui lòng phê duyệt.`,
                 is_read: 0,
+                data: { resourceType: 'SCORING', scoringSheetId: form.id, studentId: enrollInfo.user_id },
               })),
             });
           }
         }
       } else if (role === 'ADVISOR') {
-        // Thông báo cho sinh viên: CVHT đã phê duyệt
         await prisma.notifications.create({
           data: {
             id: randomUUID(),
@@ -1335,13 +2319,20 @@ export class ScoringService {
             title: 'Phiếu rèn luyện đã được phê duyệt',
             content: 'Phiếu tự đánh giá của bạn đã được Cố vấn học tập phê duyệt và chốt sổ.',
             is_read: 0,
+            data: { resourceType: 'SCORING', scoringSheetId: form.id, studentId },
           },
         });
       }
     } catch (err) {
       console.warn('Lỗi khi gửi thông báo nội bộ:', err);
+      warnings.push({ code: 'NOTIFICATION_FAILED', message: 'Phiếu đã được xử lý nhưng chưa gửi được thông báo.' });
     }
 
+    return { form, updated, transition, warnings };
+  }
+
+  async submitForm(formId: string, role: string, _inputStudentId: string, actorId: string, semesterId?: string) {
+    const { updated } = await this.approveSingleFormInternal(formId, role, actorId, semesterId);
     return {
       message: this.getSuccessMessage(role),
       data: updated,
@@ -1351,29 +2342,30 @@ export class ScoringService {
   // =============================================
   // 6.1 ✅ TRẢ LẠI PHIẾU (Chuyển sang REJECTED)
   // =============================================
-  async rejectForm(formId: string, role: string, studentId: string, actorId: string, semesterId?: string, reason?: string) {
-    let targetSemesterId = semesterId;
-    if (!targetSemesterId) {
-      const activeSemester = await this.getActiveSemester();
-      if (!activeSemester) throw new BadRequestException('Không tìm thấy học kỳ đang hoạt động!');
-      targetSemesterId = activeSemester.id;
+  async rejectSingleFormInternal(formId: string, role: string, actorId: string, reason?: string) {
+    if (!reason || reason.trim() === '') {
+      throw new BadRequestException('Vui lòng nhập lý do trả lại phiếu.');
     }
-
-    // 6.1-0. Xác thực quyền thực tế của người thao tác (Fix IDOR)
-    await this.verifyActorRole(actorId, studentId, role, targetSemesterId);
+    const cleanReason = reason.trim();
+    if (cleanReason.length < 5 || cleanReason.length > 500) {
+      throw new BadRequestException('Lý do trả lại phải từ 5 đến 500 ký tự.');
+    }
 
     const form = await prisma.scoring_sheets.findFirst({
       where: {
-        semester_enrollments: {
-          user_id: studentId,
-          ...(targetSemesterId ? { semester_id: targetSemesterId } : {}),
-        },
+        id: formId
       },
+      include: {
+        semester_enrollments: true
+      }
     });
 
     if (!form) {
       throw new BadRequestException('Không tìm thấy phiếu điểm của sinh viên này!');
     }
+
+    // Xác thực quyền thực tế của người thao tác (Fix IDOR)
+    await this.verifyActorRole(actorId, form.semester_enrollments.user_id, role, form.semester_enrollments.semester_id);
 
     if (role !== 'CLASS_COMMITTEE' && role !== 'ADVISOR') {
       throw new BadRequestException('Chỉ Ban cán sự và Cố vấn học tập mới có quyền trả lại phiếu!');
@@ -1386,57 +2378,59 @@ export class ScoringService {
       throw new BadRequestException('Cố vấn chỉ được trả lại phiếu khi phiếu đã được xét duyệt.');
     }
 
-    if (!reason || reason.trim() === '') {
-      throw new BadRequestException('Vui lòng nhập lý do trả lại phiếu.');
-    }
-
     const newStatus = role === 'CLASS_COMMITTEE' ? 'CLASS_REJECTED' : 'ADVISOR_REJECTED';
 
     await prisma.$transaction(async (tx) => {
-      await tx.scoring_sheets.update({
-        where: { id: form.id },
+      const up = await tx.scoring_sheets.updateMany({
+        where: { id: form.id, status: form.status },
         data: {
           status: newStatus as any,
-          rejection_reason: reason.trim(),
+          rejection_reason: cleanReason,
           updated_at: new Date(),
         }
       });
+      
+      if (up.count === 0) {
+        throw new BadRequestException('STALE_STATUS');
+      }
 
-      // ✅ Ghi audit log cho việc trả lại phiếu
-      await this.logAudit(actorId, 'REJECT_FORM', 'scoring_sheets', form.id,
+      await this.logCriticalAudit(actorId, 'REJECT_FORM', 'scoring_sheets', form.id,
         { status: form.status },
-        { status: newStatus, role, reason },
+        { status: newStatus, role, reason: cleanReason },
         tx
       );
     });
 
-    // Thông báo cho sinh viên: phiếu bị trả lại
+    const warnings: any[] = [];
     try {
       const rejecterLabel = role === 'CLASS_COMMITTEE' ? 'Ban cán sự lớp' : 'Cố vấn học tập';
       await prisma.notifications.create({
         data: {
           id: randomUUID(),
-          user_id: studentId,
+          user_id: form.semester_enrollments.user_id,
           type: 'SCORE_REJECTED',
           title: 'Phiếu rèn luyện đã bị trả lại',
-          content: `Phiếu tự đánh giá của bạn đã bị ${rejecterLabel} trả lại với lý do: "${reason.trim()}". Vui lòng xem lại và nộp lại.`,
+          content: `Phiếu tự đánh giá của bạn đã bị ${rejecterLabel} trả lại với lý do: "${cleanReason}". Vui lòng xem lại và nộp lại.`,
           is_read: 0,
+          data: { resourceType: 'SCORING', scoringSheetId: form.id, studentId: form.semester_enrollments.user_id },
         },
       });
     } catch (notifErr) {
       console.warn('Lỗi khi gửi thông báo trả lại:', notifErr);
+      warnings.push({ code: 'NOTIFICATION_FAILED', message: 'Phiếu đã được trả lại nhưng chưa gửi được thông báo.' });
     }
 
+    return { form, warnings };
+  }
+
+  async rejectForm(formId: string, role: string, _studentId: string, actorId: string, _semesterId?: string, reason?: string) {
+    await this.rejectSingleFormInternal(formId, role, actorId, reason);
     return {
       message: 'Đã trả lại phiếu thành công! Sinh viên có thể vào xem lý do và sửa điểm.',
       data: null,
     };
   }
 
-  // =============================================
-  // 7. ✅ TÍNH TỔNG ĐIỂM TỰ ĐỘNG
-  //    ✅ FIX: Áp trần điểm theo danh mục (category max_score)
-  //    Tránh tổng điểm vượt quá giới hạn khi gọi API trực tiếp
   // =============================================
   private computeTotalsPure(
     details: any[],

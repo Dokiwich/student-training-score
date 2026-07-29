@@ -30,7 +30,7 @@ export function ParentCriteriaPicker({ categoryId, currentCriterionId, value, on
       value={value || ''} 
       onChange={(e) => onChange(e.target.value)}
       disabled={!categoryId}
-      className="px-3 py-2 bg-white border border-[#D1D5DB] rounded-[6px] text-[14px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all disabled:opacity-60 disabled:bg-[#F3F4F6]"
+      className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all disabled:opacity-60 disabled:bg-surface-muted"
     >
       <option value="">-- Không có (Tiêu chí gốc) --</option>
       {availableParents.map(c => (

@@ -2,10 +2,10 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
 const ROLE_REDIRECTS: Record<string, string> = {
-  STUDENT: '/student',
-  CLASS_COMMITTEE: '/class-president',
-  ADVISOR: '/advisor',
-  DEPARTMENT: '/department',
+  STUDENT: '/student/dashboard',
+  CLASS_COMMITTEE: '/class-president/dashboard',
+  ADVISOR: '/advisor/dashboard',
+  DEPARTMENT: '/department/dashboard',
   SCHOOL_ADMIN: '/admin',
 };
 
@@ -19,6 +19,11 @@ export default withAuth(
       const destination = ROLE_REDIRECTS[role] || '/student';
       return NextResponse.redirect(new URL(destination, req.url));
     }
+
+    // Handle deleted base pages to prevent 404 for old bookmarks
+    if (path === '/advisor') return NextResponse.redirect(new URL('/advisor/dashboard', req.url));
+    if (path === '/department') return NextResponse.redirect(new URL('/department/dashboard', req.url));
+    if (path === '/class-president') return NextResponse.redirect(new URL('/class-president/dashboard', req.url));
 
     // Admin routes
     if (path.startsWith('/admin') && role !== 'SCHOOL_ADMIN') {

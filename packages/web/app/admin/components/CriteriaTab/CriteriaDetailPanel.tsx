@@ -136,11 +136,11 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
 
   if (!selectedItem) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8 text-[#94A3B8]">
-        <div className="w-16 h-16 rounded-full bg-[#F1F5F9] flex items-center justify-center mb-4">
-          <AlertCircle className="w-8 h-8 text-[#CBD5E1]" strokeWidth={1.5} />
+      <div className="flex flex-col items-center justify-center h-full text-center p-8 text-muted-foreground">
+        <div className="w-16 h-16 rounded-full bg-surface-muted flex items-center justify-center mb-4">
+          <AlertCircle className="w-8 h-8 text-muted" strokeWidth={1.5} />
         </div>
-        <p className="text-[15px] font-[510] text-[#1F2937]">Chưa chọn mục nào</p>
+        <p className="text-[15px] font-[510] text-foreground">Chưa chọn mục nào</p>
         <p className="text-[14px]">Chọn một nhóm hoặc tiêu chí bên trái để xem và chỉnh sửa chi tiết.</p>
       </div>
     );
@@ -289,20 +289,20 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
   return (
     <div className="flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-300">
       {/* Detail Header */}
-      <div className="flex justify-between items-center px-6 py-4 border-b border-[#E5E7EB]">
+      <div className="flex justify-between items-center px-6 py-4 border-b border-border">
         <div>
-          <h3 className="text-[16px] font-[590] text-[#1F2937] leading-[1.2]">
+          <h3 className="text-[16px] font-[590] text-foreground leading-[1.2]">
             {isNew ? `Thêm ${typeLabel.toLowerCase()}` : `Chỉnh sửa ${typeLabel.toLowerCase()}`}
           </h3>
           {!isNew && (
-            <p className="text-[13px] text-[#64748B] font-[400] mt-0.5">
+            <p className="text-[13px] text-muted-foreground font-[400] mt-0.5">
               ID: {isCategoryForm(formData) ? formData.id : isCriterionForm(formData) ? formData.id : ''}
             </p>
           )}
         </div>
         <button 
           onClick={onCancel}
-          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F1F5F9] text-[#64748B] transition-colors"
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-muted text-muted-foreground transition-colors"
         >
           <X className="w-4 h-4" strokeWidth={1.5} />
         </button>
@@ -310,7 +310,7 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
 
       {/* Inline Error */}
       {formError && (
-        <div className="mx-6 mt-4 px-3 py-2 bg-[#FEF2F2] border border-[#FECACA] rounded-[6px] text-[13px] text-[#DC2626] font-[510]">
+        <div className="mx-6 mt-4 px-3 py-2 bg-danger/10 border border-danger/30 rounded-[6px] text-[13px] text-danger font-[510]">
           {formError}
         </div>
       )}
@@ -321,47 +321,47 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
           <>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-[590] text-[#374151]">Mã nhóm <span className="text-[#DC2626]">*</span></label>
+                <label className="text-[13px] font-[590] text-foreground">Mã nhóm <span className="text-danger">*</span></label>
                 <input 
                   type="text" 
                   value={formData.code} 
                   onChange={(e) => updateField('code', e.target.value)}
                   placeholder="VD: I, II, III..."
-                  className="px-3 py-2 bg-white border border-[#D1D5DB] rounded-[6px] text-[14px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                  className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-[590] text-[#374151]">Điểm tối đa</label>
+                <label className="text-[13px] font-[590] text-foreground">Điểm tối đa</label>
                 <input 
                   type="number" 
                   step="0.1" min="0" 
                   value={formData.max_score} 
                   onChange={(e) => updateField('max_score', e.target.value)}
-                  className="px-3 py-2 bg-white border border-[#D1D5DB] rounded-[6px] text-[14px] font-[590] text-[#DC2626] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                  className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] font-[590] text-danger outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
                 />
               </div>
             </div>
             
             <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-[590] text-[#374151]">Tên nhóm <span className="text-[#DC2626]">*</span></label>
+              <label className="text-[13px] font-[590] text-foreground">Tên nhóm <span className="text-danger">*</span></label>
               <input 
                 type="text" 
                 value={formData.name} 
                 onChange={(e) => updateField('name', e.target.value)}
                 placeholder="VD: Ý thức học tập..."
-                className="px-3 py-2 bg-white border border-[#D1D5DB] rounded-[6px] text-[14px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
               />
             </div>
             
             <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-[590] text-[#374151]">Thứ tự sắp xếp</label>
+              <label className="text-[13px] font-[590] text-foreground">Thứ tự sắp xếp</label>
               <input 
                 type="number" 
                 value={formData.sort_order} 
                 onChange={(e) => updateField('sort_order', e.target.value)}
-                className="px-3 py-2 bg-white border border-[#D1D5DB] rounded-[6px] text-[14px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
               />
-              <p className="text-[12px] text-[#94A3B8]">
+              <p className="text-[12px] text-muted-foreground">
                 Thứ tự hiển thị trong danh sách. Chỉ dùng để sắp xếp trên giao diện, không gửi lên server.
               </p>
             </div>
@@ -369,14 +369,14 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
         ) : isCriterionForm(formData) ? (
           <>
             <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-[590] text-[#374151]">Thuộc nhóm <span className="text-[#DC2626]">*</span></label>
+              <label className="text-[13px] font-[590] text-foreground">Thuộc nhóm <span className="text-danger">*</span></label>
               <select 
                 value={formData.category_id} 
                 onChange={(e) => {
                   setFormData(prev => ({ ...(prev as any), category_id: e.target.value, parent_id: '' }));
                   setFormError(null);
                 }}
-                className="px-3 py-2 bg-white border border-[#D1D5DB] rounded-[6px] text-[14px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
               >
                 <option value="">-- Chọn nhóm --</option>
                 {categories.map(c => (
@@ -386,7 +386,7 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-[590] text-[#374151]">Tiêu chí cha (Nếu có)</label>
+              <label className="text-[13px] font-[590] text-foreground">Tiêu chí cha (Nếu có)</label>
               <ParentCriteriaPicker 
                 categoryId={formData.category_id}
                 currentCriterionId={formData.id ?? ''}
@@ -394,65 +394,65 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
                 onChange={(val) => updateField('parent_id', val)}
                 criteria={criteria}
               />
-              <p className="text-[12px] text-[#64748B]">
+              <p className="text-[12px] text-muted-foreground">
                 Nếu chọn tiêu chí cha, tiêu chí này sẽ trở thành tiêu chí con (lá). Tiêu chí cha sẽ không trực tiếp tính điểm.
               </p>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-[590] text-[#374151]">Mã tiêu chí <span className="text-[#DC2626]">*</span></label>
+                <label className="text-[13px] font-[590] text-foreground">Mã tiêu chí <span className="text-danger">*</span></label>
                 <input 
                   type="text" 
                   value={formData.code} 
                   onChange={(e) => updateField('code', e.target.value)}
                   placeholder="VD: 1.1"
-                  className="px-3 py-2 bg-white border border-[#D1D5DB] rounded-[6px] text-[14px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                  className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-[590] text-[#374151]">Điểm tối đa</label>
+                <label className="text-[13px] font-[590] text-foreground">Điểm tối đa</label>
                 <input 
                   type="number" 
                   step="0.1" min="0" 
                   value={formData.point} 
                   onChange={(e) => updateField('point', e.target.value)}
-                  className="px-3 py-2 bg-white border border-[#D1D5DB] rounded-[6px] text-[14px] font-[590] text-[#DC2626] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                  className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] font-[590] text-danger outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
                 />
               </div>
             </div>
             
             <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-[590] text-[#374151]">Nội dung đánh giá <span className="text-[#DC2626]">*</span></label>
+              <label className="text-[13px] font-[590] text-foreground">Nội dung đánh giá <span className="text-danger">*</span></label>
               <textarea 
                 value={formData.content} 
                 onChange={(e) => updateField('content', e.target.value)}
                 placeholder="Nhập nội dung tiêu chí..."
                 rows={4}
-                className="px-3 py-2 bg-white border border-[#D1D5DB] rounded-[6px] text-[14px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all resize-none"
+                className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all resize-none"
               />
             </div>
 
             {/* Read-only display of score_type and require_evidence */}
             {formData.id && (
-              <div className="flex flex-wrap gap-3 text-[12px] text-[#64748B] bg-[#F8FAFC] p-3 rounded-[6px] border border-[#E5E7EB]">
-                <span>Loại điểm: <strong className="text-[#1F2937]">{formData.score_type || 'RANGE'}</strong></span>
-                <span>Yêu cầu minh chứng: <strong className="text-[#1F2937]">{formData.require_evidence === 1 ? 'Có' : 'Không'}</strong></span>
+              <div className="flex flex-wrap gap-3 text-[12px] text-muted-foreground bg-surface-muted p-3 rounded-[6px] border border-border">
+                <span>Loại điểm: <strong className="text-foreground">{formData.score_type || 'RANGE'}</strong></span>
+                <span>Yêu cầu minh chứng: <strong className="text-foreground">{formData.require_evidence === 1 ? 'Có' : 'Không'}</strong></span>
                 {formData.score_options && formData.score_options.length > 0 && (
-                  <span>Tùy chọn điểm: <strong className="text-[#1F2937]">[{formData.score_options.join(', ')}]</strong></span>
+                  <span>Tùy chọn điểm: <strong className="text-foreground">[{formData.score_options.join(', ')}]</strong></span>
                 )}
               </div>
             )}
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-[590] text-[#374151]">Thứ tự sắp xếp</label>
+              <label className="text-[13px] font-[590] text-foreground">Thứ tự sắp xếp</label>
               <input 
                 type="number" 
                 value={formData.sort_order} 
                 onChange={(e) => updateField('sort_order', e.target.value)}
-                className="px-3 py-2 bg-white border border-[#D1D5DB] rounded-[6px] text-[14px] text-[#1F2937] outline-none focus:border-[#B91C1C] focus:ring-[3px] focus:ring-[#FEF2F2] transition-all"
+                className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
               />
-              <p className="text-[12px] text-[#94A3B8]">
+              <p className="text-[12px] text-muted-foreground">
                 Thứ tự hiển thị trên cây. Chỉ dùng cho giao diện, không gửi lên server.
               </p>
             </div>
@@ -461,11 +461,11 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
       </div>
 
       {/* Footer Actions */}
-      <div className="p-4 border-t border-[#E5E7EB] bg-[#F8FAFC] flex justify-between gap-3">
+      <div className="p-4 border-t border-border bg-surface-muted flex justify-between gap-3">
         {!isNew ? (
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-[#DC2626] text-[#DC2626] hover:bg-[#FEF2F2] rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-[#FEF2F2] outline-none"
+            className="flex items-center gap-2 px-4 py-2 bg-surface border border-danger text-danger hover:bg-danger/10 rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-danger/20 outline-none"
           >
             <Trash2 className="w-4 h-4" strokeWidth={2} />
             Xóa
@@ -477,14 +477,14 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
         <div className="flex gap-2">
           <button
             onClick={onCancel}
-            className="px-4 py-2 bg-white border border-[#E5E7EB] text-[#475569] hover:bg-[#F8FAFC] rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-[#F1F5F9] outline-none"
+            className="px-4 py-2 bg-surface border border-border text-foreground hover:bg-surface-muted rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-border outline-none"
           >
             Hủy
           </button>
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-2 px-5 py-2 bg-[#10B981] hover:bg-[#059669] text-white rounded-[6px] text-[14px] font-[510] transition-colors border border-transparent focus:ring-[3px] focus:ring-[#ECFDF5] outline-none disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 bg-success hover:bg-success-hover text-success-foreground rounded-[6px] text-[14px] font-[510] transition-colors border border-transparent focus:ring-[3px] focus:ring-success/20 outline-none disabled:opacity-50"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" strokeWidth={2} />}
             Lưu thay đổi

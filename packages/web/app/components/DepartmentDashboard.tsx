@@ -6,6 +6,8 @@ import { ScoringForm } from './ScoringForm';
 import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { CheckCircle, FileText } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
+import { StatusBadge } from './ui/StatusBadge';
 
 const API_BASE = '/proxy-api';
 
@@ -120,22 +122,29 @@ function DonutChart({ data, total }: { data: Record<string, number>; total: numb
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+    <div className="flex flex-col items-center gap-4">
       <svg width="200" height="200" viewBox="0 0 200 200">
-        <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#f1f5f9" strokeWidth={strokeWidth} />
-        {arcs.map((arc, i) => (
-          <path key={i} d={arc.path} fill="none" stroke={arc.color} strokeWidth={strokeWidth} strokeLinecap="round" style={{ transition: 'all 0.5s ease' }}>
-            <title>{arc.label}: {arc.value} ({(arc.pct * 100).toFixed(1)}%)</title>
-          </path>
-        ))}
-        <text x={cx} y={cy - 6} textAnchor="middle" fontSize="28" fontWeight="800" fill="#0f172a">{total}</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="11" fill="#94a3b8" fontWeight="500">Sinh viên</text>
+        <circle cx={cx} cy={cy} r={radius} fill="none" className="stroke-muted" strokeWidth={strokeWidth} />
+        {arcs.length === 1 ? (
+          /* Single segment = full circle (SVG arc can't draw 360°) */
+          <circle cx={cx} cy={cy} r={radius} fill="none" stroke={arcs[0].color} strokeWidth={strokeWidth} style={{ transition: 'all 0.5s ease' }}>
+            <title>{arcs[0].label}: {arcs[0].value} ({(arcs[0].pct * 100).toFixed(1)}%)</title>
+          </circle>
+        ) : (
+          arcs.map((arc, i) => (
+            <path key={i} d={arc.path} fill="none" stroke={arc.color} strokeWidth={strokeWidth} strokeLinecap="round" style={{ transition: 'all 0.5s ease' }}>
+              <title>{arc.label}: {arc.value} ({(arc.pct * 100).toFixed(1)}%)</title>
+            </path>
+          ))
+        )}
+        <text x={cx} y={cy - 6} textAnchor="middle" fontSize="28" fontWeight="800" className="fill-foreground">{total}</text>
+        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="11" className="fill-muted-foreground" fontWeight="500">Sinh viên</text>
       </svg>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+      <div className="flex flex-wrap gap-2 justify-center">
         {segments.filter(s => s.value > 0).map(s => (
-          <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#475569' }}>
+          <div key={s.key} className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: s.color }} />
-            <span>{s.label}: <strong>{s.value}</strong></span>
+            <span>{s.label}: <strong className="text-foreground">{s.value}</strong></span>
           </div>
         ))}
       </div>
@@ -371,17 +380,17 @@ export function DepartmentDashboard() {
 
   // Fetch department classes
   useEffect(() => {
-    if (!session?.user) return;
-    fetch('/api/department/classes').then(r => r.ok ? r.json() : Promise.reject()).then(j => setDeptClasses(j.data || [])).catch(() => {});
-  }, [session]);
+    if (!session?.user || !selectedSemesterId) return;
+    fetch(`/api/department/classes?semesterId=${selectedSemesterId}`).then(r => r.ok ? r.json() : Promise.reject()).then(j => setDeptClasses(j.data || [])).catch(() => {});
+  }, [session, selectedSemesterId]);
 
   // Fetch students for selected class in classes view
   useEffect(() => {
-    if (activeView === 'classes' && manageClassId) {
+    if (activeView === 'classes' && manageClassId && selectedSemesterId) {
       setLoadingStudents(true);
-      fetch(`/api/department/users?classId=${manageClassId}`).then(r => r.ok ? r.json() : Promise.reject()).then(j => setClassStudents(j.data || [])).catch(() => setClassStudents([])).finally(() => setLoadingStudents(false));
+      fetch(`/api/department/users?classId=${manageClassId}&semesterId=${selectedSemesterId}`).then(r => r.ok ? r.json() : Promise.reject()).then(j => setClassStudents(j.data || [])).catch(() => setClassStudents([])).finally(() => setLoadingStudents(false));
     } else { setClassStudents([]); }
-  }, [activeView, manageClassId]);
+  }, [activeView, manageClassId, selectedSemesterId]);
 
   // Sync selectedClass from URL class param
   useEffect(() => {
@@ -391,7 +400,7 @@ export function DepartmentDashboard() {
   // --- Handlers ---
   const refreshClasses = async () => {
     try {
-      const r = await fetch('/api/department/classes');
+      const r = await fetch(`/api/department/classes?semesterId=${selectedSemesterId}`);
       if (r.ok) { const j = await r.json(); setDeptClasses(j.data || []); }
     } catch { /* ignore */ }
   };
@@ -449,7 +458,7 @@ export function DepartmentDashboard() {
     try {
       const r = await fetch('/api/department/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ full_name: newSvName, email: newSvEmail, password: newSvPassword, student_id: newSvMssv || undefined, class_id: manageClassId, role: newSvRole }) });
       const d = await r.json();
-      if (r.ok) { alert('Thêm sinh viên thành công'); setShowAddStudentModal(false); setNewSvName(''); setNewSvEmail(''); setNewSvPassword(''); setNewSvMssv(''); setNewSvRole('STUDENT'); const r2 = await fetch(`/api/department/users?classId=${manageClassId}`); if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); } } else { alert(d.message); }
+      if (r.ok) { alert('Thêm sinh viên thành công'); setShowAddStudentModal(false); setNewSvName(''); setNewSvEmail(''); setNewSvPassword(''); setNewSvMssv(''); setNewSvRole('STUDENT'); const r2 = await fetch(`/api/department/users?classId=${manageClassId}&semesterId=${selectedSemesterId}`); if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); } } else { alert(d.message); }
     } catch { alert('Lỗi kết nối'); }
   };
 
@@ -472,7 +481,7 @@ export function DepartmentDashboard() {
       if (r.ok) { 
         alert('Cập nhật sinh viên thành công'); 
         setEditingStudent(null); 
-        const r2 = await fetch(`/api/department/users?classId=${manageClassId}`); 
+        const r2 = await fetch(`/api/department/users?classId=${manageClassId}&semesterId=${selectedSemesterId}`); 
         if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); } 
       } else { alert(d.message); }
     } catch { alert('Lỗi kết nối'); }
@@ -611,28 +620,58 @@ export function DepartmentDashboard() {
     try {
       const r = await fetch('/api/department/bulk-import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: importData, classId: manageClassId || undefined }) });
       const d = await r.json();
-      if (r.ok) { setImportResults(d.results || []); setImportStats({ successCount: d.successCount, errorCount: d.errorCount, total: d.total }); if (manageClassId) { const r2 = await fetch(`/api/department/users?classId=${manageClassId}`); if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); } } } else { alert(d.message); }
+      if (r.ok) { setImportResults(d.results || []); setImportStats({ successCount: d.successCount, errorCount: d.errorCount, total: d.total }); if (manageClassId) { const r2 = await fetch(`/api/department/users?classId=${manageClassId}&semesterId=${selectedSemesterId}`); if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); } } } else { alert(d.message); }
     } catch { alert('Lỗi kết nối khi import'); } finally { setIsImporting(false); }
   };
 
   const resetDeptImport = () => { setImportData([]); setImportResults(null); setImportStats(null); setImportFileName(''); if (fileInputRef.current) fileInputRef.current.value = ''; };
 
-  const exportData = (type: 'csv' | 'excel' | 'pdf') => {
-    const dataToExport = selectedClass === 'ALL' ? students : students.filter(s => s.classCode === selectedClass);
-    const header = ['STT', 'MSSV', 'Họ và Tên', 'Lớp', 'Điểm SV', 'Điểm BCS', 'Điểm CVHT', 'Xếp loại'];
-    const rows = dataToExport.map((s, i) => [i + 1, s.studentCode || '', s.name, s.className || '', s.studentTotal ?? '', s.classTotal ?? '', s.advisorTotal ?? '', s.classification ? CLASSIFICATION_LABELS[s.classification] || '' : '']);
-    const fileName = selectedClass === 'ALL' ? 'thong_ke_khoa' : `thong_ke_lop_${selectedClass}`;
-    if (type === 'csv') {
-      const BOM = '\uFEFF'; const csv = BOM + [header, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${fileName}.csv`; a.click(); URL.revokeObjectURL(url);
-    } else if (type === 'excel') {
-      const tableHtml = `<html><head><meta charset="utf-8"></head><body><table border="1"><tr>${header.map(h => `<th>${h}</th>`).join('')}</tr>${rows.map(row => `<tr>${row.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table></body></html>`;
-      const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${fileName}.xls`; a.click(); URL.revokeObjectURL(url);
-    } else if (type === 'pdf') {
-      const pw = window.open('', '_blank');
-      if (pw) { pw.document.write(`<html><head><title>Thống kê ${departmentInfo?.name || 'Khoa'}</title><style>body{font-family:sans-serif}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #000;padding:8px;text-align:left}th{background:#f3f4f6}</style></head><body><h2>Thống kê - ${departmentInfo?.name || 'Khoa'}</h2><table><tr>${header.map(h => `<th>${h}</th>`).join('')}</tr>${rows.map(row => `<tr>${row.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table><script>window.print();window.close();<\/script></body></html>`); pw.document.close(); }
+  const exportData = (reportType: 'summary' | 'detailed' | 'unsubmitted') => {
+    let dataToExport = students;
+    let fileName = 'Bao_Cao';
+    let header: string[] = [];
+    let rows: any[][] = [];
+
+    if (reportType === 'summary') {
+      if (!stats) return alert('Không có dữ liệu thống kê');
+      header = ['Lớp', 'Sĩ số', 'Đã nộp', 'Đã duyệt', 'Điểm TB', 'Xuất sắc', 'Giỏi', 'Khá', 'TB', 'Yếu', 'Kém'];
+      rows = stats.byClass.map(c => [
+        c.classCode, c.total, c.submitted, c.finalized, c.avgScore,
+        c.byClassification['EXCELLENT'] || 0,
+        c.byClassification['VERY_GOOD'] || 0,
+        c.byClassification['GOOD'] || 0,
+        c.byClassification['AVERAGE'] || 0,
+        c.byClassification['WEAK'] || 0,
+        c.byClassification['POOR'] || 0
+      ]);
+      fileName = 'Bao_Cao_Tong_Hop_Khoa';
+    } else if (reportType === 'detailed') {
+      dataToExport = selectedClass === 'ALL' ? students : students.filter(s => s.classCode === selectedClass);
+      if (dataToExport.length === 0) return alert('Không có dữ liệu để xuất');
+      header = ['STT', 'MSSV', 'Họ và Tên', 'Lớp', 'Điểm SV', 'Điểm BCS', 'Điểm CVHT', 'Điểm Cuối', 'Xếp loại'];
+      rows = dataToExport.map((s, i) => [
+        i + 1, s.studentCode || '', s.name, s.className || '', 
+        s.studentTotal ?? '', s.classTotal ?? '', s.advisorTotal ?? '', s.finalTotal ?? '',
+        s.classification ? CLASSIFICATION_LABELS[s.classification] || '' : ''
+      ]);
+      fileName = selectedClass === 'ALL' ? 'Chi_Tiet_Khoa' : `Chi_Tiet_Lop_${selectedClass}`;
+    } else if (reportType === 'unsubmitted') {
+      dataToExport = selectedClass === 'ALL' ? students : students.filter(s => s.classCode === selectedClass);
+      const unsubmitted = dataToExport.filter(s => s.status === 'UPCOMING');
+      if (unsubmitted.length === 0) return alert('Không có sinh viên nào chưa nộp');
+      header = ['STT', 'MSSV', 'Họ và Tên', 'Lớp', 'Trạng thái'];
+      rows = unsubmitted.map((s, i) => [
+        i + 1, s.studentCode || '', s.name, s.className || '', 'Chưa nộp'
+      ]);
+      fileName = selectedClass === 'ALL' ? 'DS_Chua_Nop_Khoa' : `DS_Chua_Nop_${selectedClass}`;
     }
-    setShowExportMenu(false);
+
+    import('xlsx').then((XLSX) => {
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'ThongKe');
+      XLSX.writeFile(wb, `${fileName}.xlsx`);
+    });
   };
 
   const filteredStudents = useMemo(() => {
@@ -676,11 +715,11 @@ export function DepartmentDashboard() {
   }
 
   const classStatsColumns = [
-    { header: 'STT', width: 60, align: 'center' as const, render: (_c: any, i: number) => <span style={{ color: 'var(--text-muted)' }}>{i + 1}</span> },
-    { header: 'Lớp', render: (c: any) => (<><div style={{ fontWeight: 600 }}>{c.classCode}</div><div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.className}</div></>) },
+    { header: 'STT', width: 60, align: 'center' as const, render: (_c: any, i: number) => <span style={{ color: 'var(--muted-foreground)' }}>{i + 1}</span> },
+    { header: 'Lớp', render: (c: any) => (<><div style={{ fontWeight: 600 }}>{c.classCode}</div><div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{c.className}</div></>) },
     { header: 'Sĩ số', align: 'center' as const, render: (c: any) => <span style={{ fontWeight: 600 }}>{c.total}</span> },
     { header: 'Đã nộp', align: 'center' as const, render: (c: any) => <span style={{ color: c.submitted < c.total ? 'var(--danger)' : 'var(--success)' }}>{c.submitted} ({c.total > 0 ? Math.round(c.submitted / c.total * 100) : 0}%)</span> },
-    { header: 'Đã duyệt', align: 'center' as const, render: (c: any) => <span style={{ color: c.finalized < c.total ? 'var(--warning-dark)' : 'var(--success)' }}>{c.finalized}</span> },
+    { header: 'Đã duyệt', align: 'center' as const, render: (c: any) => <span style={{ color: c.finalized < c.total ? 'var(--warning-foreground)' : 'var(--success)' }}>{c.finalized}</span> },
     { header: 'Điểm TB', align: 'center' as const, render: (c: any) => <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{c.avgScore}</span> },
     { header: 'XS/Giỏi', align: 'center' as const, render: (c: any) => <span>{(c.byClassification['EXCELLENT'] || 0) + (c.byClassification['VERY_GOOD'] || 0)}</span> },
     { header: 'Khá/TB', align: 'center' as const, render: (c: any) => <span>{(c.byClassification['GOOD'] || 0) + (c.byClassification['AVERAGE'] || 0)}</span> },
@@ -688,9 +727,9 @@ export function DepartmentDashboard() {
   ];
 
   const classStatsFooter = stats ? (
-    <tr style={{ background: '#f1f5f9', fontWeight: 700 }}>
+    <tr style={{ background: 'var(--surface-muted)', fontWeight: 700 }}>
       <td colSpan={2} style={{ textAlign: 'center', padding: '12px' }}>TỔNG CỘNG</td>
-      <td style={{ textAlign: 'center', color: 'var(--text-primary)' }}>{stats.total}</td>
+      <td style={{ textAlign: 'center', color: 'var(--foreground)' }}>{stats.total}</td>
       <td style={{ textAlign: 'center', color: 'var(--success)' }}>{stats.submitted}</td>
       <td style={{ textAlign: 'center', color: 'var(--success)' }}>{stats.finalized}</td>
       <td style={{ textAlign: 'center', color: 'var(--accent)' }}>{stats.avgScore}</td>
@@ -701,16 +740,11 @@ export function DepartmentDashboard() {
   ) : null;
 
   const manageStudentsColumns = [
-    { header: 'STT', width: 40, align: 'center' as const, render: (_s: any, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'STT', width: 40, align: 'center' as const, render: (_s: any, i: number) => <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{i + 1}</span> },
     { header: 'MSSV', width: 90, render: (s: any) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.student_id || '-'}</span> },
     { header: 'Họ và Tên', render: (s: any) => <span style={{ fontWeight: 500 }}>{s.full_name}</span> },
     { header: 'Trạng thái', width: 90, align: 'center' as const, render: (s: any) => {
-      let statusLabel = '', statusColor = '';
-      if (s.status === 'NO_SHEET' || s.status === 'DRAFT') { statusLabel = 'Chưa nộp'; statusColor = 'var(--text-muted)'; }
-      else if (s.status === 'STUDENT_SUBMITTED') { statusLabel = 'Chờ lớp duyệt'; statusColor = 'var(--warning-dark)'; }
-      else if (s.status === 'CLASS_REVIEWED' || s.status === 'ADVISOR_REVIEWING') { statusLabel = 'Chờ CVHT'; statusColor = 'var(--accent)'; }
-      else { statusLabel = 'Hoàn tất'; statusColor = 'var(--success)'; }
-      return <span style={{ fontSize: 12, fontWeight: 500, color: statusColor }}>{statusLabel}</span>;
+      return <StatusBadge status={s.status} />;
     }},
     { header: 'Vai trò', width: 90, align: 'center' as const, render: (s: any) => {
       const roleLabel = s.role === 'CLASS_COMMITTEE' ? 'Ban cán sự' : s.role === 'ADVISOR' ? 'Cố vấn' : 'Sinh viên';
@@ -721,13 +755,13 @@ export function DepartmentDashboard() {
     { header: 'Xếp loại', width: 90, align: 'center' as const, render: (s: any) => {
       const clsLabel = s.classification ? CLASSIFICATION_LABELS[s.classification] || '' : '';
       const clsColor = CLS_COLORS[s.classification || ''] || { bg: '#f3f4f6', color: '#6b7280' };
-      return clsLabel ? <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: clsColor.bg, color: clsColor.color }}>{clsLabel}</span> : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>-</span>;
+      return clsLabel ? <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: clsColor.bg, color: clsColor.color }}>{clsLabel}</span> : <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>-</span>;
     }},
     { header: 'Thao tác', width: 140, align: 'center' as const, render: (s: any) => (
       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button onClick={() => { setEditingStudent(s); setEditSvRole(s.role); }} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #d1d5db', background: '#f9fafb', color: '#374151', cursor: 'pointer', transition: 'all 0.2s' }}>Sửa</button>
-        <button onClick={() => setSelectedStudentForEdit(s)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #bfdbfe', background: '#fef2f2', color: '#1d4ed8', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#dbeafe'; }} onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}>Phiếu</button>
-        <button onClick={() => handleDeleteStudent(s)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#fee2e2'; }} onMouseOut={e => { e.currentTarget.style.background = '#fef2f2'; }}>Xóa</button>
+        <button onClick={() => { setEditingStudent(s); setEditSvRole(s.role); }} className="px-2 py-1 text-[11px] font-semibold rounded-md border border-border bg-surface hover:bg-surface-muted text-foreground transition-colors">Sửa</button>
+        <button onClick={() => setSelectedStudentForEdit(s)} className="px-2 py-1 text-[11px] font-semibold rounded-md border border-info-border bg-info-bg hover:bg-info/10 text-info-foreground transition-colors">Phiếu</button>
+        <button onClick={() => handleDeleteStudent(s)} className="px-2 py-1 text-[11px] font-semibold rounded-md border border-danger-border bg-danger-bg hover:bg-danger/10 text-danger-foreground transition-colors">Xóa</button>
       </div>
     ) },
   ];
@@ -735,74 +769,91 @@ export function DepartmentDashboard() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* ══════ Header with semester selector ══════ */}
-      <div style={{ background: '#fff', padding: 20, borderRadius: 12, border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>{departmentInfo?.name || 'Khoa'}</h2>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14 }}>Tổng hợp kết quả đánh giá điểm rèn luyện sinh viên</p>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Semester selector */}
-          <select value={selectedSemesterId} onChange={e => setSelectedSemesterId(e.target.value)} className="form-input" style={{ width: 220, fontWeight: 500, fontSize: 13 }}>
-            {semesters.map(s => (
-              <option key={s.id} value={s.id}>{s.name} {Number(s.is_active) === 1 ? '(Active)' : ''}</option>
-            ))}
-          </select>
-          {/* Class filter for export */}
-          {stats && (
-            <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="form-input" style={{ width: 200, fontWeight: 500, fontSize: 13 }}>
-              <option value="ALL">Tất cả các lớp</option>
-              {stats.byClass.map(c => (
-                <option key={c.classCode} value={c.classCode}>{c.classCode} - {c.className}</option>
+      <Card>
+        <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-foreground">{departmentInfo?.name || 'Khoa'}</h2>
+            <p className="text-sm text-muted-foreground mt-1">Tổng hợp kết quả đánh giá điểm rèn luyện sinh viên</p>
+          </div>
+          <div className="flex gap-3 items-center flex-wrap">
+            {/* Semester selector */}
+            <select value={selectedSemesterId} onChange={e => setSelectedSemesterId(e.target.value)} className="min-w-[12rem] bg-surface border border-border text-foreground text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 outline-none transition-colors">
+              {semesters.map(s => (
+                <option key={s.id} value={s.id}>{s.name} {Number(s.is_active) === 1 ? '(Active)' : ''}</option>
               ))}
             </select>
-          )}
-          {/* Export button */}
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowExportMenu(!showExportMenu)} className="btn-primary" id="export-csv-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-              Xuất báo cáo
-            </button>
-            {showExportMenu && (
-              <div style={{ position: 'absolute', top: 40, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', padding: 4, zIndex: 10, display: 'flex', flexDirection: 'column', minWidth: 150 }}>
-                <button onClick={() => exportData('csv')} style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, borderRadius: 4, width: '100%', fontWeight: 500 }}>Xuất CSV</button>
-                <button onClick={() => exportData('excel')} style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, borderRadius: 4, width: '100%', fontWeight: 500 }}>Xuất Excel</button>
-                <button onClick={() => exportData('pdf')} style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, borderRadius: 4, width: '100%', fontWeight: 500 }}>In trang (PDF)</button>
-              </div>
+            {/* Class filter for export */}
+            {stats && (
+              <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="min-w-[12rem] max-w-xs bg-surface border border-border text-foreground text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 outline-none transition-colors">
+                <option value="ALL">Tất cả các lớp</option>
+                {stats.byClass.map(c => (
+                  <option key={c.classCode} value={c.classCode}>{c.classCode} - {c.className}</option>
+                ))}
+              </select>
             )}
+            {/* Export button */}
+            <div className="relative">
+              <button onClick={() => setShowExportMenu(!showExportMenu)} className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm" id="export-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                Xuất báo cáo
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              
+              {showExportMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)}></div>
+                  <div className="absolute right-0 mt-2 w-56 bg-surface border border-border rounded-lg shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                    <button onClick={() => { exportData('summary'); setShowExportMenu(false); }} className="w-full text-left px-4 py-2.5 text-[13px] hover:bg-surface-muted transition-colors flex items-center gap-2">
+                      <span className="text-success-foreground bg-success/10 font-mono text-[10px] px-1 py-0.5 rounded">XLSX</span> Báo cáo tổng hợp
+                    </button>
+                    <button onClick={() => { exportData('detailed'); setShowExportMenu(false); }} className="w-full text-left px-4 py-2.5 text-[13px] hover:bg-surface-muted transition-colors flex items-center gap-2 border-t border-border/50">
+                      <span className="text-info-foreground bg-info/10 font-mono text-[10px] px-1 py-0.5 rounded">XLSX</span> Danh sách chi tiết
+                    </button>
+                    <button onClick={() => { exportData('unsubmitted'); setShowExportMenu(false); }} className="w-full text-left px-4 py-2.5 text-[13px] hover:bg-surface-muted transition-colors flex items-center gap-2 border-t border-border/50">
+                      <span className="text-danger-foreground bg-danger/10 font-mono text-[10px] px-1 py-0.5 rounded">XLSX</span> DS Sinh viên chưa nộp
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* ══════ VIEW: Dashboard (default) ══════ */}
       {activeView === 'dashboard' && stats && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="flex flex-col gap-6">
           {/* Stat cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-            <div style={{ background: 'linear-gradient(135deg, #6ee7b7 0%, #10b981 100%)', borderRadius: 12, padding: 20, color: '#064e3b', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)' }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Tổng Sinh viên</div>
-              <div style={{ fontSize: 36, fontWeight: 800 }}>{stats.total}</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="bg-gradient-to-br from-emerald-100 to-emerald-500 rounded-xl p-5 sm:p-6 text-emerald-950 shadow-sm">
+              <div className="text-sm font-semibold mb-2 opacity-90">Tổng Sinh viên</div>
+              <div className="text-3xl sm:text-4xl font-black">{stats.total}</div>
             </div>
-            <div style={{ background: 'linear-gradient(135deg, #93c5fd 0%, #b91c1c 100%)', borderRadius: 12, padding: 20, color: '#1e3a8a', boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.2)' }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Điểm trung bình</div>
-              <div style={{ fontSize: 36, fontWeight: 800 }}>{stats.avgScore}</div>
+            <div className="bg-gradient-to-br from-primary-light to-primary rounded-xl p-5 sm:p-6 text-primary-foreground shadow-sm">
+              <div className="text-sm font-semibold mb-2 opacity-90">Điểm trung bình</div>
+              <div className="text-3xl sm:text-4xl font-black">{stats.avgScore}</div>
             </div>
-            <div style={{ background: 'linear-gradient(135deg, #d8b4fe 0%, #a855f7 100%)', borderRadius: 12, padding: 20, color: '#4c1d95', boxShadow: '0 4px 6px -1px rgba(168, 85, 247, 0.2)' }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Xuất sắc / Giỏi</div>
-              <div style={{ fontSize: 36, fontWeight: 800 }}>{(stats.byClassification['EXCELLENT'] || 0) + (stats.byClassification['VERY_GOOD'] || 0)}</div>
+            <div className="bg-gradient-to-br from-purple-100 to-purple-500 rounded-xl p-5 sm:p-6 text-purple-950 shadow-sm">
+              <div className="text-sm font-semibold mb-2 opacity-90">Xuất sắc / Giỏi</div>
+              <div className="text-3xl sm:text-4xl font-black">{(stats.byClassification['EXCELLENT'] || 0) + (stats.byClassification['VERY_GOOD'] || 0)}</div>
             </div>
-            <div style={{ background: 'linear-gradient(135deg, #fcd34d 0%, #f59e0b 100%)', borderRadius: 12, padding: 20, color: '#78350f', boxShadow: '0 4px 6px -1px rgba(245, 158, 11, 0.2)' }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Đã nộp / Đã duyệt</div>
-              <div style={{ fontSize: 28, fontWeight: 800 }}>{stats.submitted} / {stats.finalized}</div>
+            <div className="bg-gradient-to-br from-amber-100 to-amber-500 rounded-xl p-5 sm:p-6 text-amber-950 shadow-sm">
+              <div className="text-sm font-semibold mb-2 opacity-90">Đã nộp / Đã duyệt</div>
+              <div className="text-2xl sm:text-3xl font-black">{stats.submitted} / {stats.finalized}</div>
             </div>
           </div>
 
           {/* Donut + Class table side by side */}
-          <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 20 }}>
-            <div style={{ background: '#fff', borderRadius: 12, padding: 24, border: '1px solid var(--border)' }}>
-              <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Phân loại rèn luyện</h3>
-              <DonutChart data={stats.byClassification} total={stats.total} />
-            </div>
-            <div>
+          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 sm:gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Phân loại rèn luyện</CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center pb-6">
+                <DonutChart data={stats.byClassification} total={stats.total} />
+              </CardContent>
+            </Card>
+            <div className="min-w-0">
               <DataTable
                 title="Thống kê theo lớp"
                 columns={classStatsColumns}
@@ -824,29 +875,41 @@ export function DepartmentDashboard() {
 
       {/* ══════ VIEW: Charts ══════ */}
       {activeView === 'charts' && stats && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="flex flex-col gap-6">
           {/* Bar chart */}
-          <div style={{ background: '#fff', borderRadius: 12, padding: 24, border: '1px solid var(--border)' }}>
-            <h3 style={{ margin: '0 0 20px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', marginRight: 8 }}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
-              So sánh phân loại qua 3 học kỳ
-            </h3>
-            <BarChart comparison={comparison} />
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block mr-2 align-middle"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
+                So sánh phân loại qua 3 học kỳ
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pb-6">
+              <BarChart comparison={comparison} />
+            </CardContent>
+          </Card>
 
           {/* Donut chart */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            <div style={{ background: '#fff', borderRadius: 12, padding: 24, border: '1px solid var(--border)' }}>
-              <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Phân loại HK hiện tại</h3>
-              <DonutChart data={stats.byClassification} total={stats.total} />
-            </div>
-            <div style={{ background: '#fff', borderRadius: 12, padding: 24, border: '1px solid var(--border)' }}>
-              <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', marginRight: 6 }}><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                Thống kê nộp phiếu theo tháng
-              </h3>
-              <MonthlyChart data={stats.byMonth || []} />
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Phân loại HK hiện tại</CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center pb-6">
+                <DonutChart data={stats.byClassification} total={stats.total} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block mr-2 align-middle"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                  Thống kê nộp phiếu theo tháng
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pb-6">
+                <MonthlyChart data={stats.byMonth || []} />
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}
@@ -859,7 +922,7 @@ export function DepartmentDashboard() {
           {manageClassId && (() => {
             const currentClass = deptClasses.find(c => c.id === manageClassId);
             return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--muted-foreground)' }}>
                 <button
                   onClick={() => { setManageClassId(''); setManageSearch(''); }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontWeight: 600, fontSize: 13, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
@@ -867,8 +930,8 @@ export function DepartmentDashboard() {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                   Danh sách lớp
                 </button>
-                <span style={{ color: 'var(--text-muted)' }}>›</span>
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{currentClass ? `${currentClass.code} - ${currentClass.name}` : ''}</span>
+                <span style={{ color: 'var(--muted-foreground)' }}>›</span>
+                <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{currentClass ? `${currentClass.code} - ${currentClass.name}` : ''}</span>
               </div>
             );
           })()}
@@ -879,7 +942,7 @@ export function DepartmentDashboard() {
               <div className="dashboard-card-header">
                 <div>
                   <h3 className="dashboard-card-title">Danh sách Lớp học</h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>{deptClasses.length} lớp đang hoạt động · Click vào lớp để quản lý sinh viên</p>
+                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)', margin: '4px 0 0' }}>{deptClasses.length} lớp đang hoạt động · Click vào lớp để quản lý sinh viên</p>
                 </div>
                 <button onClick={() => setShowAddClassModal(true)} className="btn-primary" style={{ fontSize: 12 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -887,43 +950,41 @@ export function DepartmentDashboard() {
                 </button>
               </div>
               {deptClasses.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)', fontSize: 13 }}>Chưa có lớp nào. Nhấn "Thêm lớp" để tạo mới.</div>
+                <div style={{ textAlign: 'center', padding: 32, color: 'var(--muted-foreground)', fontSize: 13 }}>Chưa có lớp nào. Nhấn "Thêm lớp" để tạo mới.</div>
               ) : (
                 <div style={{ overflowX: 'auto' }}>
-                  <table className="dashboard-table">
-                    <thead><tr>
-                      <th style={{ width: 50, textAlign: 'center' }}>STT</th>
-                      <th style={{ width: 120 }}>Mã lớp</th>
-                      <th>Tên lớp</th>
-                      <th style={{ width: 100, textAlign: 'center' }}>Năm học</th>
-                      <th style={{ width: 80, textAlign: 'center' }}>Sĩ số</th>
-                      <th style={{ width: 80, textAlign: 'center' }}>Thao tác</th>
-                    </tr></thead>
-                    <tbody>
+                  <table className="w-full text-left border-collapse min-w-[800px]">
+                    <thead className="bg-surface-muted border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-bold">
+                      <tr>
+                        <th className="px-6 py-4 text-center w-16">STT</th>
+                        <th className="px-6 py-4 w-32">Mã lớp</th>
+                        <th className="px-6 py-4">Tên lớp</th>
+                        <th className="px-6 py-4 text-center w-24">Năm học</th>
+                        <th className="px-6 py-4 text-center w-20">Sĩ số</th>
+                        <th className="px-6 py-4 text-center w-28">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
                       {deptClasses.map((cls, i) => (
                         <tr
                           key={cls.id}
                           onClick={() => setManageClassId(cls.id)}
-                          style={{ cursor: 'pointer', transition: 'background 0.15s' }}
-                          onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover, #f0f9ff)'; }}
-                          onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = ''; }}
+                          className="hover:bg-surface-muted cursor-pointer transition-colors group"
                         >
-                          <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12, color: 'var(--accent)' }}>{cls.code}</td>
-                          <td style={{ fontWeight: 500 }}>{cls.name}</td>
-                          <td style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-tertiary)' }}>{cls.academicYear || '-'}</td>
-                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{cls.studentCount}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                          <td className="px-6 py-4 text-center text-sm font-medium text-muted-foreground">{i + 1}</td>
+                          <td className="px-6 py-4 font-mono font-semibold text-sm text-primary">{cls.code}</td>
+                          <td className="px-6 py-4 font-medium text-sm text-foreground">{cls.name}</td>
+                          <td className="px-6 py-4 text-center text-sm text-muted-foreground">{cls.academicYear || '-'}</td>
+                          <td className="px-6 py-4 text-center text-sm font-semibold text-foreground">{cls.studentCount}</td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex gap-2 justify-center">
                               <button
                                 onClick={(e) => { e.stopPropagation(); setEditClassData({ id: cls.id, code: cls.code, name: cls.name, academic_year: cls.academicYear || '' }); }}
-                                className="btn-secondary"
-                                style={{ padding: '4px 10px', fontSize: 11 }}
+                                className="px-3 py-1 bg-surface border border-border text-foreground hover:bg-surface-muted rounded text-xs font-medium transition-colors"
                               >Sửa</button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleDeleteClass(cls); }}
-                                className="btn-danger"
-                                style={{ padding: '4px 10px', fontSize: 11 }}
+                                className="px-3 py-1 bg-danger text-danger-foreground hover:bg-danger/90 rounded text-xs font-medium transition-colors disabled:opacity-50"
                                 disabled={cls.studentCount > 0}
                                 title={cls.studentCount > 0 ? 'Phải xóa hết SV trước' : 'Xóa lớp'}
                               >Xóa</button>
@@ -942,7 +1003,7 @@ export function DepartmentDashboard() {
           {manageClassId && (
             <div className="dashboard-card" style={{ padding: 0 }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 16, borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-secondary)' }}>Sinh viên trong lớp</span>
+                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--muted-foreground)' }}>Sinh viên trong lớp</span>
                 <div style={{ position: 'relative', flex: 1, maxWidth: 280, minWidth: 180 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
                   <input type="text" placeholder="Tìm tên, MSSV..." value={manageSearch} onChange={(e) => setManageSearch(e.target.value)} style={{ width: '100%', fontSize: 13, padding: '8px 10px 8px 32px', border: '1px solid var(--border)', borderRadius: 8, outline: 'none' }} />
@@ -960,7 +1021,7 @@ export function DepartmentDashboard() {
               </div>
               <div style={{ padding: 16 }}>
                 {loadingStudents ? (
-                  <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải danh sách...</div>
+                  <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted-foreground)' }}>Đang tải danh sách...</div>
                 ) : (
                   <DataTable title="" subtitle={`${filteredManageStudents.length} sinh viên`} columns={manageStudentsColumns} data={filteredManageStudents} emptyMessage="Chưa có sinh viên nào trong lớp" />
                 )}
@@ -982,11 +1043,11 @@ export function DepartmentDashboard() {
               <h3 className="modal-header-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <FileText size={18} strokeWidth={2} /> Phiếu điểm rèn luyện:{' '}
                 <span style={{ color: 'var(--accent)' }}>{selectedStudentForEdit.name}</span>
-                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>({selectedStudentForEdit.studentCode})</span>
+                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted-foreground)', marginLeft: 8 }}>({selectedStudentForEdit.studentCode})</span>
               </h3>
               <button
                 onClick={() => setSelectedStudentForEdit(null)}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', color: 'var(--muted-foreground)' }}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
@@ -1084,7 +1145,7 @@ export function DepartmentDashboard() {
                   {manageClassId && <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#15803d', fontWeight: 500 }}><CheckCircle size={14} strokeWidth={2} /> Lớp đã chọn: <strong>{deptClasses.find(c => c.id === manageClassId)?.code}</strong></div>}
                   {!manageClassId && <div style={{ padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#92400e', fontWeight: 500 }}>⚠ Chưa chọn lớp — File cần cột &quot;Lớp&quot;</div>}
                   <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <button onClick={downloadDeptTemplate} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button onClick={downloadDeptTemplate} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                       Tải file mẫu
                     </button>
@@ -1101,29 +1162,29 @@ export function DepartmentDashboard() {
                         <p style={{ fontSize: 14, fontWeight: 600, color: '#1f2937', margin: 0 }}>Xem trước: {importData.length} dòng</p>
                         <button onClick={resetDeptImport} style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Chọn file khác</button>
                       </div>
-                      <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, maxHeight: 300 }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                          <thead><tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>Dòng</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>MSSV</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>Họ tên</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>Email</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>Vai trò</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid #e5e7eb' }}>Lớp</th>
+                      <div className="overflow-x-auto border border-border rounded-lg max-h-[300px]">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead className="bg-surface-muted sticky top-0 text-muted-foreground"><tr>
+                            <th className="px-3 py-2 font-semibold border-b border-border">Dòng</th>
+                            <th className="px-3 py-2 font-semibold border-b border-border">MSSV</th>
+                            <th className="px-3 py-2 font-semibold border-b border-border">Họ tên</th>
+                            <th className="px-3 py-2 font-semibold border-b border-border">Email</th>
+                            <th className="px-3 py-2 font-semibold border-b border-border">Vai trò</th>
+                            <th className="px-3 py-2 font-semibold border-b border-border">Lớp</th>
                           </tr></thead>
                           <tbody>{importData.map((row, i) => {
                             const hasError = !row.full_name || !row.email || !row.password;
-                            return (<tr key={i} style={{ background: hasError ? '#fef2f2' : 'transparent' }}>
-                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#9ca3af' }}>{row.rowIndex}</td>
-                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', fontFamily: 'monospace' }}>{row.student_id || '-'}</td>
-                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', fontWeight: 500, color: !row.full_name ? '#dc2626' : '#1f2937' }}>{row.full_name || '⚠ Thiếu'}</td>
-                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: !row.email ? '#dc2626' : '#6b7280' }}>{row.email || '⚠ Thiếu'}</td>
-                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6' }}>
-                                <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: '#f3f4f6', color: '#374151' }}>
+                            return (<tr key={i} className={hasError ? 'bg-danger/10' : 'bg-transparent'}>
+                              <td className="px-3 py-1.5 border-b border-border text-muted-foreground">{row.rowIndex}</td>
+                              <td className="px-3 py-1.5 border-b border-border font-mono">{row.student_id || '-'}</td>
+                              <td className={`px-3 py-1.5 border-b border-border font-medium ${!row.full_name ? 'text-danger' : 'text-foreground'}`}>{row.full_name || '⚠ Thiếu'}</td>
+                              <td className={`px-3 py-1.5 border-b border-border ${!row.email ? 'text-danger' : 'text-muted-foreground'}`}>{row.email || '⚠ Thiếu'}</td>
+                              <td className="px-3 py-1.5 border-b border-border">
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                                   {row.role === 'CLASS_COMMITTEE' ? 'Ban cán sự' : (row.role === 'STUDENT' ? 'Sinh viên' : row.role)}
                                 </span>
                               </td>
-                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{row.class_code || (manageClassId ? '← Lớp đã chọn' : '⚠ Chưa có')}</td>
+                              <td className="px-3 py-1.5 border-b border-border text-muted-foreground">{row.class_code || (manageClassId ? '← Lớp đã chọn' : '⚠ Chưa có')}</td>
                             </tr>);
                           })}</tbody>
                         </table>

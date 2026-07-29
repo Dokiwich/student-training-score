@@ -15,13 +15,13 @@ const DATE_FIELDS = [
   { key: 'end_date', label: 'Ngày kết thúc' }
 ] as const;
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  UPCOMING: { bg: '#fef2f2', color: '#ef4444' }, // red-50, red-500
+  UPCOMING: { bg: 'var(--danger-bg)', color: 'var(--danger)' }, // red-50, red-500
   STUDENT_SCORING: { bg: '#fffbeb', color: '#f59e0b' }, // amber-50, amber-500
   CLASS_REVIEWING: { bg: '#fffbeb', color: '#f59e0b' },
   ADVISOR_REVIEWING: { bg: '#f5f3ff', color: '#8b5cf6' }, // violet-50, violet-500
   SCHOOL_REVIEWING: { bg: '#ecfeff', color: '#06b6d4' }, // cyan-50, cyan-500
-  FINALIZED: { bg: '#ecfdf5', color: '#10b981' }, // emerald-50, emerald-500
-  LOCKED: { bg: '#f3f4f6', color: '#6b7280' }, // gray-100, gray-500
+  FINALIZED: { bg: '#ecfdf5', color: 'var(--success)' }, // emerald-50, emerald-500
+  LOCKED: { bg: 'var(--border)', color: 'var(--muted-foreground)' }, // gray-100, gray-500
 };
 
 function fmtDate(d: string) { if (!d) return '-'; return new Date(d).toLocaleDateString('vi-VN'); }
@@ -144,39 +144,39 @@ export function SemestersTab() {
     }
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted-foreground)' }}>Đang tải...</div>;
 
   const columns = [
-    { header: 'STT', width: 50, render: (_s: Semester, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'STT', width: 50, render: (_s: Semester, i: number) => <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{i + 1}</span> },
     { header: 'Mã', width: 120, render: (s: Semester) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12 }}>{s.code}</span> },
     { header: 'Tên', render: (s: Semester) => <span style={{ fontWeight: 500 }}>{s.name}</span> },
-    { header: 'Năm học', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{s.academic_year}</span> },
+    { header: 'Năm học', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{s.academic_year}</span> },
     { header: 'Bắt đầu', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtDate(s.start_date)}</span> },
     { header: 'Kết thúc', width: 100, render: (s: Semester) => <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{fmtDate(s.end_date)}</span> },
     {
       header: 'Trạng thái', width: 110, align: 'center' as const, render: (s: Semester) => {
-        const sc = STATUS_COLORS[s.status] || { bg: '#f3f4f6', color: '#6b7280' };
+        const sc = STATUS_COLORS[s.status] || { bg: 'var(--border)', color: 'var(--muted-foreground)' };
         return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: sc.bg, color: sc.color }}>{STATUS_LABELS[s.status] || s.status}</span>;
       }
     },
     {
       header: 'Tiêu chí', width: 100, align: 'center' as const, render: (s: Semester) => {
         if (s.criteriaCount && s.criteriaCount > 0) {
-          return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: '#ecfdf5', color: '#10b981' }}><Check size={12} strokeWidth={2.5} /> {s.criteriaCount} TC</span>;
+          return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: 'var(--success-bg)', color: 'var(--success)' }}><Check size={12} strokeWidth={2.5} /> {s.criteriaCount} TC</span>;
         }
-        return <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 9999, background: '#fef2f2', color: '#ef4444' }}>Chưa có</span>;
+        return <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 9999, background: 'var(--danger-bg)', color: 'var(--danger)' }}>Chưa có</span>;
       }
     },
     {
       header: 'Kích hoạt', width: 80, align: 'center' as const, render: (s: Semester) => (
-        Number(s.is_active) === 1 ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#10b981', fontWeight: 600, fontSize: 12 }}><CheckCircle2 size={14} strokeWidth={2} /> Active</span> : <span style={{ display: 'inline-flex', alignItems: 'center', color: '#d1d5db', fontSize: 12 }}><Circle size={14} strokeWidth={2} /></span>
+        Number(s.is_active) === 1 ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, fontSize: 12 }}><CheckCircle2 size={14} strokeWidth={2} /> Active</span> : <span style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--border)', fontSize: 12 }}><Circle size={14} strokeWidth={2} /></span>
       )
     },
     {
       header: 'Thao tác', width: 220, align: 'center' as const, render: (s: Semester) => (
         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {Number(s.is_active) !== 1 && <button onClick={() => activateSemester(s.id)} className="btn-secondary" style={{ padding: '4px 8px', fontSize: 11, borderColor: '#10b981', color: '#10b981' }}>Kích hoạt</button>}
-          {Number(s.is_active) === 1 && <button onClick={() => deactivateSemester(s.id)} className="btn-secondary" style={{ padding: '4px 8px', fontSize: 11, borderColor: '#8a8f98', color: '#62666d' }}>Hủy kích hoạt</button>}
+          {Number(s.is_active) !== 1 && <button onClick={() => activateSemester(s.id)} className="btn-secondary" style={{ padding: '4px 8px', fontSize: 11, borderColor: 'var(--success)', color: 'var(--success)' }}>Kích hoạt</button>}
+          {Number(s.is_active) === 1 && <button onClick={() => deactivateSemester(s.id)} className="btn-secondary" style={{ padding: '4px 8px', fontSize: 11, borderColor: 'var(--muted-foreground)', color: 'var(--muted-foreground)' }}>Hủy kích hoạt</button>}
           <button onClick={() => startEdit(s)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Sửa</button>
         </div>
       )
@@ -230,15 +230,15 @@ export function SemestersTab() {
       {/* Apply Criteria Popup */}
       {showApplyPopup && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-100 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-bold text-gray-800 mb-2">Áp dụng Bộ tiêu chí</h3>
-            <p className="text-sm text-gray-500 mb-5">Chọn phiên bản tiêu chí và học kỳ để sao chép toàn bộ mục và tiêu chí.</p>
+          <div className="bg-surface rounded-2xl border border-border shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-card-foreground mb-2">Áp dụng Bộ tiêu chí</h3>
+            <p className="text-sm text-muted-foreground mb-5">Chọn phiên bản tiêu chí và học kỳ để sao chép toàn bộ mục và tiêu chí.</p>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phiên bản nguồn</label>
+              <label className="block text-sm font-medium text-secondary-foreground mb-1">Phiên bản nguồn</label>
               <select
                 value={selectedVersionToApply}
                 onChange={e => setSelectedVersionToApply(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm font-medium text-gray-700"
+                className="w-full px-4 py-2.5 border border-border rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm font-medium text-secondary-foreground"
               >
                 <option value="">-- Chọn phiên bản --</option>
                 {versions.map(v => (
@@ -249,11 +249,11 @@ export function SemestersTab() {
               </select>
             </div>
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Học kỳ đích</label>
+              <label className="block text-sm font-medium text-secondary-foreground mb-1">Học kỳ đích</label>
               <select
                 value={selectedSemesterToApply}
                 onChange={e => setSelectedSemesterToApply(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm font-medium text-gray-700"
+                className="w-full px-4 py-2.5 border border-border rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm font-medium text-secondary-foreground"
               >
                 <option value="">-- Chọn học kỳ --</option>
                 {semesters.filter(s => !s.criteriaCount || s.criteriaCount === 0).map(s => (
@@ -264,7 +264,7 @@ export function SemestersTab() {
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => { setShowApplyPopup(false); setSelectedSemesterToApply(''); }}
-                className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-sm transition-colors"
+                className="px-5 py-2.5 bg-muted hover:bg-secondary text-secondary-foreground rounded-xl font-semibold text-sm transition-colors"
               >
                 Hủy bỏ
               </button>

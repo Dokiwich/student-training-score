@@ -32,9 +32,14 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const classId = searchParams.get('classId');
+  const semesterId = searchParams.get('semesterId');
 
-  if (!classId) {
-    return NextResponse.json({ message: 'classId là bắt buộc' }, { status: 400 });
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!classId || !uuidRegex.test(classId)) {
+    return NextResponse.json({ message: 'classId không hợp lệ' }, { status: 400 });
+  }
+  if (semesterId && !uuidRegex.test(semesterId)) {
+    return NextResponse.json({ message: 'semesterId không hợp lệ' }, { status: 400 });
   }
 
   // Verify class belongs to this department
@@ -45,14 +50,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ message: 'Lớp không thuộc khoa của bạn' }, { status: 403 });
   }
 
-  // Get active semester
-  const activeSemester = await prisma.semesters.findFirst({
-    where: { is_active: 1 },
-    orderBy: { created_at: 'desc' },
-    select: { id: true },
-  });
+  let activeSemesterId = semesterId;
+  if (!activeSemesterId) {
+    const activeSemester = await prisma.semesters.findFirst({
+      where: { is_active: 1 },
+      orderBy: { created_at: 'desc' },
+      select: { id: true },
+    });
+    if (activeSemester) activeSemesterId = activeSemester.id;
+  }
 
-  if (!activeSemester) {
+  if (!activeSemesterId) {
     return NextResponse.json({ data: [] });
   }
 
@@ -71,7 +79,7 @@ export async function GET(req: Request) {
     },
     where: {
       class_id: classId,
-      semester_id: activeSemester.id,
+      semester_id: activeSemesterId,
       is_active: 1,
       users: {
         is_active: 1,

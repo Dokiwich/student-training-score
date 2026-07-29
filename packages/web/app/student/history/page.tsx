@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { ScoringForm } from '../../components/ScoringForm';
+import { fetchWithCache, StaleRequestError } from '../../lib/client-request-cache';
 
 interface Note {
   id: string;
@@ -40,11 +41,11 @@ interface HistoryRecord {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  STUDENT: 'bg-gray-100 text-gray-700',
-  CLASS_COMMITTEE: 'bg-red-100 text-red-700',
-  ADVISOR: 'bg-green-100 text-green-700',
-  DEPARTMENT: 'bg-purple-100 text-purple-700',
-  SCHOOL_ADMIN: 'bg-red-100 text-red-700',
+  STUDENT: 'bg-muted text-secondary-foreground',
+  CLASS_COMMITTEE: 'bg-danger-bg text-danger-foreground',
+  ADVISOR: 'bg-success-bg text-success-foreground',
+  DEPARTMENT: 'bg-info-bg text-info-foreground',
+  SCHOOL_ADMIN: 'bg-danger-bg text-danger-foreground',
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -72,22 +73,33 @@ export default function StudentHistoryPage() {
   useEffect(() => {
     if (!studentId) return;
 
+    let mounted = true;
+
     const fetchHistory = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/scoring-history`);
-        if (!res.ok) throw new Error('Không thể tải lịch sử');
-        const json = await res.json();
-        setRecords(json.data || []);
+        const json = await fetchWithCache<any>(`/api/scoring-history`, studentId);
+        if (mounted) {
+          setRecords(json.data || []);
+        }
       } catch (err: any) {
-        setError(err.message);
+        if (mounted) {
+          if (err instanceof StaleRequestError || err.name === 'StaleRequestError') {
+             // Silently ignore stale responses
+          } else {
+             setError(err.message);
+          }
+        }
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchHistory();
+    return () => { mounted = false; };
   }, [studentId]);
 
   return (
@@ -95,7 +107,7 @@ export default function StudentHistoryPage() {
       pageTitle="Lịch sử đánh giá"
       pageSubtitle="Xem lại kết quả rèn luyện và nhận xét của các học kỳ trước"
     >
-      <div className="p-4 md:p-6 bg-gray-50 flex-1 overflow-y-auto">
+      <div className="p-4 md:p-6 bg-surface-muted flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto">
           
           {isLoading ? (
@@ -103,24 +115,24 @@ export default function StudentHistoryPage() {
               <div className="w-10 h-10 rounded-full border-4 border-red-100 border-t-red-500 animate-spin"></div>
             </div>
           ) : error ? (
-            <div className="bg-white p-8 rounded-2xl text-center border shadow-sm">
+            <div className="bg-surface p-8 rounded-2xl text-center border shadow-sm">
               <p className="text-red-500 mb-2">Đã có lỗi xảy ra</p>
-              <p className="text-gray-500">{error}</p>
+              <p className="text-muted-foreground">{error}</p>
             </div>
           ) : records.length === 0 ? (
-            <div className="bg-white p-12 rounded-2xl text-center border shadow-sm">
+            <div className="bg-surface p-12 rounded-2xl text-center border shadow-sm">
               <div className="text-4xl mb-4">📭</div>
-              <h3 className="text-lg font-semibold text-gray-800">Chưa có dữ liệu</h3>
-              <p className="text-gray-500 mt-2">Bạn chưa có phiếu rèn luyện nào trong lịch sử.</p>
+              <h3 className="text-lg font-semibold text-card-foreground">Chưa có dữ liệu</h3>
+              <p className="text-muted-foreground mt-2">Bạn chưa có phiếu rèn luyện nào trong lịch sử.</p>
             </div>
           ) : (
             <div className="space-y-6">
               {records.map((record) => (
-                <div key={record.semesterId} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col md:flex-row">
+                <div key={record.semesterId} className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden flex flex-col md:flex-row">
                   
                   {/* Ô 1: Thông tin điểm số */}
                   <div 
-                    className="flex-1 p-6 border-b md:border-b-0 md:border-r border-gray-100 hover:bg-red-50 transition-colors cursor-pointer group"
+                    className="flex-1 p-6 border-b md:border-b-0 md:border-r border-border hover:bg-danger-bg transition-colors cursor-pointer group"
                     onClick={() => {
                       if (record.hasSheet) {
                         setSelectedSemester({ id: record.semesterId, name: record.semesterName });
@@ -129,13 +141,13 @@ export default function StudentHistoryPage() {
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h3 className="text-xl font-bold text-gray-900 group-hover:text-red-700 transition-colors">
+                        <h3 className="text-xl font-bold text-foreground group-hover:text-red-700 transition-colors">
                           {record.semesterName}
                         </h3>
-                        <p className="text-sm text-gray-500 mt-1">Lớp: {record.className}</p>
+                        <p className="text-sm text-muted-foreground mt-1">Lớp: {record.className}</p>
                       </div>
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        record.status === 'NO_SHEET' ? 'bg-gray-100 text-gray-600' :
+                        record.status === 'NO_SHEET' ? 'bg-muted text-muted-foreground' :
                         record.status === 'FINALIZED' ? 'bg-green-100 text-green-700' :
                         'bg-red-100 text-red-700'
                       }`}>
@@ -144,23 +156,23 @@ export default function StudentHistoryPage() {
                     </div>
 
                     {!record.hasSheet ? (
-                      <div className="py-8 text-center text-gray-400 italic">
+                      <div className="py-8 text-center opacity-70 italic">
                         Chưa có phiếu đánh giá trong học kỳ này
                       </div>
                     ) : (
                       <>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                          <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
-                            <div className="text-xs text-gray-500 mb-1">SV tự chấm</div>
-                            <div className="text-lg font-bold text-gray-800">{record.studentTotal ?? '-'}</div>
+                          <div className="bg-surface-muted p-3 rounded-xl border border-border text-center">
+                            <div className="text-xs text-muted-foreground mb-1">SV tự chấm</div>
+                            <div className="text-lg font-bold text-card-foreground">{record.studentTotal ?? '-'}</div>
                           </div>
-                          <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
-                            <div className="text-xs text-gray-500 mb-1">BCS chấm</div>
-                            <div className="text-lg font-bold text-gray-800">{record.classTotal ?? '-'}</div>
+                          <div className="bg-surface-muted p-3 rounded-xl border border-border text-center">
+                            <div className="text-xs text-muted-foreground mb-1">BCS chấm</div>
+                            <div className="text-lg font-bold text-card-foreground">{record.classTotal ?? '-'}</div>
                           </div>
-                          <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
-                            <div className="text-xs text-gray-500 mb-1">CVHT chấm</div>
-                            <div className="text-lg font-bold text-gray-800">{record.advisorTotal ?? '-'}</div>
+                          <div className="bg-surface-muted p-3 rounded-xl border border-border text-center">
+                            <div className="text-xs text-muted-foreground mb-1">CVHT chấm</div>
+                            <div className="text-lg font-bold text-card-foreground">{record.advisorTotal ?? '-'}</div>
                           </div>
                           <div className="bg-red-50 p-3 rounded-xl border border-red-100 text-center">
                             <div className="text-xs text-red-600 mb-1">Điểm chốt</div>
@@ -170,7 +182,7 @@ export default function StudentHistoryPage() {
 
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-500">Xếp loại:</span>
+                            <span className="text-sm text-muted-foreground">Xếp loại:</span>
                             <span className={`font-semibold ${
                               record.classification === 'EXCELLENT' ? 'text-purple-600' :
                               record.classification === 'VERY_GOOD' ? 'text-red-600' :
@@ -192,30 +204,30 @@ export default function StudentHistoryPage() {
                   </div>
 
                   {/* Ô 2: Ghi chú của những người chấm */}
-                  <div className="w-full md:w-80 bg-gray-50 p-6 flex flex-col max-h-[300px] overflow-y-auto border-t md:border-t-0">
-                    <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2 sticky top-0 bg-gray-50 py-1">
+                  <div className="w-full md:w-80 bg-surface-muted p-6 flex flex-col max-h-[300px] overflow-y-auto border-t md:border-t-0">
+                    <h4 className="text-sm font-bold text-secondary-foreground mb-4 flex items-center gap-2 sticky top-0 bg-surface-muted py-1">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                       Ghi chú & Lịch sử
                     </h4>
 
                     {!record.hasSheet ? (
-                      <p className="text-sm text-gray-400 italic">Trống</p>
+                      <p className="text-sm opacity-70 italic">Trống</p>
                     ) : record.notes.length === 0 ? (
-                      <p className="text-sm text-gray-400 italic">Không có ghi chú nào.</p>
+                      <p className="text-sm opacity-70 italic">Không có ghi chú nào.</p>
                     ) : (
                       <div className="space-y-4">
                         {record.notes.map((note) => (
-                          <div key={note.id} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm text-sm">
+                          <div key={note.id} className="bg-surface p-3 rounded-lg border border-border shadow-sm text-sm">
                             <div className="flex items-start justify-between mb-2 gap-2">
                               <div>
-                                <span className="font-semibold text-gray-800">{note.author}</span>
+                                <span className="font-semibold text-card-foreground">{note.author}</span>
                                 {note.authorRole && (
-                                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[note.authorRole] || 'bg-gray-100 text-gray-600'}`}>
+                                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[note.authorRole] || 'bg-muted text-muted-foreground'}`}>
                                     {note.authorRole === 'CLASS_COMMITTEE' ? 'BCS' : note.authorRole === 'ADVISOR' ? 'CVHT' : note.authorRole === 'SCHOOL_ADMIN' ? 'Admin' : note.authorRole}
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[10px] text-gray-400 shrink-0">
+                              <span className="text-[10px] opacity-70 shrink-0">
                                 {new Date(note.createdAt).toLocaleDateString('vi-VN')}
                               </span>
                             </div>
@@ -226,7 +238,7 @@ export default function StudentHistoryPage() {
                               </div>
                             )}
                             
-                            <p className="text-gray-600 whitespace-pre-wrap">{note.content}</p>
+                            <p className="text-muted-foreground whitespace-pre-wrap">{note.content}</p>
                           </div>
                         ))}
                       </div>
@@ -248,23 +260,23 @@ export default function StudentHistoryPage() {
           style={{ animation: 'fadeIn 0.2s forwards' }}
         >
           <div 
-            className="bg-white w-full max-w-6xl h-[90vh] sm:h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+            className="bg-surface w-full max-w-6xl h-[90vh] sm:h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
             style={{ animation: 'modalSlideUp 0.3s forwards' }}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="text-lg font-bold text-gray-900">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <h3 className="text-lg font-bold text-foreground">
                 Chi tiết phiếu điểm - <span className="text-red-600">{selectedSemester.name}</span>
               </h3>
               <button 
                 onClick={() => setSelectedSemester(null)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 opacity-70 hover:text-muted-foreground hover:bg-muted rounded-lg transition-colors"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto bg-gray-50 relative">
+            <div className="flex-1 overflow-y-auto bg-surface-muted relative">
               <ScoringForm
                 forcedRole="STUDENT"
                 studentId={studentId}

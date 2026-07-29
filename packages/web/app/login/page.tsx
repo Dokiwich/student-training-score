@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { APP_BRANDING } from '../../lib/branding';
 import './login.css';
 
 export default function LoginPage() {
@@ -100,9 +101,9 @@ export default function LoginPage() {
           <div className="login-logo-container">
             <img src="/assets/login/logo.png" alt="Logo Trường" className="login-logo-image" />
           </div>
-          <h1 className="login-title">Cổng Chấm Điểm Rèn Luyện</h1>
+          <h1 className="login-title">{APP_BRANDING.loginTitle}</h1>
           <p className="login-subtitle">
-            Đăng nhập để truy cập hệ thống chấm điểm rèn luyện sinh viên
+            Đăng nhập để truy cập hệ thống đánh giá điểm rèn luyện sinh viên
           </p>
         </div>
 

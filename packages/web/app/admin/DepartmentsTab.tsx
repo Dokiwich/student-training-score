@@ -53,19 +53,19 @@ export function DepartmentsTab() {
 
   const startEdit = (dept: Dept) => { setEditing(dept); setCode(dept.code); setName(dept.name); setIsActive(dept.is_active); setShowForm(true); };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted-foreground)' }}>Đang tải...</div>;
 
   const columns = [
-    { header: 'STT', width: 60, render: (_d: Dept, i: number) => <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</span> },
-    { header: 'Mã khoa', width: 120, render: (d: Dept) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>{d.code}</span> },
+    { header: 'STT', width: 60, render: (_d: Dept, i: number) => <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{i + 1}</span> },
+    { header: 'Mã khoa', width: 120, render: (d: Dept) => <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--foreground)' }}>{d.code}</span> },
     { header: 'Tên khoa', render: (d: Dept) => <span style={{ fontWeight: 500 }}>{d.name}</span> },
     { header: 'Số lớp', width: 90, align: 'center' as const, render: (d: Dept) => <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', padding: '2px 8px', borderRadius: 9999, fontSize: 12, fontWeight: 600 }}>{d.classCount}</span> },
     { header: 'Số users', width: 90, align: 'center' as const, render: (d: Dept) => <span style={{ fontSize: 12 }}>{d.userCount}</span> },
     { header: 'Trạng thái', width: 100, align: 'center' as const, render: (d: Dept) => (
         <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999,
-          background: d.is_active ? 'var(--success-bg)' : '#f3f4f6',
-          color: d.is_active ? 'var(--success)' : 'var(--text-muted)',
-          border: `1px solid ${d.is_active ? 'var(--success-border)' : '#e5e7eb'}` }}>
+          background: d.is_active ? 'var(--success-bg)' : 'var(--border)',
+          color: d.is_active ? 'var(--success)' : 'var(--muted-foreground)',
+          border: `1px solid ${d.is_active ? 'var(--success-border)' : 'var(--border)'}` }}>
           {d.is_active ? 'Hoạt động' : 'Ẩn'}
         </span>
       )
@@ -83,7 +83,7 @@ export function DepartmentsTab() {
     <div>
       {showForm && (
         <form onSubmit={handleSubmit} className="dashboard-card" style={{ marginBottom: 16 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)', marginBottom: 12 }}>
             {editing ? `Sửa khoa [${editing.code}]` : 'Thêm khoa mới'}
           </h3>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>

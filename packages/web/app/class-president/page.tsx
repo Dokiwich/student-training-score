@@ -12,7 +12,12 @@ export default function ClassPresidentPage() {
       pageSubtitle="Quản lý và xét duyệt điểm rèn luyện"
     >
       <Suspense fallback={<p style={{ padding: 20 }}>Đang tải...</p>}>
-        <ScoringDashboard role="CLASS_COMMITTEE" showHeader={false} />
+        <ScoringDashboard
+          scopeContext="CLASS_COMMITTEE"
+          scopeMode="SINGLE_CLASS"
+          classSelectorOwner="self"
+          showHeader={false}
+        />
       </Suspense>
     </DashboardLayout>
   );
