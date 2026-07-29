@@ -277,11 +277,11 @@ export function DepartmentDashboard() {
 
   const [selectedClass, setSelectedClass] = useState<string>(classParam || 'ALL');
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   const [students, setStudents] = useState<DeptStudent[]>([]);
   const [stats, setStats] = useState<DepartmentStats | null>(null);
-  const [departmentInfo, setDepartmentInfo] = useState<{name: string, code: string} | null>(null);
-  
+  const [departmentInfo, setDepartmentInfo] = useState<{ name: string, code: string } | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [showExportMenu, setShowExportMenu] = useState(false);
 
@@ -313,7 +313,7 @@ export function DepartmentDashboard() {
   const [newClassName, setNewClassName] = useState('');
   const [newClassCode, setNewClassCode] = useState('');
   const [newClassYear, setNewClassYear] = useState(new Date().getFullYear().toString());
-  const [editClassData, setEditClassData] = useState<{id: string, code: string, name: string, academic_year: string} | null>(null);
+  const [editClassData, setEditClassData] = useState<{ id: string, code: string, name: string, academic_year: string } | null>(null);
 
   // Import Excel state (Khoa)
   const [showImportModal, setShowImportModal] = useState(false);
@@ -348,7 +348,7 @@ export function DepartmentDashboard() {
           setSelectedSemesterId(semList[0].id);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [session, getHeaders]);
 
   // Fetch stats & students when semester changes
@@ -375,13 +375,13 @@ export function DepartmentDashboard() {
     fetch(`${API_BASE}/department/stats/compare`, { headers, credentials: 'include' })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(j => setComparison(j.data || []))
-      .catch(() => {});
+      .catch(() => { });
   }, [session, activeView, getHeaders]);
 
   // Fetch department classes
   useEffect(() => {
     if (!session?.user || !selectedSemesterId) return;
-    fetch(`/api/department/classes?semesterId=${selectedSemesterId}`).then(r => r.ok ? r.json() : Promise.reject()).then(j => setDeptClasses(j.data || [])).catch(() => {});
+    fetch(`/api/department/classes?semesterId=${selectedSemesterId}`).then(r => r.ok ? r.json() : Promise.reject()).then(j => setDeptClasses(j.data || [])).catch(() => { });
   }, [session, selectedSemesterId]);
 
   // Fetch students for selected class in classes view
@@ -465,24 +465,24 @@ export function DepartmentDashboard() {
   const handleEditStudentSave = async () => {
     if (!editingStudent || !editingStudent.full_name || !editingStudent.email) return alert('Vui lòng nhập đầy đủ');
     try {
-      const r = await fetch('/api/department/users', { 
-        method: 'PUT', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ 
-          id: editingStudent.id, 
-          full_name: editingStudent.full_name, 
-          email: editingStudent.email, 
-          student_id: editingStudent.studentCode || undefined, 
-          class_id: manageClassId, 
-          role: editSvRole 
-        }) 
+      const r = await fetch('/api/department/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingStudent.id,
+          full_name: editingStudent.full_name,
+          email: editingStudent.email,
+          student_id: editingStudent.studentCode || undefined,
+          class_id: manageClassId,
+          role: editSvRole
+        })
       });
       const d = await r.json();
-      if (r.ok) { 
-        alert('Cập nhật sinh viên thành công'); 
-        setEditingStudent(null); 
-        const r2 = await fetch(`/api/department/users?classId=${manageClassId}&semesterId=${selectedSemesterId}`); 
-        if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); } 
+      if (r.ok) {
+        alert('Cập nhật sinh viên thành công');
+        setEditingStudent(null);
+        const r2 = await fetch(`/api/department/users?classId=${manageClassId}&semesterId=${selectedSemesterId}`);
+        if (r2.ok) { const j = await r2.json(); setClassStudents(j.data || []); }
       } else { alert(d.message); }
     } catch { alert('Lỗi kết nối'); }
   };
@@ -650,7 +650,7 @@ export function DepartmentDashboard() {
       if (dataToExport.length === 0) return alert('Không có dữ liệu để xuất');
       header = ['STT', 'MSSV', 'Họ và Tên', 'Lớp', 'Điểm SV', 'Điểm BCS', 'Điểm CVHT', 'Điểm Cuối', 'Xếp loại'];
       rows = dataToExport.map((s, i) => [
-        i + 1, s.studentCode || '', s.name, s.className || '', 
+        i + 1, s.studentCode || '', s.name, s.className || '',
         s.studentTotal ?? '', s.classTotal ?? '', s.advisorTotal ?? '', s.finalTotal ?? '',
         s.classification ? CLASSIFICATION_LABELS[s.classification] || '' : ''
       ]);
@@ -743,27 +743,35 @@ export function DepartmentDashboard() {
     { header: 'STT', width: 40, align: 'center' as const, render: (_s: any, i: number) => <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{i + 1}</span> },
     { header: 'MSSV', width: 90, render: (s: any) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.student_id || '-'}</span> },
     { header: 'Họ và Tên', render: (s: any) => <span style={{ fontWeight: 500 }}>{s.full_name}</span> },
-    { header: 'Trạng thái', width: 90, align: 'center' as const, render: (s: any) => {
-      return <StatusBadge status={s.status} />;
-    }},
-    { header: 'Vai trò', width: 90, align: 'center' as const, render: (s: any) => {
-      const roleLabel = s.role === 'CLASS_COMMITTEE' ? 'Ban cán sự' : s.role === 'ADVISOR' ? 'Cố vấn' : 'Sinh viên';
-      const rc = s.role === 'CLASS_COMMITTEE' ? { bg: '#fef3c7', color: '#d97706' } : s.role === 'ADVISOR' ? { bg: '#ecfdf5', color: '#059669' } : { bg: '#eff6ff', color: '#2563eb' };
-      return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: rc.bg, color: rc.color }}>{roleLabel}</span>;
-    }},
+    {
+      header: 'Trạng thái', width: 90, align: 'center' as const, render: (s: any) => {
+        return <StatusBadge status={s.status} />;
+      }
+    },
+    {
+      header: 'Vai trò', width: 90, align: 'center' as const, render: (s: any) => {
+        const roleLabel = s.role === 'CLASS_COMMITTEE' ? 'Ban cán sự' : s.role === 'ADVISOR' ? 'Cố vấn' : 'Sinh viên';
+        const rc = s.role === 'CLASS_COMMITTEE' ? { bg: '#fef3c7', color: '#d97706' } : s.role === 'ADVISOR' ? { bg: '#ecfdf5', color: '#059669' } : { bg: '#eff6ff', color: '#2563eb' };
+        return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: rc.bg, color: rc.color }}>{roleLabel}</span>;
+      }
+    },
     { header: 'Điểm CVHT', width: 80, align: 'center' as const, render: (s: any) => <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{s.advisorTotal ?? '-'}</span> },
-    { header: 'Xếp loại', width: 90, align: 'center' as const, render: (s: any) => {
-      const clsLabel = s.classification ? CLASSIFICATION_LABELS[s.classification] || '' : '';
-      const clsColor = CLS_COLORS[s.classification || ''] || { bg: '#f3f4f6', color: '#6b7280' };
-      return clsLabel ? <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: clsColor.bg, color: clsColor.color }}>{clsLabel}</span> : <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>-</span>;
-    }},
-    { header: 'Thao tác', width: 140, align: 'center' as const, render: (s: any) => (
-      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button onClick={() => { setEditingStudent(s); setEditSvRole(s.role); }} className="px-2 py-1 text-[11px] font-semibold rounded-md border border-border bg-surface hover:bg-surface-muted text-foreground transition-colors">Sửa</button>
-        <button onClick={() => setSelectedStudentForEdit(s)} className="px-2 py-1 text-[11px] font-semibold rounded-md border border-info-border bg-info-bg hover:bg-info/10 text-info-foreground transition-colors">Phiếu</button>
-        <button onClick={() => handleDeleteStudent(s)} className="px-2 py-1 text-[11px] font-semibold rounded-md border border-danger-border bg-danger-bg hover:bg-danger/10 text-danger-foreground transition-colors">Xóa</button>
-      </div>
-    ) },
+    {
+      header: 'Xếp loại', width: 90, align: 'center' as const, render: (s: any) => {
+        const clsLabel = s.classification ? CLASSIFICATION_LABELS[s.classification] || '' : '';
+        const clsColor = CLS_COLORS[s.classification || ''] || { bg: '#f3f4f6', color: '#6b7280' };
+        return clsLabel ? <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: clsColor.bg, color: clsColor.color }}>{clsLabel}</span> : <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>-</span>;
+      }
+    },
+    {
+      header: 'Thao tác', width: 140, align: 'center' as const, render: (s: any) => (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <button onClick={() => { setEditingStudent(s); setEditSvRole(s.role); }} className="px-2 py-1 text-[11px] font-semibold rounded-md border border-border bg-surface hover:bg-surface-muted text-foreground transition-colors">Sửa</button>
+          <button onClick={() => setSelectedStudentForEdit(s)} className="px-2 py-1 text-[11px] font-semibold rounded-md border border-info-border bg-info-bg hover:bg-info/10 text-info-foreground transition-colors">Phiếu</button>
+          <button onClick={() => handleDeleteStudent(s)} className="px-2 py-1 text-[11px] font-semibold rounded-md border border-danger-border bg-danger-bg hover:bg-danger/10 text-danger-foreground transition-colors">Xóa</button>
+        </div>
+      )
+    },
   ];
 
   return (
@@ -777,14 +785,14 @@ export function DepartmentDashboard() {
           </div>
           <div className="flex gap-3 items-center flex-wrap">
             {/* Semester selector */}
-            <select value={selectedSemesterId} onChange={e => setSelectedSemesterId(e.target.value)} className="min-w-[12rem] bg-surface border border-border text-foreground text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 outline-none transition-colors">
+            <select value={selectedSemesterId} onChange={e => setSelectedSemesterId(e.target.value)} className="min-w-12rem] bg-surface border border-border text-foreground text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 outline-none transition-colors">
               {semesters.map(s => (
                 <option key={s.id} value={s.id}>{s.name} {Number(s.is_active) === 1 ? '(Active)' : ''}</option>
               ))}
             </select>
             {/* Class filter for export */}
             {stats && (
-              <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="min-w-[12rem] max-w-xs bg-surface border border-border text-foreground text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 outline-none transition-colors">
+              <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="min-w-12rem max-w-xs bg-surface border border-border text-foreground text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 outline-none transition-colors">
                 <option value="ALL">Tất cả các lớp</option>
                 {stats.byClass.map(c => (
                   <option key={c.classCode} value={c.classCode}>{c.classCode} - {c.className}</option>
@@ -798,7 +806,7 @@ export function DepartmentDashboard() {
                 Xuất báo cáo
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"></polyline></svg>
               </button>
-              
+
               {showExportMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)}></div>
@@ -825,19 +833,19 @@ export function DepartmentDashboard() {
         <div className="flex flex-col gap-6">
           {/* Stat cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            <div className="bg-gradient-to-br from-emerald-100 to-emerald-500 rounded-xl p-5 sm:p-6 text-emerald-950 shadow-sm">
+            <div className="bg-linear-to-br from-emerald-100 to-emerald-500 rounded-xl p-5 sm:p-6 text-emerald-950 shadow-sm">
               <div className="text-sm font-semibold mb-2 opacity-90">Tổng Sinh viên</div>
               <div className="text-3xl sm:text-4xl font-black">{stats.total}</div>
             </div>
-            <div className="bg-gradient-to-br from-primary-light to-primary rounded-xl p-5 sm:p-6 text-primary-foreground shadow-sm">
+            <div className="bg-linear-to-br from-primary-light to-primary rounded-xl p-5 sm:p-6 text-primary-foreground shadow-sm">
               <div className="text-sm font-semibold mb-2 opacity-90">Điểm trung bình</div>
               <div className="text-3xl sm:text-4xl font-black">{stats.avgScore}</div>
             </div>
-            <div className="bg-gradient-to-br from-purple-100 to-purple-500 rounded-xl p-5 sm:p-6 text-purple-950 shadow-sm">
+            <div className="bg-linear-to-br from-purple-100 to-purple-500 rounded-xl p-5 sm:p-6 text-purple-950 shadow-sm">
               <div className="text-sm font-semibold mb-2 opacity-90">Xuất sắc / Giỏi</div>
               <div className="text-3xl sm:text-4xl font-black">{(stats.byClassification['EXCELLENT'] || 0) + (stats.byClassification['VERY_GOOD'] || 0)}</div>
             </div>
-            <div className="bg-gradient-to-br from-amber-100 to-amber-500 rounded-xl p-5 sm:p-6 text-amber-950 shadow-sm">
+            <div className="bg-linear-to-br from-amber-100 to-amber-500 rounded-xl p-5 sm:p-6 text-amber-950 shadow-sm">
               <div className="text-sm font-semibold mb-2 opacity-90">Đã nộp / Đã duyệt</div>
               <div className="text-2xl sm:text-3xl font-black">{stats.submitted} / {stats.finalized}</div>
             </div>
@@ -953,7 +961,7 @@ export function DepartmentDashboard() {
                 <div style={{ textAlign: 'center', padding: 32, color: 'var(--muted-foreground)', fontSize: 13 }}>Chưa có lớp nào. Nhấn "Thêm lớp" để tạo mới.</div>
               ) : (
                 <div style={{ overflowX: 'auto' }}>
-                  <table className="w-full text-left border-collapse min-w-[800px]">
+                  <table className="w-full text-left border-collapse min-w-200">
                     <thead className="bg-surface-muted border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-bold">
                       <tr>
                         <th className="px-6 py-4 text-center w-16">STT</th>
@@ -1010,7 +1018,7 @@ export function DepartmentDashboard() {
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
                   <button onClick={() => { setShowImportModal(true); resetDeptImport(); }} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #e0e7ff', background: '#eef2ff', color: '#4f46e5', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#e0e7ff'; }} onMouseOut={e => { e.currentTarget.style.background = '#eef2ff'; }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
                     Import Excel
                   </button>
                   <button onClick={() => setShowAddStudentModal(true)} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.2s' }} onMouseOver={e => { e.currentTarget.style.background = '#059669'; }} onMouseOut={e => { e.currentTarget.style.background = '#10b981'; }}>
@@ -1124,9 +1132,9 @@ export function DepartmentDashboard() {
           <div className="modal-content" style={{ maxWidth: 450 }}>
             <div className="modal-header"><h3 className="modal-header-title">Chỉnh sửa thông tin</h3><button onClick={() => setEditingStudent(null)} className="modal-close-btn">✕</button></div>
             <div className="modal-body">
-              <div style={{ marginBottom: 16 }}><label className="form-label">Họ tên *</label><input type="text" className="form-input" value={editingStudent.full_name} onChange={e => setEditingStudent({...editingStudent, full_name: e.target.value})} placeholder="Nhập họ tên" /></div>
-              <div style={{ marginBottom: 16 }}><label className="form-label">MSSV</label><input type="text" className="form-input" value={editingStudent.studentCode || ''} onChange={e => setEditingStudent({...editingStudent, studentCode: e.target.value})} placeholder="Nhập MSSV" /></div>
-              <div style={{ marginBottom: 16 }}><label className="form-label">Email *</label><input type="email" className="form-input" value={editingStudent.email} onChange={e => setEditingStudent({...editingStudent, email: e.target.value})} placeholder="Nhập email" /></div>
+              <div style={{ marginBottom: 16 }}><label className="form-label">Họ tên *</label><input type="text" className="form-input" value={editingStudent.full_name} onChange={e => setEditingStudent({ ...editingStudent, full_name: e.target.value })} placeholder="Nhập họ tên" /></div>
+              <div style={{ marginBottom: 16 }}><label className="form-label">MSSV</label><input type="text" className="form-input" value={editingStudent.studentCode || ''} onChange={e => setEditingStudent({ ...editingStudent, studentCode: e.target.value })} placeholder="Nhập MSSV" /></div>
+              <div style={{ marginBottom: 16 }}><label className="form-label">Email *</label><input type="email" className="form-input" value={editingStudent.email} onChange={e => setEditingStudent({ ...editingStudent, email: e.target.value })} placeholder="Nhập email" /></div>
               <div style={{ marginBottom: 16 }}><label className="form-label">Vai trò *</label><select className="form-select" value={editSvRole} onChange={e => setEditSvRole(e.target.value)}><option value="STUDENT">Sinh viên</option><option value="CLASS_COMMITTEE">Ban cán sự</option><option value="ADVISOR">Cố vấn học tập</option></select></div>
             </div>
             <div className="modal-footer"><button onClick={() => setEditingStudent(null)} className="btn-secondary">Hủy</button><button onClick={handleEditStudentSave} className="btn-primary">Lưu thay đổi</button></div>
@@ -1146,7 +1154,7 @@ export function DepartmentDashboard() {
                   {!manageClassId && <div style={{ padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#92400e', fontWeight: 500 }}>⚠ Chưa chọn lớp — File cần cột &quot;Lớp&quot;</div>}
                   <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
                     <button onClick={downloadDeptTemplate} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                       Tải file mẫu
                     </button>
                     <div style={{ flex: 1, minWidth: 200 }}>
@@ -1162,7 +1170,7 @@ export function DepartmentDashboard() {
                         <p style={{ fontSize: 14, fontWeight: 600, color: '#1f2937', margin: 0 }}>Xem trước: {importData.length} dòng</p>
                         <button onClick={resetDeptImport} style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Chọn file khác</button>
                       </div>
-                      <div className="overflow-x-auto border border-border rounded-lg max-h-[300px]">
+                      <div className="overflow-x-auto border border-border rounded-lg max-h-75">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead className="bg-surface-muted sticky top-0 text-muted-foreground"><tr>
                             <th className="px-3 py-2 font-semibold border-b border-border">Dòng</th>

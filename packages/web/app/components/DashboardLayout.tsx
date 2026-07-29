@@ -5,8 +5,8 @@ import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { APP_BRANDING } from '../../lib/branding';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
-import { 
-  CheckCircle, ClipboardCheck, Check, XCircle, ShieldCheck, 
+import {
+  CheckCircle, ClipboardCheck, Check, XCircle, ShieldCheck,
   MessageSquare, MessageSquareCheck, Calendar, Clock, Info,
   Bell, ChevronDown, ChevronUp, CheckCircle2, Circle, FileText,
   Users, BarChart2, Briefcase, Settings, Box, UserCog,
@@ -36,13 +36,13 @@ interface SemesterInfo {
 }
 
 const SEM_STATUS_META: Record<string, { label: string; color: string; dot: string; getDeadline?: (s: SemesterInfo) => string | null | undefined }> = {
-  UPCOMING:          { label: 'Chưa bắt đầu',   color: 'var(--muted-foreground)', dot: 'var(--muted-foreground)', getDeadline: (s) => s.start_date },
-  STUDENT_SCORING:   { label: 'Sinh viên đang tự đánh giá',   color: 'var(--info-foreground)', dot: 'var(--info)', getDeadline: (s) => s.student_deadline },
-  CLASS_REVIEWING:   { label: 'Ban cán sự đang đánh giá',   color: 'var(--warning-foreground)', dot: 'var(--warning)', getDeadline: (s) => s.class_committee_deadline },
-  ADVISOR_REVIEWING: { label: 'CVHT đang đánh giá',  color: 'var(--warning-foreground)', dot: 'var(--warning)', getDeadline: (s) => s.advisor_deadline },
-  SCHOOL_REVIEWING:  { label: 'Chờ Trường duyệt', color: 'var(--info-foreground)', dot: 'var(--info)', getDeadline: (s) => s.school_deadline },
-  FINALIZED:         { label: 'Đã hoàn tất',         color: 'var(--success-foreground)', dot: 'var(--success)' },
-  LOCKED:            { label: 'Đã kết thúc',          color: 'var(--muted-foreground)', dot: 'var(--muted-foreground)' },
+  UPCOMING: { label: 'Chưa bắt đầu', color: 'var(--muted-foreground)', dot: 'var(--muted-foreground)', getDeadline: (s) => s.start_date },
+  STUDENT_SCORING: { label: 'Sinh viên đang tự đánh giá', color: 'var(--info-foreground)', dot: 'var(--info)', getDeadline: (s) => s.student_deadline },
+  CLASS_REVIEWING: { label: 'Ban cán sự đang đánh giá', color: 'var(--warning-foreground)', dot: 'var(--warning)', getDeadline: (s) => s.class_committee_deadline },
+  ADVISOR_REVIEWING: { label: 'CVHT đang đánh giá', color: 'var(--warning-foreground)', dot: 'var(--warning)', getDeadline: (s) => s.advisor_deadline },
+  SCHOOL_REVIEWING: { label: 'Chờ Trường duyệt', color: 'var(--info-foreground)', dot: 'var(--info)', getDeadline: (s) => s.school_deadline },
+  FINALIZED: { label: 'Đã hoàn tất', color: 'var(--success-foreground)', dot: 'var(--success)' },
+  LOCKED: { label: 'Đã kết thúc', color: 'var(--muted-foreground)', dot: 'var(--muted-foreground)' },
 };
 
 // removed useSemesterStatus in favor of SemesterProvider
@@ -55,7 +55,7 @@ function SemesterBadge({ semester }: { semester: SemesterInfo | null }) {
     if (!semester) return;
     const meta = SEM_STATUS_META[semester.status];
     const targetDateStr = meta?.getDeadline ? meta.getDeadline(semester) : null;
-    
+
     if (!targetDateStr) {
       if (semester.status === 'FINALIZED' || semester.status === 'LOCKED') {
         setTimeLeft('Đã hoàn tất');
@@ -67,7 +67,7 @@ function SemesterBadge({ semester }: { semester: SemesterInfo | null }) {
     }
 
     const targetDate = new Date(targetDateStr).getTime();
-    
+
     const updateCountdown = () => {
       const now = new Date().getTime();
       const diff = targetDate - now;
@@ -85,7 +85,7 @@ function SemesterBadge({ semester }: { semester: SemesterInfo | null }) {
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      
+
       if (days > 0) setTimeLeft(`Còn ${days} ngày ${hours} giờ`);
       else if (hours > 0) setTimeLeft(`Còn ${hours} giờ ${minutes} phút`);
       else setTimeLeft(`Còn ${minutes} phút`);
@@ -111,13 +111,13 @@ function SemesterBadge({ semester }: { semester: SemesterInfo | null }) {
         <span className="text-muted-foreground hidden sm:inline">Năm học {semester.academic_year}</span>
         <span className="text-muted-foreground sm:hidden">{semester.academic_year}</span>
       </div>
-      
+
       <div className="hidden xl:block w-px h-3.5 bg-border" />
 
       <div className="flex items-center gap-2 text-[11px] sm:text-xs">
         <div className="flex items-center gap-1.5 shrink-0">
           <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${isPulsing ? 'animate-pulse' : ''}`} style={{ backgroundColor: meta.dot }} />
-          <span className="font-medium truncate max-w-[150px] sm:max-w-none" style={{ color: meta.color }}>
+          <span className="font-medium truncate max-w-150px sm:max-w-none" style={{ color: meta.color }}>
             {meta.label}
           </span>
         </div>
@@ -178,7 +178,7 @@ function useNotifications(intervalMs = 60000) {
   const [loading, setLoading] = useState(true);
   const { data: session } = useSession();
   const userId = (session?.user as any)?.id ?? null;
-  
+
   const isFetchingRef = useRef(false);
   const mountedRef = useRef(true);
   const lastFetchedAtRef = useRef<number>(0);
@@ -196,13 +196,13 @@ function useNotifications(intervalMs = 60000) {
 
   const fetchNotifications = useCallback(async (forceRefresh = false) => {
     if (!userId) return;
-    
+
     if (forceRefresh) {
       pendingForceRefreshRef.current = true;
     }
 
     if (isFetchingRef.current) return;
-    
+
     isFetchingRef.current = true;
     let currentForceRefresh = pendingForceRefreshRef.current;
     pendingForceRefreshRef.current = false;
@@ -213,7 +213,7 @@ function useNotifications(intervalMs = 60000) {
       setNotifications(json.data || []);
       setUnreadCount(json.unreadCount || 0);
       lastFetchedAtRef.current = Date.now();
-    } catch (err: any) { 
+    } catch (err: any) {
       if (mountedRef.current && !(err instanceof StaleRequestError) && err.name !== 'StaleRequestError') {
         // silent fail
       }
@@ -294,12 +294,12 @@ function useNotifications(intervalMs = 60000) {
 
   useEffect(() => {
     if (!userId) return;
-    
+
     // Initial fetch if it's been a while or first time
     if (Date.now() - lastFetchedAtRef.current > 10000) {
       fetchNotifications();
     }
-    
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         if (Date.now() - lastFetchedAtRef.current > 15000) {
@@ -320,7 +320,7 @@ function useNotifications(intervalMs = 60000) {
     };
     window.addEventListener(NOTIFICATION_EVENTS.UPDATED, handleCustomEvent);
 
-    return () => { 
+    return () => {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener(NOTIFICATION_EVENTS.UPDATED, handleCustomEvent);
@@ -434,11 +434,11 @@ function NotificationBell() {
               </div>
             )}
           </div>
-          
+
           <div className="p-2 border-t border-border bg-surface-muted flex justify-center">
-             <Link href="/notifications" onClick={() => setOpen(false)} className="text-sm text-primary font-medium hover:underline p-1">
-               Xem tất cả thông báo
-             </Link>
+            <Link href="/notifications" onClick={() => setOpen(false)} className="text-sm text-primary font-medium hover:underline p-1">
+              Xem tất cả thông báo
+            </Link>
           </div>
         </div>
       )}
@@ -474,7 +474,7 @@ const ROLE_NAV: Record<string, NavItem[]> = {
     { label: 'Phiếu của tôi', href: '/student', sectionLabel: 'Cá nhân', icon: <ClipboardCheck size={18} /> },
     { label: 'Lịch sử đánh giá', href: '/student/history', icon: <Clock size={18} /> },
     { label: 'Khiếu nại cá nhân', href: '/student/appeals', icon: <MessageSquare size={18} /> },
-    
+
     { label: 'Quản lý đánh giá lớp', href: '/class-president', sectionLabel: 'Lớp học', icon: <Users size={18} /> },
   ],
   ADVISOR: [
@@ -517,7 +517,7 @@ function SidebarNavList({ navItems, isDesktopCollapsed, setSidebarOpen }: { navI
     <div className="py-4">
       {navItems.map((item, idx) => {
         const isActive = item.href.includes('?') ? item.href === currentUrl : pathname === item.href && !queryString;
-        
+
         return (
           <div key={`${item.href}-${idx}`}>
             {item.sectionLabel && !isDesktopCollapsed && (
@@ -528,11 +528,10 @@ function SidebarNavList({ navItems, isDesktopCollapsed, setSidebarOpen }: { navI
             <Link
               href={item.href}
               onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-3 px-6 py-2.5 mx-2 my-1 rounded-md transition-colors ${
-                isActive 
-                  ? 'bg-primary-light text-primary font-medium' 
+              className={`flex items-center gap-3 px-6 py-2.5 mx-2 my-1 rounded-md transition-colors ${isActive
+                  ? 'bg-primary-light text-primary font-medium'
                   : 'text-muted-foreground hover:bg-surface-muted hover:text-foreground'
-              }`}
+                }`}
               title={isDesktopCollapsed ? item.label : undefined}
             >
               <span className={`shrink-0 ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
@@ -586,7 +585,7 @@ export function DashboardLayout({
     <div className="flex flex-col h-screen bg-background overflow-hidden font-sans">
       {/* Mobile Overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/40 z-40 lg:hidden transition-opacity"
           onClick={() => setSidebarOpen(false)}
         />
@@ -603,13 +602,13 @@ export function DashboardLayout({
           >
             <Menu size={20} />
           </button>
-          
+
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
               <img src="/assets/dash/logom.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-xs sm:text-sm font-bold text-primary truncate max-w-[100px] sm:max-w-none">{APP_BRANDING.shortName}</span>
+              <span className="text-xs sm:text-sm font-bold text-primary truncate max-w-100px sm:max-w-none">{APP_BRANDING.shortName}</span>
               <span className="text-[9px] sm:text-[10px] text-muted-foreground hidden md:block truncate">{APP_BRANDING.englishName}</span>
             </div>
           </div>
@@ -636,10 +635,9 @@ export function DashboardLayout({
       {/* Main Layout Area */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Sidebar */}
-        <aside 
-          className={`absolute lg:static inset-y-0 left-0 z-40 flex flex-col bg-surface border-r border-border transition-transform duration-300 ease-in-out ${
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-          } ${isDesktopCollapsed ? 'w-20' : 'w-64'}`}
+        <aside
+          className={`absolute lg:static inset-y-0 left-0 z-40 flex flex-col bg-surface border-r border-border transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+            } ${isDesktopCollapsed ? 'w-20' : 'w-64'}`}
         >
           {/* Navigation Menu */}
           <nav className="flex-1 overflow-y-auto py-2 scrollbar-thin">
@@ -664,11 +662,11 @@ export function DashboardLayout({
         {/* Scrollable Main Content */}
         <main className="flex-1 overflow-y-auto bg-background p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto h-full flex flex-col">
-            <PageHeader 
-              title={pageTitle} 
-              description={pageSubtitle} 
+            <PageHeader
+              title={pageTitle}
+              description={pageSubtitle}
               actions={topBarExtra}
-              breadcrumbs={breadcrumbs} 
+              breadcrumbs={breadcrumbs}
             />
             <div className="mt-6 flex-1">
               {children}

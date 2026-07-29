@@ -38,7 +38,7 @@ export function AdvisorSummary() {
       setState({ status: 'loading' });
       const { isScoringStudentRow } = await import('../lib/scoring-types');
       const res = await fetchClassScopedStudents<import('../lib/scoring-types').ScoringStudentRow>(
-        `${API_BASE}/scoring/advisor/students`, 
+        `${API_BASE}/scoring/advisor/students`,
         customJwt,
         isScoringStudentRow
       );
@@ -75,7 +75,7 @@ export function AdvisorSummary() {
     const submitted = students.filter(s => s.status !== 'NO_SHEET' && s.status !== 'DRAFT').length;
     const unsubmitted = total - submitted;
     const submittedPct = total > 0 ? Math.round((submitted / total) * 100) : 0;
-    
+
     const byClass: Record<string, number> = {};
     students.forEach((s) => { const cls = s.classification || 'NONE'; byClass[cls] = (byClass[cls] || 0) + 1; });
 
@@ -83,7 +83,7 @@ export function AdvisorSummary() {
     const avgScore = scoredStudents.length > 0
       ? (scoredStudents.reduce((sum, s) => sum + (s.finalTotal || s.advisorTotal || s.classTotal || s.studentTotal || 0), 0) / scoredStudents.length).toFixed(1)
       : '0';
-    
+
     return { total, submitted, unsubmitted, submittedPct, byClass, avgScore };
   }, [state]);
   if (state.status === 'loading') {
@@ -140,7 +140,7 @@ export function AdvisorSummary() {
       {/* Table */}
       <div className="bg-surface rounded-xl border border-border overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[900px]">
+          <table className="w-full text-left border-collapse min-w-900px">
             <thead>
               <tr className="bg-surface-muted border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-bold">
                 <th className="px-4 py-3 text-center w-12">STT</th>
