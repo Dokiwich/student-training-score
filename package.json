@@ -9,7 +9,10 @@
     "dev:api": "dotenv -e .env -- npm run start:dev --workspace=@student-score/api",
     "db:push": "dotenv -e .env -- npm run db:push --workspace=@student-score/database",
     "db:generate": "dotenv -e .env -- npm run db:generate --workspace=@student-score/database",
-    "db:studio": "dotenv -e .env -- npm run db:studio --workspace=@student-score/database"
+    "db:studio": "dotenv -e .env -- npm run db:studio --workspace=@student-score/database",
+    "db:migrate:dev": "dotenv -e .env -- npm run db:migrate:dev --workspace=@student-score/database",
+    "db:migrate:deploy": "dotenv -e .env -- npm run db:migrate:deploy --workspace=@student-score/database",
+    "db:migrate:status": "dotenv -e .env -- npm run db:migrate:status --workspace=@student-score/database"
   },
   "devDependencies": {
     "dotenv-cli": "^11.0.0",

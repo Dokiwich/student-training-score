@@ -233,12 +233,16 @@ Mở tệp `.env` và cập nhật các giá trị — đặc biệt là `DATABA
 
 ### 3. Khởi tạo cơ sở dữ liệu
 
-```bash
-npm run db:generate
-npm run db:push
-```
+Repository đã sử dụng Prisma migration history. Tùy vào trạng thái database, hãy sử dụng lệnh phù hợp:
 
-Lệnh `db:push` đồng bộ Prisma schema trực tiếp vào database — phù hợp cho môi trường phát triển.
+- **Database mới/rỗng (Production/Staging)**: Dùng `npm run db:migrate:deploy` để tạo bảng và `npm run db:generate`.
+- **Database phát triển (Development)**: Khi thay đổi schema, dùng `npm run db:migrate:dev`.
+- **Database hiện hữu**: Đã được baseline bằng `migrate resolve`. Không chạy baseline SQL (`0_init`) trên database đã tồn tại.
+
+> [!WARNING]
+> Lệnh `db:push` chỉ dành cho thử nghiệm/local schema prototyping.
+> Sau khi có migration history, thay đổi schema phải dùng `migrate dev`. Deployment dùng `migrate deploy`.
+> Tuyệt đối không dùng `db:push` trên production.
 
 ### 4. Chạy ứng dụng
 
@@ -286,7 +290,10 @@ Chạy từ thư mục gốc repository:
 | `npm run dev:web` | Khởi chạy frontend development server |
 | `npm run dev:api` | Khởi chạy backend development server |
 | `npm run db:generate` | Tạo Prisma Client từ schema hiện tại |
-| `npm run db:push` | Đồng bộ schema vào database (development) |
+| `npm run db:migrate:dev` | Tạo migration mới khi thay đổi schema (chỉ dùng ở local/dev) |
+| `npm run db:migrate:deploy` | Chạy migration lên database (dùng khi deploy/production) |
+| `npm run db:migrate:status` | Kiểm tra trạng thái migration |
+| `npm run db:push` | Đồng bộ schema nhánh thử nghiệm (không dùng cho production) |
 | `npm run db:studio` | Mở Prisma Studio — giao diện quản lý dữ liệu trực quan |
 | `npm run build --workspace=packages/web` | Build production cho frontend |
 | `npm run build --workspace=packages/api` | Build production cho backend |
