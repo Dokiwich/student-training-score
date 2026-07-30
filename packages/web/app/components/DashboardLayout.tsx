@@ -117,7 +117,7 @@ function SemesterBadge({ semester }: { semester: SemesterInfo | null }) {
       <div className="flex items-center gap-2 text-[11px] sm:text-xs">
         <div className="flex items-center gap-1.5 shrink-0">
           <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${isPulsing ? 'animate-pulse' : ''}`} style={{ backgroundColor: meta.dot }} />
-          <span className="font-medium truncate max-w-150px sm:max-w-none" style={{ color: meta.color }}>
+          <span className="font-medium truncate max-w-[150px] sm:max-w-none" style={{ color: meta.color }}>
             {meta.label}
           </span>
         </div>
@@ -608,7 +608,7 @@ export function DashboardLayout({
               <img src="/assets/dash/logom.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-xs sm:text-sm font-bold text-primary truncate max-w-100px sm:max-w-none">{APP_BRANDING.shortName}</span>
+              <span className="text-xs sm:text-sm font-bold text-primary truncate max-w-[100px] sm:max-w-none">{APP_BRANDING.shortName}</span>
               <span className="text-[9px] sm:text-[10px] text-muted-foreground hidden md:block truncate">{APP_BRANDING.englishName}</span>
             </div>
           </div>

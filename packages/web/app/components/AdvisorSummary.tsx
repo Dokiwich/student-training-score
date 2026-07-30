@@ -140,7 +140,7 @@ export function AdvisorSummary() {
       {/* Table */}
       <div className="bg-surface rounded-xl border border-border overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-900px">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-surface-muted border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-bold">
                 <th className="px-4 py-3 text-center w-12">STT</th>
