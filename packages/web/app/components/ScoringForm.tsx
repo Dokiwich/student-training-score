@@ -277,7 +277,7 @@ export function ScoringForm({
         } else if (scoresData.formStatus) {
           setFormStatus(scoresData.formStatus);
         }
-        
+
         // ✅ Cập nhật currentStep từ API response
         if (scoresData.currentStep) {
           setCurrentStep(scoresData.currentStep);
@@ -650,7 +650,7 @@ export function ScoringForm({
         addToast('success', 'Đã lưu nháp toàn bộ phiếu!');
         success = true;
       }
-      
+
       if (success) {
         setIsDirty(false);
       } else {
@@ -751,7 +751,7 @@ export function ScoringForm({
           const errors: SubmissionValidationError[] = errorData.errors;
           setValidationErrors(errors);
           addToast('error', `Phiếu chưa hợp lệ! Có ${errors.length} lỗi cần sửa.`);
-          
+
           // Scroll to the first error
           if (errors.length > 0) {
             setTimeout(() => {
@@ -826,7 +826,7 @@ export function ScoringForm({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[400px]">
+      <div className="flex items-center justify-center h-full min-h-400px">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 rounded-full border-4 border-stone-200 border-t-red-900 animate-spin"></div>
           <span className="text-red-900 text-sm">Đang tải dữ liệu...</span>
@@ -837,7 +837,7 @@ export function ScoringForm({
 
   if (fetchError) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[400px]">
+      <div className="flex items-center justify-center h-full min-h-400px">
         <div className="bg-danger-bg text-danger p-6 rounded-xl flex flex-col items-center gap-4 max-w-md text-center shadow-sm border border-danger-border">
           <AlertTriangle size={36} strokeWidth={2} />
           <span className="font-medium">{fetchError}</span>
@@ -932,363 +932,363 @@ export function ScoringForm({
           {/* Horizontal Score Card */}
           {criteria.length === 0 ? (
             <div className="py-12">
-              <EmptyState 
-                icon={FileText} 
-                title="Chưa có tiêu chí đánh giá" 
-                description="Bộ tiêu chí chấm điểm rèn luyện cho học kỳ này chưa được cấu hình." 
+              <EmptyState
+                icon={FileText}
+                title="Chưa có tiêu chí đánh giá"
+                description="Bộ tiêu chí chấm điểm rèn luyện cho học kỳ này chưa được cấu hình."
               />
             </div>
           ) : (
             <>
               <div className="bg-surface rounded-2xl px-4 py-3 shadow-sm border border-border flex flex-col md:flex-row items-center gap-4">
-            {/* Circle */}
-            <div className="flex flex-col items-center shrink-0">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Tổng điểm</span>
-              <div className="relative w-24 h-24 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" className="text-border" strokeWidth="7" />
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" className="text-primary" strokeWidth="7" strokeLinecap="round" strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * totalScore) / 100} style={{ transition: 'stroke-dashoffset 1s ease-out' }} />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-3xl font-bold text-foreground leading-none">{totalScore}</span>
-                  <span className="text-xs text-muted-foreground font-medium">/ 100</span>
+                {/* Circle */}
+                <div className="flex flex-col items-center shrink-0">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Tổng điểm</span>
+                  <div className="relative w-24 h-24 flex items-center justify-center">
+                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" className="text-border" strokeWidth="7" />
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" className="text-primary" strokeWidth="7" strokeLinecap="round" strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * totalScore) / 100} style={{ transition: 'stroke-dashoffset 1s ease-out' }} />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-3xl font-bold text-foreground leading-none">{totalScore}</span>
+                      <span className="text-xs text-muted-foreground font-medium">/ 100</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category chips */}
+                <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full">
+                  {TAB_GROUPS.map((tab, idx) => {
+                    const tabRoots = criteria.filter(c => (!c.parent_id) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
+                    const tabScore = Math.min(tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0), tab.max);
+                    const isFull = tabScore === tab.max;
+                    const isEmpty = tabScore === 0;
+                    return (
+                      <div key={tab.id} className={`flex flex-col items-center px-2 py-2 rounded-xl border transition-colors ${isFull ? 'bg-primary/5 border-primary/20' : isEmpty ? 'bg-surface-muted border-border/50' : 'bg-surface border-border'}`}>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-center leading-tight mb-1 line-clamp-1" title={tab.short}>Mục {idx + 1}</span>
+                        <span className={`text-xl font-bold leading-none ${isFull ? 'text-primary' : isEmpty ? 'text-muted-foreground' : 'text-foreground'}`}>{tabScore}<span className="text-sm text-muted-foreground font-medium">/{tab.max}</span></span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
 
-            {/* Category chips */}
-            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full">
-              {TAB_GROUPS.map((tab, idx) => {
-                const tabRoots = criteria.filter(c => (!c.parent_id) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
-                const tabScore = Math.min(tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0), tab.max);
-                const isFull = tabScore === tab.max;
-                const isEmpty = tabScore === 0;
-                return (
-                  <div key={tab.id} className={`flex flex-col items-center px-2 py-2 rounded-xl border transition-colors ${isFull ? 'bg-primary/5 border-primary/20' : isEmpty ? 'bg-surface-muted border-border/50' : 'bg-surface border-border'}`}>
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-center leading-tight mb-1 line-clamp-1" title={tab.short}>Mục {idx + 1}</span>
-                    <span className={`text-xl font-bold leading-none ${isFull ? 'text-primary' : isEmpty ? 'text-muted-foreground' : 'text-foreground'}`}>{tabScore}<span className="text-sm text-muted-foreground font-medium">/{tab.max}</span></span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+              {/* Accordion List for Criteria */}
+              <div className="space-y-2 pb-4">
+                {TAB_GROUPS.map((tab, idx) => {
+                  const isTabExpanded = expandedTabs.has(tab.id);
+                  const tabRoots = criteria.filter(c => (!c.parent_id) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
+                  const tabScore = Math.min(tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0), tab.max);
+                  const isFull = tabScore === tab.max;
+                  const filtered = sortedCriteria.filter(item => {
+                    if (!isVisible(item.id)) return false;
+                    const root = getRoot(item.id);
+                    if (!root) return true;
+                    return root.code === tab.id || root.code.startsWith(tab.id + '.') || root.code.startsWith('TC_0' + tab.id) || root.code.startsWith('TC_' + tab.id);
+                  });
 
-          {/* Accordion List for Criteria */}
-          <div className="space-y-2 pb-4">
-            {TAB_GROUPS.map((tab, idx) => {
-              const isTabExpanded = expandedTabs.has(tab.id);
-              const tabRoots = criteria.filter(c => (!c.parent_id) && (c.code === tab.id || c.code.startsWith(tab.id + '.') || c.code.startsWith('TC_0' + tab.id) || c.code.startsWith('TC_' + tab.id)));
-              const tabScore = Math.min(tabRoots.reduce((acc, root) => acc + calculateAutoScore(root.id), 0), tab.max);
-              const isFull = tabScore === tab.max;
-              const filtered = sortedCriteria.filter(item => {
-                if (!isVisible(item.id)) return false;
-                const root = getRoot(item.id);
-                if (!root) return true;
-                return root.code === tab.id || root.code.startsWith(tab.id + '.') || root.code.startsWith('TC_0' + tab.id) || root.code.startsWith('TC_' + tab.id);
-              });
+                  return (
+                    <div key={tab.id} className={`bg-surface rounded-2xl shadow-sm border overflow-hidden transition-all duration-200 ${isTabExpanded ? 'border-primary/50' : 'border-border hover:border-border/80'}`}>
+                      {/* Accordion Header */}
+                      <button onClick={() => toggleTab(tab.id)} className="w-full px-3 py-2.5 flex items-center justify-between gap-2 outline-none group">
+                        <div className="flex items-center gap-2 text-left min-w-0">
+                          <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-semibold text-base shrink-0 transition-colors ${isTabExpanded ? 'bg-primary text-primary-foreground' : 'bg-surface-muted text-primary group-hover:bg-primary/10'}`}>
+                            {idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="text-base font-semibold text-foreground truncate">Mục {idx + 1}: {tab.short}</h4>
+                            {isTabExpanded && <p className="text-sm text-muted-foreground mt-0.5 leading-snug line-clamp-2">{tab.title}</p>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-base font-semibold px-2 py-0.5 rounded-lg ${isFull ? 'bg-primary/10 text-primary' : 'bg-surface-muted text-foreground'}`}>
+                            {tabScore}<span className="text-sm text-muted-foreground font-medium">/{tab.max}</span>
+                          </span>
+                          <div className={`w-6 h-6 rounded-md bg-surface-muted flex items-center justify-center transition-transform duration-200 ${isTabExpanded ? 'rotate-180' : ''}`}>
+                            <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                          </div>
+                        </div>
+                      </button>
 
-              return (
-                <div key={tab.id} className={`bg-surface rounded-2xl shadow-sm border overflow-hidden transition-all duration-200 ${isTabExpanded ? 'border-primary/50' : 'border-border hover:border-border/80'}`}>
-                  {/* Accordion Header */}
-                  <button onClick={() => toggleTab(tab.id)} className="w-full px-3 py-2.5 flex items-center justify-between gap-2 outline-none group">
-                    <div className="flex items-center gap-2 text-left min-w-0">
-                      <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-semibold text-base shrink-0 transition-colors ${isTabExpanded ? 'bg-primary text-primary-foreground' : 'bg-surface-muted text-primary group-hover:bg-primary/10'}`}>
-                        {idx + 1}
-                      </span>
-                      <div className="min-w-0">
-                        <h4 className="text-base font-semibold text-foreground truncate">Mục {idx + 1}: {tab.short}</h4>
-                        {isTabExpanded && <p className="text-sm text-muted-foreground mt-0.5 leading-snug line-clamp-2">{tab.title}</p>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-base font-semibold px-2 py-0.5 rounded-lg ${isFull ? 'bg-primary/10 text-primary' : 'bg-surface-muted text-foreground'}`}>
-                        {tabScore}<span className="text-sm text-muted-foreground font-medium">/{tab.max}</span>
-                      </span>
-                      <div className={`w-6 h-6 rounded-md bg-surface-muted flex items-center justify-center transition-transform duration-200 ${isTabExpanded ? 'rotate-180' : ''}`}>
-                        <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                      </div>
-                    </div>
-                  </button>
+                      {/* Accordion Body */}
+                      {isTabExpanded && (
+                        <div className="border-t border-border overflow-x-auto">
+                          <table className="w-full text-left border-collapse min-w-700px">
+                            <thead className="bg-surface-muted">
+                              <tr className="text-muted-foreground text-sm font-semibold uppercase tracking-wider border-b border-border">
+                                <th className="px-2 py-1.5 w-16">Mã</th>
+                                <th className="px-2 py-1.5">Nội dung</th>
+                                <th className="px-2 py-1.5 w-16 text-center">Điểm</th>
+                                <th className="px-2 py-1.5 w-20 text-center">Số lần</th>
+                                <th className="px-2 py-1.5 w-24 text-center">Tổng điểm</th>
+                                {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
+                                  <th className="px-2 py-1.5 w-24 text-center">BCS Lớp</th>
+                                )}
+                                {currentRole === 'ADVISOR' && (
+                                  <th className="px-2 py-1.5 w-24 text-center">Cố vấn</th>
+                                )}
+                                <th className="px-2 py-1.5 w-48">Minh chứng</th>
+                                <th className="px-2 py-1.5 w-12 text-center"></th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {filtered.length === 0 ? (
+                                <tr><td colSpan={currentRole === 'STUDENT' ? 7 : currentRole === 'CLASS_COMMITTEE' ? 8 : 9} className="p-4 text-center text-muted-foreground text-base">Không có tiêu chí nào.</td></tr>
+                              ) : (
+                                filtered.map((item) => {
+                                  const isParent = parentIds.has(item.id);
+                                  const depth = depthMap.get(item.id) || 0;
+                                  const isExpanded = expandedIds.has(item.id);
+                                  const isFixed = item.score_type === 'FIXED';
+                                  const val = inputValues[item.id] || '';
+                                  const evidence = evidenceValues?.[item.id] || '';
+                                  const isRowSaving = savingId === item.id;
 
-                  {/* Accordion Body */}
-                  {isTabExpanded && (
-                    <div className="border-t border-border overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[700px]">
-                        <thead className="bg-surface-muted">
-                          <tr className="text-muted-foreground text-sm font-semibold uppercase tracking-wider border-b border-border">
-                            <th className="px-2 py-1.5 w-16">Mã</th>
-                            <th className="px-2 py-1.5">Nội dung</th>
-                            <th className="px-2 py-1.5 w-16 text-center">Điểm</th>
-                            <th className="px-2 py-1.5 w-20 text-center">Số lần</th>
-                            <th className="px-2 py-1.5 w-24 text-center">Tổng điểm</th>
-                            {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
-                              <th className="px-2 py-1.5 w-24 text-center">BCS Lớp</th>
-                            )}
-                            {currentRole === 'ADVISOR' && (
-                              <th className="px-2 py-1.5 w-24 text-center">Cố vấn</th>
-                            )}
-                            <th className="px-2 py-1.5 w-48">Minh chứng</th>
-                            <th className="px-2 py-1.5 w-12 text-center"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {filtered.length === 0 ? (
-                            <tr><td colSpan={currentRole === 'STUDENT' ? 7 : currentRole === 'CLASS_COMMITTEE' ? 8 : 9} className="p-4 text-center text-muted-foreground text-base">Không có tiêu chí nào.</td></tr>
-                          ) : (
-                            filtered.map((item) => {
-                              const isParent = parentIds.has(item.id);
-                              const depth = depthMap.get(item.id) || 0;
-                              const isExpanded = expandedIds.has(item.id);
-                              const isFixed = item.score_type === 'FIXED';
-                              const val = inputValues[item.id] || '';
-                              const evidence = evidenceValues?.[item.id] || '';
-                              const isRowSaving = savingId === item.id;
+                                  const isDeduction = item.score_type === 'DEDUCTION' || item.point < 0;
+                                  const minVal = isDeduction ? item.point : 0;
+                                  const maxVal = isDeduction ? 0 : (item.point > 0 ? item.point : 100);
 
-                              const isDeduction = item.score_type === 'DEDUCTION' || item.point < 0;
-                              const minVal = isDeduction ? item.point : 0;
-                              const maxVal = isDeduction ? 0 : (item.point > 0 ? item.point : 100);
+                                  const multiplier = QUANTITY_MULTIPLIERS[item.code];
+                                  const isQuantityBased = !!multiplier;
+                                  const absMultiplier = isQuantityBased ? Math.abs(multiplier) : 1;
+                                  const displayVal = isQuantityBased && val ? String(Math.abs(Number(val)) / absMultiplier) : val;
+                                  const displayMinVal = isQuantityBased ? 0 : minVal;
+                                  const displayMaxVal = isQuantityBased ? (isDeduction ? 40 : 30) : maxVal;
+                                  const onChangeFn = isQuantityBased
+                                    ? (e: React.ChangeEvent<HTMLInputElement>) => {
+                                      if (e.target.value === '' || e.target.value === '-') {
+                                        handleInputChange(item.id, '');
+                                      } else {
+                                        const num = Number(e.target.value);
+                                        if (isNaN(num)) return;
+                                        const qty = Math.abs(Math.round(num));
+                                        const scoreVal = multiplier < 0 ? -(qty * absMultiplier) : qty * absMultiplier;
+                                        handleInputChange(item.id, String(scoreVal));
+                                      }
+                                    }
+                                    : (e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(item.id, e.target.value);
 
-                              const multiplier = QUANTITY_MULTIPLIERS[item.code];
-                              const isQuantityBased = !!multiplier;
-                              const absMultiplier = isQuantityBased ? Math.abs(multiplier) : 1;
-                              const displayVal = isQuantityBased && val ? String(Math.abs(Number(val)) / absMultiplier) : val;
-                              const displayMinVal = isQuantityBased ? 0 : minVal;
-                              const displayMaxVal = isQuantityBased ? (isDeduction ? 40 : 30) : maxVal;
-                              const onChangeFn = isQuantityBased
-                                ? (e: React.ChangeEvent<HTMLInputElement>) => {
-                                  if (e.target.value === '' || e.target.value === '-') {
-                                    handleInputChange(item.id, '');
-                                  } else {
-                                    const num = Number(e.target.value);
-                                    if (isNaN(num)) return;
-                                    const qty = Math.abs(Math.round(num));
-                                    const scoreVal = multiplier < 0 ? -(qty * absMultiplier) : qty * absMultiplier;
-                                    handleInputChange(item.id, String(scoreVal));
-                                  }
-                                }
-                                : (e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(item.id, e.target.value);
-
-                              if (isParent) {
-                                return (
-                                  <tr key={item.id} className="bg-surface-muted hover:bg-surface-muted/80 cursor-pointer transition-colors" onClick={() => toggleExpand(item.id)}>
-                                    <td className="px-2 py-1.5 text-sm font-medium text-muted-foreground">{item.code}</td>
-                                    <td className="px-2 py-1.5">
-                                      <div className="flex items-center" style={{ paddingLeft: `${depth * 1.2}rem` }}>
-                                        <span className={`w-5 h-5 rounded flex items-center justify-center mr-2 text-xs font-semibold ${isExpanded ? 'bg-primary/20 text-primary' : 'bg-primary text-primary-foreground'}`}>{isExpanded ? '−' : '+'}</span>
-                                        <span className="text-sm font-semibold text-foreground">{item.content}</span>
-                                      </div>
-                                    </td>
-                                    <td className="px-2 py-1.5 text-center text-sm text-muted-foreground">{item.point}</td>
-                                    <td className="px-2 py-1.5"></td>
-                                    <td className="px-2 py-1.5 text-center text-sm font-semibold text-foreground">
-                                      {currentRole === 'STUDENT' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedStudentScores)}
-                                    </td>
-                                    {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
-                                      <td className="px-2 py-1.5 text-center text-sm font-semibold text-foreground">
-                                        {currentRole === 'CLASS_COMMITTEE' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedClassScores)}
-                                      </td>
-                                    )}
-                                    {currentRole === 'ADVISOR' && (
-                                      <td className="px-2 py-1.5 text-center text-sm font-semibold text-foreground">
-                                        {calculateAutoScore(item.id)}
-                                      </td>
-                                    )}
-                                    <td className="px-2 py-1.5"></td>
-                                    <td className="px-2 py-1.5 text-center"><span className="text-xs uppercase font-semibold text-muted-foreground bg-surface px-1.5 py-0.5 rounded border border-border/50">Auto</span></td>
-                                  </tr>
-                                );
-                              }
-
-                              const itemErrors = validationErrors.filter(e => e.criterionId === item.id);
-                              const hasError = itemErrors.length > 0;
-
-                              return (
-                                <tr key={item.id} id={`criterion-${item.id}`} className={`hover:bg-surface-muted/50 transition-colors group ${isRowSaving ? 'opacity-50' : ''} ${hasError ? 'bg-danger/10' : ''}`}>
-                                  <td className="px-2 py-1.5 text-sm text-muted-foreground">{item.code}</td>
-                                  <td className="px-2 py-1.5">
-                                    <div style={{ paddingLeft: `${depth * 1.2}rem` }}>
-                                      <span className="text-sm text-foreground leading-snug">
-                                        {item.content}
-                                        {item.require_evidence === 1 && <span className="text-danger font-bold ml-1" title="Bắt buộc có minh chứng">*</span>}
-                                      </span>
-                                      {item.description && <span className="text-xs text-muted-foreground mt-0.5 block leading-relaxed">{item.description}</span>}
-                                      {item.require_evidence === 1 && <span className="text-[10px] text-danger font-medium block mt-1 uppercase tracking-wide">⚠️ Bắt buộc đính kèm minh chứng</span>}
-                                      {itemErrors.map((err, idx) => (
-                                        <span key={idx} className="text-xs text-danger font-semibold block mt-1.5 flex items-center gap-1 bg-danger/10 p-1.5 rounded-md border border-danger/20">
-                                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {err.message}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </td>
-                                  <td className="px-2 py-1.5 text-center text-sm text-muted-foreground">
-                                    {isQuantityBased ? (multiplier > 0 ? `+${multiplier}` : `${multiplier}`) : item.point}
-                                  </td>
-
-                                  {/* Số lượng Column */}
-                                  <td className="px-2 py-1.5 text-center">
-                                    {!isFixed && isQuantityBased ? (
-                                      <div className="relative inline-block">
-                                        <input type="number" min={0} max={displayMaxVal} step={1} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-16 h-9 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground disabled:border-border hover:border-primary/50" />
-                                        {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
-                                      </div>
-                                    ) : (
-                                      <span className="text-sm text-muted-foreground">-</span>
-                                    )}
-                                  </td>
-
-                                  {/* Student Score Column (Tổng điểm) */}
-                                  <td className="px-2 py-1.5 text-center">
-                                    {isFixed ? (
-                                      <span className="text-sm font-semibold text-foreground bg-surface-muted px-2 py-1 rounded-lg">{item.point}</span>
-                                    ) : currentRole === 'STUDENT' ? (
-                                      isQuantityBased ? (
-                                        <span className="text-sm font-semibold text-foreground">{val ? `${val}` : '0'}</span>
-                                      ) : item.score_type === 'OPTIONS' ? (
-                                        <div className="flex flex-col items-center gap-1">
-                                          <div className="relative inline-block">
-                                            <select
-                                              value={val}
-                                              disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
-                                              onChange={(e) => handleInputChange(item.id, e.target.value)}
-                                              className="w-16 h-9 px-1 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50 cursor-pointer appearance-none"
-                                              style={{ textAlignLast: 'center' }}
-                                            >
-                                              <option value="" disabled>-</option>
-                                              {Array.isArray(item.score_options)
-                                                ? item.score_options.map((opt, idx) => (
-                                                  <option key={idx} value={String(opt)}>{opt}</option>
-                                                ))
-                                                : <option value={item.point}>{item.point}</option>}
-                                            </select>
-                                            {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
+                                  if (isParent) {
+                                    return (
+                                      <tr key={item.id} className="bg-surface-muted hover:bg-surface-muted/80 cursor-pointer transition-colors" onClick={() => toggleExpand(item.id)}>
+                                        <td className="px-2 py-1.5 text-sm font-medium text-muted-foreground">{item.code}</td>
+                                        <td className="px-2 py-1.5">
+                                          <div className="flex items-center" style={{ paddingLeft: `${depth * 1.2}rem` }}>
+                                            <span className={`w-5 h-5 rounded flex items-center justify-center mr-2 text-xs font-semibold ${isExpanded ? 'bg-primary/20 text-primary' : 'bg-primary text-primary-foreground'}`}>{isExpanded ? '−' : '+'}</span>
+                                            <span className="text-sm font-semibold text-foreground">{item.content}</span>
                                           </div>
-                                        </div>
-                                      ) : (
-                                        <div className="flex flex-col items-center gap-1">
-                                          <div className="relative inline-block">
-                                            <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-16 h-9 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50" />
-                                            {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
-                                          </div>
-                                        </div>
-                                      )
-                                    ) : (
-                                      <span className="text-sm font-medium text-foreground">{savedStudentScores[item.id] ?? '-'}</span>
-                                    )}
-                                  </td>
-
-                                  {/* BCS Score Column */}
-                                  {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
-                                    <td className="px-2 py-1.5 text-center">
-                                      {isFixed ? (
-                                        <span className="text-sm font-semibold text-foreground bg-surface-muted px-2 py-1 rounded-lg border border-border/50">{item.point}</span>
-                                      ) : currentRole === 'CLASS_COMMITTEE' ? (
-                                        isQuantityBased ? (
-                                          <span className="text-sm font-semibold text-primary">{val ? `${val}` : '0'}</span>
-                                        ) : item.score_type === 'OPTIONS' ? (
-                                          <div className="flex flex-col items-center gap-1">
-                                            <div className="relative inline-block">
-                                              <select
-                                                value={val}
-                                                disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
-                                                onChange={(e) => handleInputChange(item.id, e.target.value)}
-                                                className="w-16 h-9 px-1 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50 cursor-pointer appearance-none"
-                                                style={{ textAlignLast: 'center' }}
-                                              >
-                                                <option value="" disabled>-</option>
-                                                {Array.isArray(item.score_options)
-                                                  ? item.score_options.map((opt, idx) => (
-                                                    <option key={idx} value={String(opt)}>{opt}</option>
-                                                  ))
-                                                  : <option value={item.point}>{item.point}</option>}
-                                              </select>
-                                              {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <div className="flex flex-col items-center gap-1">
-                                            <div className="relative inline-block">
-                                              <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-16 h-9 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50" />
-                                              {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
-                                            </div>
-                                          </div>
-                                        )
-                                      ) : (
-                                        <span className="text-sm font-medium text-foreground">{savedClassScores[item.id] ?? '-'}</span>
-                                      )}
-                                    </td>
-                                  )}
-
-                                  {/* Advisor Score Column */}
-                                  {currentRole === 'ADVISOR' && (
-                                    <td className="px-2 py-1.5 text-center">
-                                      {isFixed ? (
-                                        <span className="text-sm font-semibold text-foreground bg-surface-muted px-2 py-1 rounded-lg">{item.point}</span>
-                                      ) : (
-                                        isQuantityBased ? (
-                                          <span className="text-sm font-semibold text-foreground">{val ? `${val}` : '0'}</span>
-                                        ) : item.score_type === 'OPTIONS' ? (
-                                          <div className="flex flex-col items-center gap-1">
-                                            <div className="relative inline-block">
-                                              <select
-                                                value={val}
-                                                disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
-                                                onChange={(e) => handleInputChange(item.id, e.target.value)}
-                                                className="w-16 h-9 px-1 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50 cursor-pointer appearance-none"
-                                                style={{ textAlignLast: 'center' }}
-                                              >
-                                                <option value="" disabled>-</option>
-                                                {Array.isArray(item.score_options)
-                                                  ? item.score_options.map((opt, idx) => (
-                                                    <option key={idx} value={String(opt)}>{opt}</option>
-                                                  ))
-                                                  : <option value={item.point}>{item.point}</option>}
-                                              </select>
-                                              {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <div className="flex flex-col items-center gap-1">
-                                            <div className="relative inline-block">
-                                              <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-16 h-9 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50" />
-                                              {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
-                                            </div>
-                                          </div>
-                                        )
-                                      )}
-                                    </td>
-                                  )}
-                                  <td className="px-2 py-1.5">
-                                    {!isFixed && (
-                                      <div className="relative flex items-center">
-                                        <input type="text" placeholder="Link minh chứng..." value={evidence} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => setEvidenceValues(prev => ({ ...prev, [item.id]: e.target.value }))} className="w-full h-9 px-3 text-sm text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all pr-8 disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50 placeholder:text-muted-foreground" />
-                                        {evidence && (
-                                          <a href={evidence.startsWith('http') ? evidence : `https://${evidence}`} target="_blank" rel="noopener noreferrer" className="absolute right-2 w-6 h-6 bg-primary-light hover:bg-primary/20 rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer z-10" title="Mở liên kết minh chứng">
-                                            <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                                          </a>
+                                        </td>
+                                        <td className="px-2 py-1.5 text-center text-sm text-muted-foreground">{item.point}</td>
+                                        <td className="px-2 py-1.5"></td>
+                                        <td className="px-2 py-1.5 text-center text-sm font-semibold text-foreground">
+                                          {currentRole === 'STUDENT' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedStudentScores)}
+                                        </td>
+                                        {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
+                                          <td className="px-2 py-1.5 text-center text-sm font-semibold text-foreground">
+                                            {currentRole === 'CLASS_COMMITTEE' ? calculateAutoScore(item.id) : calculateScoreFromMap(item.id, savedClassScores)}
+                                          </td>
                                         )}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-1.5 text-center">
-                                    {!isFixed && effectiveCanEdit && (
-                                      <button onClick={() => { handleInputChange(item.id, ''); setEvidenceValues(prev => ({ ...prev, [item.id]: '' })); }} disabled={isRowSaving || isSavingDraft || isSubmitting} className="w-7 h-7 rounded-md flex items-center justify-center text-stone-400 hover:text-stone-500 hover:bg-stone-50 transition-colors mx-auto opacity-0 group-hover:opacity-100 disabled:opacity-0" title="Xóa">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                      </button>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
+                                        {currentRole === 'ADVISOR' && (
+                                          <td className="px-2 py-1.5 text-center text-sm font-semibold text-foreground">
+                                            {calculateAutoScore(item.id)}
+                                          </td>
+                                        )}
+                                        <td className="px-2 py-1.5"></td>
+                                        <td className="px-2 py-1.5 text-center"><span className="text-xs uppercase font-semibold text-muted-foreground bg-surface px-1.5 py-0.5 rounded border border-border/50">Auto</span></td>
+                                      </tr>
+                                    );
+                                  }
+
+                                  const itemErrors = validationErrors.filter(e => e.criterionId === item.id);
+                                  const hasError = itemErrors.length > 0;
+
+                                  return (
+                                    <tr key={item.id} id={`criterion-${item.id}`} className={`hover:bg-surface-muted/50 transition-colors group ${isRowSaving ? 'opacity-50' : ''} ${hasError ? 'bg-danger/10' : ''}`}>
+                                      <td className="px-2 py-1.5 text-sm text-muted-foreground">{item.code}</td>
+                                      <td className="px-2 py-1.5">
+                                        <div style={{ paddingLeft: `${depth * 1.2}rem` }}>
+                                          <span className="text-sm text-foreground leading-snug">
+                                            {item.content}
+                                            {item.require_evidence === 1 && <span className="text-danger font-bold ml-1" title="Bắt buộc có minh chứng">*</span>}
+                                          </span>
+                                          {item.description && <span className="text-xs text-muted-foreground mt-0.5 block leading-relaxed">{item.description}</span>}
+                                          {item.require_evidence === 1 && <span className="text-[10px] text-danger font-medium block mt-1 uppercase tracking-wide">⚠️ Bắt buộc đính kèm minh chứng</span>}
+                                          {itemErrors.map((err, idx) => (
+                                            <span key={idx} className="text-xs text-danger font-semibold mt-1.5 flex items-center gap-1 bg-danger/10 p-1.5 rounded-md border border-danger/20">
+                                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {err.message}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </td>
+                                      <td className="px-2 py-1.5 text-center text-sm text-muted-foreground">
+                                        {isQuantityBased ? (multiplier > 0 ? `+${multiplier}` : `${multiplier}`) : item.point}
+                                      </td>
+
+                                      {/* Số lượng Column */}
+                                      <td className="px-2 py-1.5 text-center">
+                                        {!isFixed && isQuantityBased ? (
+                                          <div className="relative inline-block">
+                                            <input type="number" min={0} max={displayMaxVal} step={1} value={displayVal} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={onChangeFn} className="w-16 h-9 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground disabled:border-border hover:border-primary/50" />
+                                            {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
+                                          </div>
+                                        ) : (
+                                          <span className="text-sm text-muted-foreground">-</span>
+                                        )}
+                                      </td>
+
+                                      {/* Student Score Column (Tổng điểm) */}
+                                      <td className="px-2 py-1.5 text-center">
+                                        {isFixed ? (
+                                          <span className="text-sm font-semibold text-foreground bg-surface-muted px-2 py-1 rounded-lg">{item.point}</span>
+                                        ) : currentRole === 'STUDENT' ? (
+                                          isQuantityBased ? (
+                                            <span className="text-sm font-semibold text-foreground">{val ? `${val}` : '0'}</span>
+                                          ) : item.score_type === 'OPTIONS' ? (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <div className="relative inline-block">
+                                                <select
+                                                  value={val}
+                                                  disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
+                                                  onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                                  className="w-16 h-9 px-1 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50 cursor-pointer appearance-none"
+                                                  style={{ textAlignLast: 'center' }}
+                                                >
+                                                  <option value="" disabled>-</option>
+                                                  {Array.isArray(item.score_options)
+                                                    ? item.score_options.map((opt, idx) => (
+                                                      <option key={idx} value={String(opt)}>{opt}</option>
+                                                    ))
+                                                    : <option value={item.point}>{item.point}</option>}
+                                                </select>
+                                                {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <div className="relative inline-block">
+                                                <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-16 h-9 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50" />
+                                                {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
+                                              </div>
+                                            </div>
+                                          )
+                                        ) : (
+                                          <span className="text-sm font-medium text-foreground">{savedStudentScores[item.id] ?? '-'}</span>
+                                        )}
+                                      </td>
+
+                                      {/* BCS Score Column */}
+                                      {(currentRole === 'CLASS_COMMITTEE' || currentRole === 'ADVISOR') && (
+                                        <td className="px-2 py-1.5 text-center">
+                                          {isFixed ? (
+                                            <span className="text-sm font-semibold text-foreground bg-surface-muted px-2 py-1 rounded-lg border border-border/50">{item.point}</span>
+                                          ) : currentRole === 'CLASS_COMMITTEE' ? (
+                                            isQuantityBased ? (
+                                              <span className="text-sm font-semibold text-primary">{val ? `${val}` : '0'}</span>
+                                            ) : item.score_type === 'OPTIONS' ? (
+                                              <div className="flex flex-col items-center gap-1">
+                                                <div className="relative inline-block">
+                                                  <select
+                                                    value={val}
+                                                    disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
+                                                    onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                                    className="w-16 h-9 px-1 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50 cursor-pointer appearance-none"
+                                                    style={{ textAlignLast: 'center' }}
+                                                  >
+                                                    <option value="" disabled>-</option>
+                                                    {Array.isArray(item.score_options)
+                                                      ? item.score_options.map((opt, idx) => (
+                                                        <option key={idx} value={String(opt)}>{opt}</option>
+                                                      ))
+                                                      : <option value={item.point}>{item.point}</option>}
+                                                  </select>
+                                                  {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="flex flex-col items-center gap-1">
+                                                <div className="relative inline-block">
+                                                  <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-16 h-9 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50" />
+                                                  {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
+                                                </div>
+                                              </div>
+                                            )
+                                          ) : (
+                                            <span className="text-sm font-medium text-foreground">{savedClassScores[item.id] ?? '-'}</span>
+                                          )}
+                                        </td>
+                                      )}
+
+                                      {/* Advisor Score Column */}
+                                      {currentRole === 'ADVISOR' && (
+                                        <td className="px-2 py-1.5 text-center">
+                                          {isFixed ? (
+                                            <span className="text-sm font-semibold text-foreground bg-surface-muted px-2 py-1 rounded-lg">{item.point}</span>
+                                          ) : (
+                                            isQuantityBased ? (
+                                              <span className="text-sm font-semibold text-foreground">{val ? `${val}` : '0'}</span>
+                                            ) : item.score_type === 'OPTIONS' ? (
+                                              <div className="flex flex-col items-center gap-1">
+                                                <div className="relative inline-block">
+                                                  <select
+                                                    value={val}
+                                                    disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting}
+                                                    onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                                    className="w-16 h-9 px-1 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50 cursor-pointer appearance-none"
+                                                    style={{ textAlignLast: 'center' }}
+                                                  >
+                                                    <option value="" disabled>-</option>
+                                                    {Array.isArray(item.score_options)
+                                                      ? item.score_options.map((opt, idx) => (
+                                                        <option key={idx} value={String(opt)}>{opt}</option>
+                                                      ))
+                                                      : <option value={item.point}>{item.point}</option>}
+                                                  </select>
+                                                  {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="flex flex-col items-center gap-1">
+                                                <div className="relative inline-block">
+                                                  <input type="number" min={minVal} max={maxVal} value={val} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-16 h-9 text-center text-sm font-medium text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50" />
+                                                  {isRowSaving && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin bg-surface"></div>}
+                                                </div>
+                                              </div>
+                                            )
+                                          )}
+                                        </td>
+                                      )}
+                                      <td className="px-2 py-1.5">
+                                        {!isFixed && (
+                                          <div className="relative flex items-center">
+                                            <input type="text" placeholder="Link minh chứng..." value={evidence} disabled={!effectiveCanEdit || isRowSaving || isSavingDraft || isSubmitting} onChange={(e) => setEvidenceValues(prev => ({ ...prev, [item.id]: e.target.value }))} className="w-full h-9 px-3 text-sm text-foreground bg-input border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all pr-8 disabled:bg-surface-muted disabled:text-muted-foreground hover:border-primary/50 placeholder:text-muted-foreground" />
+                                            {evidence && (
+                                              <a href={evidence.startsWith('http') ? evidence : `https://${evidence}`} target="_blank" rel="noopener noreferrer" className="absolute right-2 w-6 h-6 bg-primary-light hover:bg-primary/20 rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer z-10" title="Mở liên kết minh chứng">
+                                                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                              </a>
+                                            )}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="px-2 py-1.5 text-center">
+                                        {!isFixed && effectiveCanEdit && (
+                                          <button onClick={() => { handleInputChange(item.id, ''); setEvidenceValues(prev => ({ ...prev, [item.id]: '' })); }} disabled={isRowSaving || isSavingDraft || isSubmitting} className="w-7 h-7 rounded-md flex items-center justify-center text-stone-400 hover:text-stone-500 hover:bg-stone-50 transition-colors mx-auto opacity-0 group-hover:opacity-100 disabled:opacity-0" title="Xóa">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                          </button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          </>
+                  );
+                })}
+              </div>
+            </>
           )}
 
         </div>
