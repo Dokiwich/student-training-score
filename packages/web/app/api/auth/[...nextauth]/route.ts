@@ -7,6 +7,22 @@ import { prisma } from "@student-score/database";
 // In-memory cache for session version to avoid DB query on every request
 const sessionCache = new Map<string, { version: number, expires: number }>();
 
+type LoginIdentifier = {
+  raw: string;
+  normalized: string;
+  kind: 'EMAIL' | 'STUDENT_ID';
+};
+
+function normalizeLoginIdentifier(input: string): LoginIdentifier | null {
+  const trimmed = input.trim();
+  if (trimmed === '') return null;
+  if (trimmed.includes('@')) {
+    return { raw: input, normalized: trimmed.toLowerCase(), kind: 'EMAIL' };
+  } else {
+    return { raw: input, normalized: trimmed.toUpperCase(), kind: 'STUDENT_ID' };
+  }
+}
+
 export const authOptions: AuthOptions = {
   providers: [
     CredentialsProvider({
@@ -19,15 +35,18 @@ export const authOptions: AuthOptions = {
         if (!credentials?.username || !credentials?.password) {
           return null;
         }
+
+        const identifier = normalizeLoginIdentifier(credentials.username);
+        if (!identifier) {
+          return null;
+        }
         
-        // Find by student_id OR email in a single query to reduce DB roundtrips
-        const user = await prisma.users.findFirst({
-          where: {
-            OR: [
-              { student_id: credentials.username },
-              { email: credentials.username }
-            ]
-          },
+        const whereClause = identifier.kind === 'EMAIL' 
+          ? { email: identifier.normalized } 
+          : { student_id: identifier.normalized };
+
+        const user = await prisma.users.findUnique({
+          where: whereClause,
           include: { user_roles: { include: { roles: true } } }
         });
         
