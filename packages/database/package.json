@@ -10,7 +10,8 @@
     "db:studio": "prisma studio",
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
-    "db:migrate:status": "prisma migrate status"
+    "db:migrate:status": "prisma migrate status",
+    "check:db-perf": "node check_db_perf.js"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
