@@ -22,9 +22,7 @@ function assertReadOnlySql(sql) {
   }
 }
 
-async function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+
 
 function calcStats(times) {
   if (times.length === 0) return { min: 0, avg: 0, p50: 0, p95: 0, max: 0 };
@@ -52,7 +50,6 @@ async function runBenchmark() {
   for (const arg of args) {
     if (arg.startsWith('--runs=')) runs = parseInt(arg.split('=')[1]);
     if (arg.startsWith('--warmup=')) warmup = parseInt(arg.split('=')[1]);
-    if (arg === '--explain') explain = true;
   }
 
   runs = Math.max(3, Math.min(30, runs));
@@ -120,7 +117,7 @@ async function runBenchmark() {
       const semesterId = semester.id;
 
       const user = await tx.users.findUnique({ where: { id: studentId } });
-      const username = user ? user.username : 'unknown';
+      const loginIdentifier = (user && user.student_id) ? user.student_id : (user ? user.email : 'unknown');
 
       // --- Benchmarks ---
 
@@ -140,8 +137,8 @@ async function runBenchmark() {
         await tx.users.findFirst({
           where: {
             OR: [
-              { username: username },
-              { email: username }
+              { student_id: loginIdentifier },
+              { email: loginIdentifier }
             ]
           }
         });
@@ -194,8 +191,8 @@ async function runBenchmark() {
         });
       });
 
-      // 6. logsParallelWallTime
-      await runBench('logsParallelWallTime', async () => {
+      // 6. logsGroupedWallTime
+      await runBench('logsGroupedWallTime', async () => {
         await Promise.all([
           tx.audit_logs.findMany({
             where: {
@@ -228,7 +225,7 @@ async function runBenchmark() {
       await runBench('currentProgressReadPath', async () => {
         // Mock getScoringProgress read path without service logic
         
-        // Form
+        // progress -> form
         const form = await tx.scoring_sheets.findFirst({
           where: {
             semester_enrollments: {
@@ -240,18 +237,12 @@ async function runBenchmark() {
             semester_enrollments: { include: { classes: true, semesters: true, users: true } },
           }
         });
-        
-        // Mock verifyReadPermission (assuming student self)
-        await tx.semesters.findUnique({ where: { id: form.semester_enrollments.semester_id } });
 
         // history -> sheet again
         const form2 = await tx.scoring_sheets.findUnique({
           where: { id: sheetId },
           include: { semester_enrollments: true },
         });
-
-        // history -> verifyReadPermission again
-        await tx.semesters.findUnique({ where: { id: form2.semester_enrollments.semester_id } });
 
         // history -> details
         const scoreDetails1 = await tx.score_details.findMany({
@@ -307,8 +298,6 @@ async function runBenchmark() {
               semester_enrollments: { include: { classes: true, semesters: true, users: true } },
             }
           });
-          
-          await tx.semesters.findUnique({ where: { id: form.semester_enrollments.semester_id } });
 
           const scoreDetails = await tx.score_details.findMany({
             where: { scoring_sheet_id: sheetId },
@@ -337,10 +326,7 @@ async function runBenchmark() {
         });
       }
 
-      if (explain) {
-        assertReadOnlySql('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT 1');
-        console.log('\n--- EXPLAIN Plan available if coded ---');
-      }
+
 
     }, { maxWait: 15000, timeout: 300000 });
     
