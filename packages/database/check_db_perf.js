@@ -33,7 +33,8 @@ async function runBenchmark() {
   warmup = Math.max(0, Math.min(5, warmup));
 
   console.log(`Starting benchmark with ${runs} runs, ${warmup} warmup...`);
-  console.log('Scope: STUDENT_SELF + known semester/sample progress read path');
+  console.log('Benchmark scope: READ-ONLY DATABASE READ PATH SIMULATION');
+  console.log('Scenario: STUDENT_SELF + known semester/sample progress read path');
 
   const connectStart = performance.now();
   const prisma = new PrismaClient();
@@ -77,7 +78,10 @@ async function runBenchmark() {
       });
       const sheet = await tx.scoring_sheets.findFirst({
         where: {
-          score_details: { some: {} }
+          score_details: { some: {} },
+          semester_enrollments: {
+            semester_id: semester.id
+          }
         },
         include: {
           semester_enrollments: true
@@ -88,11 +92,17 @@ async function runBenchmark() {
         console.log('Missing valid sample data (semester or sheet with details). Skipping remaining tests.');
         return;
       }
+      
+      if (sheet.semester_enrollments.semester_id !== semester.id) {
+        throw new Error('Benchmark sample semester mismatch');
+      }
+      
       console.log('sampleFound: true');
 
-      const studentId = sheet.semester_enrollments.user_id;
       const sheetId = sheet.id;
-      const semesterId = semester.id;
+      const studentId = sheet.semester_enrollments.user_id;
+      const semesterId = sheet.semester_enrollments.semester_id;
+      const classId = sheet.semester_enrollments.class_id;
 
       const user = await tx.users.findUnique({ where: { id: studentId } });
       const loginIdentifier = (user && user.student_id) ? user.student_id : (user ? user.email : 'unknown');
@@ -190,7 +200,7 @@ async function runBenchmark() {
           }),
           tx.user_roles.findMany({
             where: {
-              entity_id: sheet.semester_enrollments.class_id,
+              entity_id: classId,
               is_active: 1
             },
             include: { roles: true }
@@ -222,6 +232,10 @@ async function runBenchmark() {
             semester_enrollments: { include: { classes: true, semesters: true, users: true } },
           }
         });
+
+        if (!form || form.id !== sheetId) {
+          throw new Error('Current benchmark form does not match selected sheet');
+        }
 
         // history -> sheet again
         const form2 = await tx.scoring_sheets.findUnique({
@@ -256,7 +270,7 @@ async function runBenchmark() {
           }),
           tx.user_roles.findMany({
             where: {
-              entity_id: form2.semester_enrollments.class_id,
+              entity_id: classId,
               is_active: 1
             },
             include: { roles: true }
@@ -290,9 +304,13 @@ async function runBenchmark() {
               semester_enrollments: { include: { classes: true, semesters: true, users: true } },
             }
           });
+          
+          if (!form || form.id !== sheetId) {
+            throw new Error('Optimized benchmark form does not match selected sheet');
+          }
 
           const scoreDetails = await tx.score_details.findMany({
-            where: { scoring_sheet_id: sheetId },
+            where: { scoring_sheet_id: form.id },
             include: { criteria: true, score_entries: true },
           });
 
@@ -308,7 +326,7 @@ async function runBenchmark() {
             tx.audit_logs.findMany({
               where: {
                 OR: [
-                  { entity_type: 'scoring_sheets', entity_id: sheetId },
+                  { entity_type: 'scoring_sheets', entity_id: form.id },
                   { entity_type: 'score_details', entity_id: { in: optimizedDetailIds } },
                   { entity_type: 'score_entries', entity_id: { in: optimizedEntryIds } },
                 ]
