@@ -13,6 +13,8 @@ export default async function StudentDashboardPage() {
   const user = session?.user as { id: string; name?: string; role?: string; studentId?: string } | undefined;
 
   let dashboardData = null;
+  let dashboardLoadFailed = false;
+
   if (session) {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
@@ -20,8 +22,13 @@ export default async function StudentDashboardPage() {
         headers: { Authorization: `Bearer ${(session as any).customJwt}` },
         cache: 'no-store'
       });
-      if (res.ok) dashboardData = await res.json();
+      if (!res.ok) {
+        dashboardLoadFailed = true;
+      } else {
+        dashboardData = await res.json();
+      }
     } catch (e) {
+      dashboardLoadFailed = true;
       console.error("Lỗi SSR fetch dashboard:", e);
     }
   }
@@ -76,7 +83,9 @@ export default async function StudentDashboardPage() {
               <div className="flex items-center justify-between space-x-2">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Điểm hiện tại</p>
-                  <div className="text-2xl font-bold mt-1">{currentPoints}</div>
+                  <div className="text-2xl font-bold mt-1">
+                    {dashboardLoadFailed ? '--' : currentPoints}
+                  </div>
                 </div>
                 <div className="h-10 w-10 bg-info-bg rounded-full flex items-center justify-center text-info-foreground">
                   <Activity size={20} />
@@ -92,14 +101,20 @@ export default async function StudentDashboardPage() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Trạng thái phiếu</p>
                   <div className="mt-1">
-                    <StatusBadge status={sheetStatus} />
+                    {dashboardLoadFailed ? (
+                      <span className="text-sm text-muted-foreground">Không thể tải</span>
+                    ) : (
+                      <StatusBadge status={sheetStatus} />
+                    )}
                   </div>
                 </div>
                 <div className="h-10 w-10 bg-warning-bg rounded-full flex items-center justify-center text-warning-foreground">
                   <FileText size={20} />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-4">{sheetStatus === 'NO_SHEET' ? 'Chưa nộp phiếu' : 'Đã khởi tạo'}</p>
+              <p className="text-xs text-muted-foreground mt-4">
+                {dashboardLoadFailed ? '--' : (sheetStatus === 'NO_SHEET' ? 'Chưa nộp phiếu' : 'Đã khởi tạo')}
+              </p>
             </CardContent>
           </Card>
 
@@ -108,14 +123,16 @@ export default async function StudentDashboardPage() {
               <div className="flex items-center justify-between space-x-2">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Hạn nộp</p>
-                  <div className="text-lg font-bold mt-1 text-foreground">{deadlineLabel}</div>
+                  <div className="text-lg font-bold mt-1 text-foreground">
+                    {dashboardLoadFailed ? '--' : deadlineLabel}
+                  </div>
                 </div>
                 <div className="h-10 w-10 bg-danger-bg rounded-full flex items-center justify-center text-danger-foreground">
                   <Clock size={20} />
                 </div>
               </div>
-              <p className={`text-xs mt-4 ${deadlineInfo.isOverdue || deadlineInfo.daysLeft <= 3 ? 'text-danger' : 'text-muted-foreground'}`}>
-                {deadlineInfo.remainingTimeText}
+              <p className={`text-xs mt-4 ${(!dashboardLoadFailed && (deadlineInfo.isOverdue || deadlineInfo.daysLeft <= 3)) ? 'text-danger' : 'text-muted-foreground'}`}>
+                {dashboardLoadFailed ? '--' : deadlineInfo.remainingTimeText}
               </p>
             </CardContent>
           </Card>
@@ -125,7 +142,9 @@ export default async function StudentDashboardPage() {
               <div className="flex items-center justify-between space-x-2">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Minh chứng</p>
-                  <div className="text-2xl font-bold mt-1">{selectedCriteriaCount} mục</div>
+                  <div className="text-2xl font-bold mt-1">
+                    {dashboardLoadFailed ? '--' : `${selectedCriteriaCount} mục`}
+                  </div>
                 </div>
                 <div className="h-10 w-10 bg-success-bg rounded-full flex items-center justify-center text-success-foreground">
                   <ClipboardCheck size={20} />
@@ -146,7 +165,11 @@ export default async function StudentDashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {(sheetStatus === 'NO_SHEET' || sheetStatus === 'DRAFT') ? (
+                  {dashboardLoadFailed ? (
+                    <div className="p-4 text-center text-danger bg-danger-bg rounded-lg">
+                      Không thể tải dữ liệu tổng quan lúc này.
+                    </div>
+                  ) : (sheetStatus === 'NO_SHEET' || sheetStatus === 'DRAFT') ? (
                     <div className="flex items-start gap-4 p-4 border border-border rounded-lg bg-surface-muted">
                       <div className="shrink-0 mt-0.5">
                         <Clock className="text-danger h-5 w-5" />
@@ -169,7 +192,16 @@ export default async function StudentDashboardPage() {
             </Card>
           </div>
         <div className="lg:col-span-1 space-y-6">
-          <ProgressMiniCard initialData={dashboardData?.progress} allowFallbackFetch={false} />
+          {dashboardLoadFailed ? (
+             <Card>
+               <CardHeader><CardTitle>Tiến độ xét duyệt</CardTitle></CardHeader>
+               <CardContent className="py-6 text-center text-muted-foreground">
+                 Không thể tải tiến độ
+               </CardContent>
+             </Card>
+          ) : (
+            <ProgressMiniCard initialData={dashboardData?.progress} allowFallbackFetch={false} />
+          )}
         </div>
         </div>
       </div>

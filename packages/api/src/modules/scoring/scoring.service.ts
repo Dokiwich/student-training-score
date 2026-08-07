@@ -296,12 +296,45 @@ export class ScoringService {
   }
 
   // =============================================
+  // HELPER: Compute Semester Phase (PURE)
+  // =============================================
+  private computeSemesterPhase(
+    semester: {
+      start_date: Date;
+      end_date: Date;
+      student_deadline: Date | null;
+      class_committee_deadline: Date | null;
+      advisor_deadline: Date | null;
+      school_deadline: Date | null;
+    },
+    now: Date = new Date()
+  ): string {
+    if (now < semester.start_date) return 'UPCOMING';
+    if (semester.student_deadline && now < semester.student_deadline) return 'STUDENT_SCORING';
+    if (semester.class_committee_deadline && now < semester.class_committee_deadline) return 'CLASS_REVIEWING';
+    if (semester.advisor_deadline && now < semester.advisor_deadline) return 'ADVISOR_REVIEWING';
+    if (semester.school_deadline && now < semester.school_deadline) return 'SCHOOL_REVIEWING';
+    if (now <= semester.end_date) return 'FINALIZED';
+    return 'LOCKED';
+  }
+
+  // =============================================
   // HELPER: Format Dashboard Deadline Info (PURE)
   // =============================================
-  private formatDashboardDeadlineInfo(semester: any | null) {
+  private formatDashboardDeadlineInfo(
+    semester: {
+      status: string;
+      start_date: Date;
+      end_date: Date;
+      student_deadline: Date | null;
+      class_committee_deadline: Date | null;
+      advisor_deadline: Date | null;
+      school_deadline: Date | null;
+    } | null,
+    now: Date = new Date()
+  ) {
     if (!semester) {
       return {
-        semester: null,
         currentPhase: 'UNKNOWN',
         currentPhaseLabel: 'Chưa xác định',
         studentSubmissionDeadline: null,
@@ -317,7 +350,6 @@ export class ScoringService {
     let daysLeft = 0;
 
     if (deadline) {
-      const now = new Date();
       const diffTime = deadline.getTime() - now.getTime();
       
       if (diffTime <= 0) {
@@ -328,6 +360,8 @@ export class ScoringService {
         remainingTimeText = daysLeft > 0 ? `Còn ${daysLeft} ngày` : 'Sắp hết hạn';
       }
     }
+
+    const currentPhase = this.computeSemesterPhase(semester, now);
 
     const PHASE_LABELS: Record<string, string> = {
       UPCOMING: 'Chưa bắt đầu',
@@ -340,13 +374,8 @@ export class ScoringService {
     };
 
     return {
-      semester: {
-        id: semester.id,
-        name: semester.name,
-        academicYear: semester.academic_year,
-      },
-      currentPhase: semester.status,
-      currentPhaseLabel: PHASE_LABELS[semester.status] || semester.status,
+      currentPhase,
+      currentPhaseLabel: PHASE_LABELS[currentPhase] || currentPhase,
       studentSubmissionDeadline: deadline,
       remainingTimeText,
       isOverdue,
