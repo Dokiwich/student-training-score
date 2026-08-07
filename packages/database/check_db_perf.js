@@ -71,11 +71,19 @@ async function runBenchmark() {
       }
       console.log('Verified: transaction_read_only = on');
 
-      // 3. Find Samples (READ ONLY)
       const semester = await tx.semesters.findFirst({
         where: { is_active: 1 },
-        orderBy: { created_at: 'desc' },
+        orderBy: [
+          { start_date: 'desc' },
+          { created_at: 'desc' }
+        ],
       });
+      
+      if (!semester) {
+        console.log('Missing active semester. Skipping remaining tests.');
+        return;
+      }
+
       const sheet = await tx.scoring_sheets.findFirst({
         where: {
           score_details: { some: {} },
@@ -88,8 +96,8 @@ async function runBenchmark() {
         }
       });
 
-      if (!semester || !sheet) {
-        console.log('Missing valid sample data (semester or sheet with details). Skipping remaining tests.');
+      if (!sheet) {
+        console.log('Missing scoring sheet with details in active semester. Skipping remaining tests.');
         return;
       }
       
@@ -136,7 +144,10 @@ async function runBenchmark() {
       await runBench('activeSemester', async () => {
         await tx.semesters.findFirst({
           where: { is_active: 1 },
-          orderBy: { created_at: 'desc' }
+          orderBy: [
+            { start_date: 'desc' },
+            { created_at: 'desc' }
+          ]
         });
       });
 
