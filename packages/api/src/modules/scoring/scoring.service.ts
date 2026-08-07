@@ -1259,48 +1259,13 @@ export class ScoringService {
   // =============================================
   // GET NORMALIZED SCORING HISTORY
   // =============================================
-  async getNormalizedScoringHistory(formId: string, actorId: string): Promise<ScoringTimelineEvent[]> {
-    // Auth check via sheet
-    const form = await prisma.scoring_sheets.findUnique({
-      where: { id: formId },
-      include: { semester_enrollments: true },
-    });
-    if (!form) return [];
-
-    await this.verifyReadPermission(actorId, form.semester_enrollments.user_id, form.semester_enrollments.semester_id);
-
-    const scoreDetails = await prisma.score_details.findMany({
-      where: { scoring_sheet_id: formId },
-      include: { criteria: true },
-    });
-    const detailIds = scoreDetails.map(d => d.id);
-    const detailMap = new Map(scoreDetails.map(d => [d.id, d]));
-
-    const scoreEntries = await prisma.score_entries.findMany({
-      where: { score_detail_id: { in: detailIds } },
-    });
-    const entryIds = scoreEntries.map(e => e.id);
-    const entryToDetailMap = new Map(scoreEntries.map(e => [e.id, e.score_detail_id]));
-
-    const [auditLogs, adjustLogs] = await Promise.all([
-      prisma.audit_logs.findMany({
-        where: {
-          OR: [
-            { entity_type: 'scoring_sheets', entity_id: formId },
-            { entity_type: 'score_details', entity_id: { in: detailIds } },
-            { entity_type: 'score_entries', entity_id: { in: entryIds } },
-          ]
-        },
-        include: { users: { select: { full_name: true } } },
-        orderBy: { created_at: 'asc' },
-      }),
-      prisma.score_adjustment_logs.findMany({
-        where: { score_detail_id: { in: detailIds } },
-        include: { users: { select: { full_name: true } }, score_details: { include: { criteria: true } } },
-        orderBy: { created_at: 'asc' },
-      }),
-    ]);
-
+  private buildNormalizedScoringHistoryPure(
+    form: any,
+    scoreDetails: any[],
+    auditLogs: any[],
+    adjustLogs: any[],
+    classRoles: any[]
+  ): ScoringTimelineEvent[] {
     const events: ScoringTimelineEvent[] = [];
     const ROLE_MAP: Record<string, string> = {
       STUDENT: 'Sinh viên',
@@ -1310,7 +1275,6 @@ export class ScoringService {
       SYSTEM: 'Hệ thống'
     };
 
-    // Helper: Map Audit action to EventType
     const mapActionToEvent = (action: string): ScoringTimelineEvent['eventType'] | null => {
       if (action === 'SUBMIT_FORM') return 'SUBMITTED';
       if (action === 'APPROVE_FORM') return 'APPROVED';
@@ -1320,12 +1284,6 @@ export class ScoringService {
       return null;
     };
 
-    // Lấy thông tin lớp để suy diễn vai trò
-    const classRoles = await prisma.user_roles.findMany({
-      where: { entity_id: form.semester_enrollments.class_id, is_active: 1 },
-      include: { roles: true }
-    });
-    
     const monitorRoleCodes = ASSIGNED_ROLE_CODES.CLASS_COMMITTEE;
     const monitorIds = new Set(classRoles.filter(r => monitorRoleCodes.includes(r.roles.code as any)).map(r => r.user_id));
     const advisorIds = new Set(classRoles.filter(r => ASSIGNED_ROLE_CODES.ADVISOR.includes(r.roles.code as any)).map(r => r.user_id));
@@ -1360,6 +1318,16 @@ export class ScoringService {
        });
     };
 
+    const detailMap = new Map(scoreDetails.map(d => [d.id, d]));
+    const entryToDetailMap = new Map();
+    for (const d of scoreDetails) {
+       if (d.score_entries) {
+          for (const e of d.score_entries) {
+             entryToDetailMap.set(e.id, d.id);
+          }
+       }
+    }
+
     // 1. Map score adjustments
     for (const adj of adjustLogs) {
       const actorRole = inferActorRole(adj.adjusted_by_id);
@@ -1378,9 +1346,9 @@ export class ScoringService {
         newScore: normalizeScoreValue(adj.new_score),
         comment: null,
         reason: adj.reason,
-        criterionId: adj.score_details.criteria.id,
-        criterionCode: adj.score_details.criteria.code,
-        criterionName: adj.score_details.criteria.content,
+        criterionId: adj.score_details?.criteria?.id || null,
+        criterionCode: adj.score_details?.criteria?.code || null,
+        criterionName: adj.score_details?.criteria?.content || null,
       });
     }
 
@@ -1430,9 +1398,9 @@ export class ScoringService {
                       newScore: newScore,
                       comment: null,
                       reason: null,
-                      criterionId: detail.criteria.id,
-                      criterionCode: detail.criteria.code,
-                      criterionName: detail.criteria.content,
+                      criterionId: detail.criteria?.id || null,
+                      criterionCode: detail.criteria?.code || null,
+                      criterionName: detail.criteria?.content || null,
                     });
                 }
             }
@@ -1472,6 +1440,49 @@ export class ScoringService {
     // Sort all events by createdAt ascending
     events.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     return events;
+  }
+
+  async getNormalizedScoringHistory(formId: string, actorId: string): Promise<ScoringTimelineEvent[]> {
+    // Auth check via sheet
+    const form = await prisma.scoring_sheets.findUnique({
+      where: { id: formId },
+      include: { semester_enrollments: true },
+    });
+    if (!form) return [];
+
+    await this.verifyReadPermission(actorId, form.semester_enrollments.user_id, form.semester_enrollments.semester_id);
+
+    const scoreDetails = await prisma.score_details.findMany({
+      where: { scoring_sheet_id: formId },
+      include: { criteria: true, score_entries: true },
+    });
+    const detailIds = scoreDetails.map(d => d.id);
+    const entryIds = scoreDetails.flatMap(d => d.score_entries || []).map(e => e.id);
+
+    const [auditLogs, adjustLogs, classRoles] = await Promise.all([
+      prisma.audit_logs.findMany({
+        where: {
+          OR: [
+            { entity_type: 'scoring_sheets', entity_id: formId },
+            { entity_type: 'score_details', entity_id: { in: detailIds } },
+            { entity_type: 'score_entries', entity_id: { in: entryIds } },
+          ]
+        },
+        include: { users: { select: { full_name: true } } },
+        orderBy: { created_at: 'asc' },
+      }),
+      prisma.score_adjustment_logs.findMany({
+        where: { score_detail_id: { in: detailIds } },
+        include: { users: { select: { full_name: true } }, score_details: { include: { criteria: true } } },
+        orderBy: { created_at: 'asc' },
+      }),
+      prisma.user_roles.findMany({
+        where: { entity_id: form.semester_enrollments.class_id, is_active: 1 },
+        include: { roles: true }
+      })
+    ]);
+
+    return this.buildNormalizedScoringHistoryPure(form, scoreDetails, auditLogs, adjustLogs, classRoles);
   }
 
   // =============================================
@@ -1724,21 +1735,48 @@ export class ScoringService {
       };
     }
     
-    // Auth check
+    // Auth check (once)
     await this.verifyReadPermission(actorId, form.semester_enrollments.user_id, form.semester_enrollments.semester_id);
 
-    const history = await this.getNormalizedScoringHistory(form.id, actorId);
-
-    const semester = form.semester_enrollments.semesters;
-
+    // Shared data loading
     const [scoreDetails, categories, allCriteria] = await Promise.all([
       prisma.score_details.findMany({
         where: { scoring_sheet_id: form.id },
-        include: { score_entries: true }
+        include: { criteria: true, score_entries: true }
       }),
       prisma.criteria_categories.findMany({ select: { id: true, max_score: true } }),
       prisma.criteria.findMany({ where: { is_active: 1 } })
     ]);
+
+    const detailIds = scoreDetails.map(d => d.id);
+    const entryIds = scoreDetails.flatMap(d => d.score_entries || []).map(e => e.id);
+
+    const [auditLogs, adjustLogs, classRoles] = await Promise.all([
+      prisma.audit_logs.findMany({
+        where: {
+          OR: [
+            { entity_type: 'scoring_sheets', entity_id: form.id },
+            { entity_type: 'score_details', entity_id: { in: detailIds } },
+            { entity_type: 'score_entries', entity_id: { in: entryIds } },
+          ]
+        },
+        include: { users: { select: { full_name: true } } },
+        orderBy: { created_at: 'asc' },
+      }),
+      prisma.score_adjustment_logs.findMany({
+        where: { score_detail_id: { in: detailIds } },
+        include: { users: { select: { full_name: true } }, score_details: { include: { criteria: true } } },
+        orderBy: { created_at: 'asc' },
+      }),
+      prisma.user_roles.findMany({
+        where: { entity_id: form.semester_enrollments.class_id, is_active: 1 },
+        include: { roles: true }
+      })
+    ]);
+
+    const history = this.buildNormalizedScoringHistoryPure(form, scoreDetails, auditLogs, adjustLogs, classRoles);
+
+    const semester = form.semester_enrollments.semesters;
 
     const totals = this.computeTotalsPure(scoreDetails as any[], categories, allCriteria);
 
