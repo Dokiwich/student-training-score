@@ -1,6 +1,5 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../api/auth/[...nextauth]/route';
-import { prisma } from '@student-score/database';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/StatusBadge';
@@ -8,59 +7,40 @@ import { Button } from '../../components/ui/Button';
 import { ClipboardCheck, Clock, FileText, Activity } from 'lucide-react';
 import Link from 'next/link';
 import { ProgressMiniCard } from './ProgressMiniCard';
-import { getStudentDashboardDeadlineInfo } from '@/lib/semester';
 
 export default async function StudentDashboardPage() {
   const session = await getServerSession(authOptions);
   const user = session?.user as { id: string; name?: string; role?: string; studentId?: string } | undefined;
 
-  const deadlineInfo = await getStudentDashboardDeadlineInfo();
-  const activeSemester = deadlineInfo.semester;
-
-  let scoringSheet = null;
-  
-  if (user?.studentId && activeSemester) {
-      scoringSheet = await prisma.scoring_sheets.findFirst({
-        where: {
-          semester_enrollments: {
-            user_id: user.id,
-            semester_id: activeSemester.id,
-          }
-        },
-        include: {
-          score_details: {
-            include: { score_entries: true }
-          }
-        }
-      });
-    }
-
-  let progressData = null;
-  if (scoringSheet && session) {
+  let dashboardData = null;
+  if (session) {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
-      const res = await fetch(`${apiUrl}/scoring/progress?sheetId=${scoringSheet.id}`, {
+      const res = await fetch(`${apiUrl}/scoring/student/dashboard`, {
         headers: { Authorization: `Bearer ${(session as any).customJwt}` },
         cache: 'no-store'
       });
-      if (res.ok) progressData = await res.json();
+      if (res.ok) dashboardData = await res.json();
     } catch (e) {
-      console.error("Lỗi SSR fetch progress:", e);
+      console.error("Lỗi SSR fetch dashboard:", e);
     }
   }
 
   const greeting = new Date().getHours() < 12 ? 'Chào buổi sáng' : 'Chào buổi chiều';
   
-  const currentPoints = scoringSheet?.score_details?.reduce((acc: number, d: any) => {
-    const studentEntry = d.score_entries?.find((e: any) => e.scorer_role === 'STUDENT');
-    return acc + (studentEntry ? Number(studentEntry.score) : 0);
-  }, 0) || 0;
+  const currentPoints = dashboardData?.sheet?.studentScore || 0;
+  const sheetStatus = dashboardData?.sheet?.status || 'NO_SHEET';
+  const selectedCriteriaCount = dashboardData?.sheet?.selectedCriteriaCount || 0;
   
-  const sheetStatus = scoringSheet?.status || 'NO_SHEET';
-  const missingProofs = 0; // simplified for now
+  const deadlineInfo = dashboardData?.deadline || {
+    isOverdue: false,
+    daysLeft: 0,
+    remainingTimeText: 'Chưa thiết lập',
+    studentSubmissionDeadline: null
+  };
 
   const deadlineLabel = deadlineInfo.studentSubmissionDeadline 
-    ? deadlineInfo.studentSubmissionDeadline.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) 
+    ? new Date(deadlineInfo.studentSubmissionDeadline).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) 
     : 'Chưa xác định';
 
   return (
@@ -145,7 +125,7 @@ export default async function StudentDashboardPage() {
               <div className="flex items-center justify-between space-x-2">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Minh chứng</p>
-                  <div className="text-2xl font-bold mt-1">{scoringSheet?.score_details?.length || 0} mục</div>
+                  <div className="text-2xl font-bold mt-1">{selectedCriteriaCount} mục</div>
                 </div>
                 <div className="h-10 w-10 bg-success-bg rounded-full flex items-center justify-center text-success-foreground">
                   <ClipboardCheck size={20} />
@@ -189,7 +169,7 @@ export default async function StudentDashboardPage() {
             </Card>
           </div>
         <div className="lg:col-span-1 space-y-6">
-          <ProgressMiniCard initialData={progressData} />
+          <ProgressMiniCard initialData={dashboardData?.progress} allowFallbackFetch={false} />
         </div>
         </div>
       </div>

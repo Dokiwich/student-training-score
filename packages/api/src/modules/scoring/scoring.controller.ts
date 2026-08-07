@@ -7,6 +7,11 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 export class ScoringController {
   constructor(private readonly scoringService: ScoringService) { }
 
+  @Get('student/dashboard')
+  async getStudentDashboard(@Req() req: any) {
+    return this.scoringService.getStudentDashboard(req.user.id);
+  }
+
   @Get('students')
   async getStudents(@Req() req: any) {
     const userId = req.user?.id;

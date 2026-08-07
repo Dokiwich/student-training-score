@@ -5,12 +5,12 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 
-export function ProgressMiniCard({ initialData }: { initialData?: Record<string, any> | null }) {
+export function ProgressMiniCard({ initialData, allowFallbackFetch = true }: { initialData?: Record<string, any> | null, allowFallbackFetch?: boolean }) {
   const [data, setData] = useState<any>(initialData || null);
-  const [loading, setLoading] = useState(!initialData);
+  const [loading, setLoading] = useState(!initialData && allowFallbackFetch);
 
   useEffect(() => {
-    if (initialData) return;
+    if (initialData || !allowFallbackFetch) return;
     fetch('/api/scoring-progress')
       .then(res => res.json())
       .then(json => {
@@ -37,7 +37,11 @@ export function ProgressMiniCard({ initialData }: { initialData?: Record<string,
       <Card>
         <CardHeader><CardTitle>Tiến độ xét duyệt</CardTitle></CardHeader>
         <CardContent className="py-6 text-center">
-          <p className="text-sm text-muted-foreground mb-4">Bạn chưa khởi tạo hoặc nộp phiếu rèn luyện.</p>
+          {!data && !allowFallbackFetch ? (
+            <p className="text-sm text-muted-foreground mb-4">Không thể tải thông tin tiến độ lúc này.</p>
+          ) : (
+            <p className="text-sm text-muted-foreground mb-4">Bạn chưa khởi tạo hoặc nộp phiếu rèn luyện.</p>
+          )}
           <Link href="/student/scoring-progress">
             <Button variant="outline" className="w-full">Xem chi tiết</Button>
           </Link>

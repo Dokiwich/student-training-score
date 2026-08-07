@@ -276,6 +276,11 @@ export class ScoringService {
       ],
       select: {
         id: true,
+        name: true,
+        academic_year: true,
+        status: true,
+        start_date: true,
+        end_date: true,
         student_deadline: true,
         class_committee_deadline: true,
         advisor_deadline: true,
@@ -288,6 +293,65 @@ export class ScoringService {
     }
 
     return activeSemesters.length > 0 ? activeSemesters[0] : null;
+  }
+
+  // =============================================
+  // HELPER: Format Dashboard Deadline Info (PURE)
+  // =============================================
+  private formatDashboardDeadlineInfo(semester: any | null) {
+    if (!semester) {
+      return {
+        semester: null,
+        currentPhase: 'UNKNOWN',
+        currentPhaseLabel: 'Chưa xác định',
+        studentSubmissionDeadline: null,
+        remainingTimeText: 'Chưa thiết lập',
+        isOverdue: false,
+        daysLeft: 0,
+      };
+    }
+
+    const deadline = semester.student_deadline ? new Date(semester.student_deadline) : null;
+    let remainingTimeText = 'Chưa thiết lập';
+    let isOverdue = false;
+    let daysLeft = 0;
+
+    if (deadline) {
+      const now = new Date();
+      const diffTime = deadline.getTime() - now.getTime();
+      
+      if (diffTime <= 0) {
+        isOverdue = true;
+        remainingTimeText = 'Đã hết hạn';
+      } else {
+        daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        remainingTimeText = daysLeft > 0 ? `Còn ${daysLeft} ngày` : 'Sắp hết hạn';
+      }
+    }
+
+    const PHASE_LABELS: Record<string, string> = {
+      UPCOMING: 'Chưa bắt đầu',
+      STUDENT_SCORING: 'Sinh viên đang tự đánh giá',
+      CLASS_REVIEWING: 'Ban cán sự đang đánh giá',
+      ADVISOR_REVIEWING: 'CVHT đang đánh giá',
+      SCHOOL_REVIEWING: 'Chờ Trường duyệt',
+      FINALIZED: 'Đã hoàn tất',
+      LOCKED: 'Đã kết thúc',
+    };
+
+    return {
+      semester: {
+        id: semester.id,
+        name: semester.name,
+        academicYear: semester.academic_year,
+      },
+      currentPhase: semester.status,
+      currentPhaseLabel: PHASE_LABELS[semester.status] || semester.status,
+      studentSubmissionDeadline: deadline,
+      remainingTimeText,
+      isOverdue,
+      daysLeft,
+    };
   }
 
   // =============================================
@@ -1731,6 +1795,7 @@ export class ScoringService {
         statusInfo: { dbStatus: 'NO_SHEET', statusLabel: 'Chưa khởi tạo', isLocked: false, isCompleted: false }, 
         progress: { currentStageIndex: 1, totalStages: 4, isReturned: false }, 
         scores: { studentScore: 0, classCommitteeScore: 0, advisorScore: 0, finalScore: 0 }, 
+        summary: { selectedCriteriaCount: 0 },
         stages: [] 
       };
     }
@@ -1840,8 +1905,53 @@ export class ScoringService {
         advisorScore: totals.advisorTotal,
         finalScore: totals.advisorTotal 
       },
+      summary: {
+        selectedCriteriaCount: detailIds.length
+      },
       stages,
       history
+    };
+  }
+
+  // =============================================
+  // STUDENT DASHBOARD AGGREGATION
+  // =============================================
+  async getStudentDashboard(userId: string) {
+    const activeSemester = await this.resolveCurrentScoringSemester();
+    if (!activeSemester) {
+      return {
+        semester: null,
+        deadline: this.formatDashboardDeadlineInfo(null),
+        sheet: null,
+        progress: {
+          statusInfo: { dbStatus: 'NO_SHEET', statusLabel: 'Chưa khởi tạo', isLocked: false, isCompleted: false },
+          progress: { currentStageIndex: 1, totalStages: 4, isReturned: false },
+          scores: { studentScore: 0, classCommitteeScore: 0, advisorScore: 0, finalScore: 0 },
+          summary: { selectedCriteriaCount: 0 },
+          stages: []
+        }
+      };
+    }
+
+    const progress = await this.getScoringProgress(userId, userId, undefined, activeSemester.id);
+    const deadline = this.formatDashboardDeadlineInfo(activeSemester);
+
+    return {
+      semester: {
+        id: activeSemester.id,
+        name: activeSemester.name,
+        academicYear: activeSemester.academic_year
+      },
+      deadline,
+      sheet: progress.sheetId
+        ? {
+            sheetId: progress.sheetId,
+            status: progress.statusInfo.dbStatus,
+            studentScore: progress.scores.studentScore,
+            selectedCriteriaCount: progress.summary?.selectedCriteriaCount ?? 0
+          }
+        : null,
+      progress
     };
   }
 
