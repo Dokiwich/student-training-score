@@ -1,29 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const { performance } = require('perf_hooks');
 
-const FORBIDDEN_SQL = [
-  'INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE',
-  'GRANT', 'REVOKE', 'MERGE', 'COPY'
-];
-
-function assertReadOnlySql(sql) {
-  const normalized = sql.replace(/--.*$/gm, '').trim().toUpperCase();
-  if (normalized.includes(';')) throw new Error('Multiple statements not allowed');
-  if (!normalized.startsWith('SELECT') && !normalized.startsWith('SHOW') && !normalized.startsWith('EXPLAIN')) {
-    throw new Error('Only SELECT, SHOW, or EXPLAIN allowed');
-  }
-  for (const word of FORBIDDEN_SQL) {
-    if (new RegExp(`\\b${word}\\b`).test(normalized)) {
-      throw new Error(`Forbidden SQL keyword: ${word}`);
-    }
-  }
-  if (normalized.includes('FOR UPDATE') || normalized.includes('FOR SHARE')) {
-    throw new Error('FOR UPDATE/SHARE not allowed');
-  }
-}
-
-
-
 function calcStats(times) {
   if (times.length === 0) return { min: 0, avg: 0, p50: 0, p95: 0, max: 0 };
   times.sort((a, b) => a - b);
@@ -45,7 +22,7 @@ async function runBenchmark() {
   const args = process.argv.slice(2);
   let runs = 10;
   let warmup = 2;
-  let explain = false;
+
 
   for (const arg of args) {
     if (arg.startsWith('--runs=')) runs = parseInt(arg.split('=')[1]);
@@ -56,6 +33,7 @@ async function runBenchmark() {
   warmup = Math.max(0, Math.min(5, warmup));
 
   console.log(`Starting benchmark with ${runs} runs, ${warmup} warmup...`);
+  console.log('Scope: STUDENT_SELF + known semester/sample progress read path');
 
   const connectStart = performance.now();
   const prisma = new PrismaClient();
@@ -209,6 +187,13 @@ async function runBenchmark() {
             where: { score_detail_id: { in: detailIds } },
             include: { users: { select: { full_name: true } }, score_details: { include: { criteria: true } } },
             orderBy: { created_at: 'asc' },
+          }),
+          tx.user_roles.findMany({
+            where: {
+              entity_id: sheet.semester_enrollments.class_id,
+              is_active: 1
+            },
+            include: { roles: true }
           })
         ]);
       });
@@ -268,6 +253,13 @@ async function runBenchmark() {
           }),
           tx.score_adjustment_logs.findMany({
             where: { score_detail_id: { in: detailIds } }
+          }),
+          tx.user_roles.findMany({
+            where: {
+              entity_id: form2.semester_enrollments.class_id,
+              is_active: 1
+            },
+            include: { roles: true }
           })
         ]);
 
@@ -304,6 +296,9 @@ async function runBenchmark() {
             include: { criteria: true, score_entries: true },
           });
 
+          const optimizedDetailIds = scoreDetails.map(d => d.id);
+          const optimizedEntryIds = scoreDetails.flatMap(d => d.score_entries.map(e => e.id));
+
           await Promise.all([
             tx.criteria_categories.findMany({ select: { id: true, max_score: true } }),
             tx.criteria.findMany({ where: { is_active: 1 } })
@@ -314,13 +309,20 @@ async function runBenchmark() {
               where: {
                 OR: [
                   { entity_type: 'scoring_sheets', entity_id: sheetId },
-                  { entity_type: 'score_details', entity_id: { in: detailIds } },
-                  { entity_type: 'score_entries', entity_id: { in: entryIds } },
+                  { entity_type: 'score_details', entity_id: { in: optimizedDetailIds } },
+                  { entity_type: 'score_entries', entity_id: { in: optimizedEntryIds } },
                 ]
               }
             }),
             tx.score_adjustment_logs.findMany({
-              where: { score_detail_id: { in: detailIds } }
+              where: { score_detail_id: { in: optimizedDetailIds } }
+            }),
+            tx.user_roles.findMany({
+              where: {
+                entity_id: form.semester_enrollments.class_id,
+                is_active: 1
+              },
+              include: { roles: true }
             })
           ]);
         });
