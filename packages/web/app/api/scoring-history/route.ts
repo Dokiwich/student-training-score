@@ -1,8 +1,6 @@
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]/route';
-
 /**
  * GET /api/scoring-history
  * Lấy lịch sử phiếu điểm rèn luyện của sinh viên (qua tất cả các học kỳ).
@@ -12,7 +10,7 @@ import { authOptions } from '../auth/[...nextauth]/route';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }

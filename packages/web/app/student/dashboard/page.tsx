@@ -1,5 +1,4 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../api/auth/[...nextauth]/route';
+import { auth } from '@/auth';
 import { prisma } from '@student-score/database';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
@@ -11,7 +10,7 @@ import { ProgressMiniCard } from './ProgressMiniCard';
 import { getStudentDashboardDeadlineInfo } from '@/lib/semester';
 
 export default async function StudentDashboardPage() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const user = session?.user as { id: string; name?: string; role?: string; studentId?: string } | undefined;
 
   const deadlineInfo = await getStudentDashboardDeadlineInfo();

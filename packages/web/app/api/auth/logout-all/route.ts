@@ -1,13 +1,12 @@
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../[...nextauth]/route';
 import { prisma } from '@student-score/database';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     
     // Using type assertion to bypass strict typing if id is not on user
     const userId = (session?.user as any)?.id;

@@ -1,7 +1,6 @@
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { logAdminAction } from '../../../../lib/audit';
@@ -24,7 +23,7 @@ async function getDepartmentUser(session: any) {
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const deptUser = await getDepartmentUser(session);
   if (!deptUser) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
@@ -106,7 +105,7 @@ export async function GET(req: Request) {
  * Add a new student to a class in user's department
  */
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const deptUser = await getDepartmentUser(session);
   if (!deptUser) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
@@ -207,7 +206,7 @@ export async function POST(req: Request) {
  * Remove a student's enrollment from a class (does NOT delete the user account)
  */
 export async function DELETE(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const deptUser = await getDepartmentUser(session);
   if (!deptUser) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
@@ -258,7 +257,7 @@ export async function DELETE(req: Request) {
  * Update user details and role (limited to STUDENT, CLASS_COMMITTEE, ADVISOR)
  */
 export async function PUT(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const deptUser = await getDepartmentUser(session);
   if (!deptUser) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });

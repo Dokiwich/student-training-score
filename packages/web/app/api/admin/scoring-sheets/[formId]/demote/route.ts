@@ -1,7 +1,6 @@
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../../../auth/[...nextauth]/route';
 import { logAdminAction } from '../../../../../../lib/audit';
 
 function isAdmin(session: any): boolean {
@@ -15,7 +14,7 @@ export async function POST(
   try {
     const resolvedParams = await params;
     const formId = resolvedParams.formId;
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!isAdmin(session)) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
     }

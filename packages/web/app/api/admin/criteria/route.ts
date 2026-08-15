@@ -1,7 +1,6 @@
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
 import { logAdminAction } from '../../../../lib/audit';
 import { computeStatus } from '../../../../lib/semester';
@@ -20,7 +19,7 @@ const ACTIVE_SCORING_PHASES = ['STUDENT_SCORING', 'CLASS_REVIEWING', 'ADVISOR_RE
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!checkAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
@@ -98,7 +97,7 @@ export async function GET(req: Request) {
 
 // PUT: update criterion or category
 export async function PUT(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!checkAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
@@ -286,7 +285,7 @@ export async function PUT(req: Request) {
 
 // POST: create criterion or category
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!checkAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
@@ -398,7 +397,7 @@ export async function POST(req: Request) {
 
 // DELETE: delete criterion or category
 export async function DELETE(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!checkAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }

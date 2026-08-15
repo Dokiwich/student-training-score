@@ -1,7 +1,6 @@
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
 import { logAdminAction } from '../../../../../lib/audit';
 import { computeStatus } from '../../../../../lib/semester';
@@ -18,7 +17,7 @@ const ACTIVE_SCORING_PHASES = ['STUDENT_SCORING', 'CLASS_REVIEWING', 'ADVISOR_RE
  * - Nếu không truyền sourceSemesterId → tự chọn version active mới nhất có dữ liệu.
  */
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }

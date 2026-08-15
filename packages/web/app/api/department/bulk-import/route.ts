@@ -1,7 +1,6 @@
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { logAdminAction } from '../../../../lib/audit';
@@ -36,7 +35,7 @@ interface ImportResult {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const deptUser = await getDepartmentUser(session);
   if (!deptUser) {
     return NextResponse.json({ message: ' Chỉ role Khoa mới được import' }, { status: 403 });

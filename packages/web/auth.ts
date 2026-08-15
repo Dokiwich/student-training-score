@@ -1,0 +1,171 @@
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import { prisma } from "@student-score/database";
+import authConfig from "./auth.config";
+
+// In-memory cache for session version to avoid DB query on every request
+const sessionCache = new Map<string, { version: number; expires: number }>();
+
+export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
+  session: { strategy: "jwt" },
+  // Keep old cookie name to avoid logging out existing users
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+    },
+  },
+  providers: [
+    Credentials({
+      name: "Tài khoản Sinh viên / Lớp trưởng / Cố vấn",
+      credentials: {
+        username: { label: "Tài khoản", type: "text", placeholder: "123" },
+        password: { label: "Mật khẩu", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.username || !credentials?.password) {
+          return null;
+        }
+
+        // Find by student_id OR email in a single query to reduce DB roundtrips
+        const user = await prisma.users.findFirst({
+          where: {
+            OR: [
+              { student_id: credentials.username as string },
+              { email: credentials.username as string },
+            ],
+          },
+          include: { user_roles: { include: { roles: true } } },
+        });
+
+        if (!user) {
+          return null;
+        }
+
+        if (user.locked_until && user.locked_until > new Date()) {
+          throw new Error("ACCOUNT_LOCKED");
+        }
+
+        const isPasswordValid = await bcrypt.compare(
+          credentials.password as string,
+          user.password_hash
+        );
+        if (!isPasswordValid) {
+          const newAttempts = (user.failed_login_attempts || 0) + 1;
+          const updates: any = { failed_login_attempts: newAttempts };
+
+          if (newAttempts >= 5) {
+            updates.locked_until = new Date(Date.now() + 30 * 60 * 1000); // Lock for 30 minutes
+          }
+
+          await prisma.users.update({
+            where: { id: user.id },
+            data: updates,
+          });
+
+          throw new Error("INVALID_CREDENTIALS");
+        }
+
+        // Reset failed attempts on success
+        if (user.failed_login_attempts > 0 || user.locked_until) {
+          await prisma.users.update({
+            where: { id: user.id },
+            data: { failed_login_attempts: 0, locked_until: null },
+          });
+        }
+
+        let mappedRole = "STUDENT";
+        if (user.user_roles) {
+          const codes = user.user_roles
+            .filter((ur) => ur.is_active === 1)
+            .map((ur) => ur.roles.code);
+          if (codes.includes("SCHOOL_ADMIN")) mappedRole = "SCHOOL_ADMIN";
+          else if (codes.includes("DEPARTMENT")) mappedRole = "DEPARTMENT";
+          else if (codes.includes("ADVISOR")) mappedRole = "ADVISOR";
+          else if (
+            codes.some((c) =>
+              ["CLASS_COMMITTEE", "MONITOR", "VICE_MONITOR", "SECRETARY"].includes(c)
+            )
+          )
+            mappedRole = "CLASS_COMMITTEE";
+        }
+
+        return {
+          id: user.id,
+          name: user.full_name,
+          email: user.student_id || user.email, // we map student_id to Auth's email field for ease, fallback to actual email for DEPT/ADMIN
+          role: mappedRole,
+          session_version: user.session_version,
+        } as any;
+      },
+    }),
+  ],
+  callbacks: {
+    ...authConfig.callbacks,
+    async jwt({ token, user }) {
+      if (user) {
+        token.role = (user as any).role;
+        token.id = user.id;
+        token.studentId = user.email;
+        token.session_version = (user as any).session_version || 1;
+      } else if (token.id) {
+        const now = Date.now();
+        const cached = sessionCache.get(token.id as string);
+
+        let isValid = false;
+        if (cached && cached.expires > now) {
+          isValid = cached.version === token.session_version;
+        } else {
+          // Validate session_version against database for subsequent requests
+          const dbUser = await prisma.users.findUnique({
+            where: { id: token.id as string },
+            select: { session_version: true },
+          });
+
+          if (dbUser) {
+            sessionCache.set(token.id as string, {
+              version: dbUser.session_version,
+              expires: now + 60000,
+            }); // cache 60s
+            isValid = dbUser.session_version === token.session_version;
+          }
+        }
+
+        if (!isValid) {
+          console.log("Session Invalidated!", {
+            token_session_version: token.session_version,
+            token_id: token.id,
+          });
+          return {}; // Invalidate token
+        }
+      }
+
+      if (!token.customJwt && token.id && token.role) {
+        if (!process.env.NEXTAUTH_SECRET)
+          throw new Error("Missing NEXTAUTH_SECRET");
+        token.customJwt = jwt.sign(
+          {
+            id: token.id,
+            role: token.role,
+            studentId: token.studentId,
+            session_version: token.session_version,
+          },
+          process.env.NEXTAUTH_SECRET,
+          { expiresIn: "1d" }
+        );
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session?.user) {
+        (session.user as any).role = token.role;
+        (session.user as any).id = token.id;
+        (session.user as any).studentId = token.studentId;
+        (session as any).customJwt = token.customJwt;
+      }
+      return session;
+    },
+  },
+});

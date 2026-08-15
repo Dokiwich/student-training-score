@@ -1,8 +1,6 @@
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
-
 /**
  * GET /api/appeals/criteria?sheetId=xxx
  * Lấy danh sách tiêu chí kèm điểm từng role cho 1 scoring_sheet.
@@ -11,7 +9,7 @@ import { authOptions } from '../../auth/[...nextauth]/route';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }

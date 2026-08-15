@@ -1,8 +1,7 @@
 // packages/web/app/api/admin/departments/route.ts
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { prisma } from '@student-score/database';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
 import { logAdminAction } from '../../../../lib/audit';
 
@@ -13,7 +12,7 @@ function isAdmin(session: any): boolean {
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
@@ -38,7 +37,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
@@ -75,7 +74,7 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
@@ -119,7 +118,7 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!isAdmin(session)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
   }
