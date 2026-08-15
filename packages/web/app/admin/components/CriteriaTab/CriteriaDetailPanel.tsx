@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Trash2, X, Loader2, AlertCircle } from 'lucide-react';
+import { Save, Trash2, X, Loader2, AlertCircle, Lock } from 'lucide-react';
 import { ConfirmActionDialog } from './ConfirmActionDialog';
 import { ParentCriteriaPicker } from './ParentCriteriaPicker';
 import type {
@@ -20,6 +20,8 @@ interface CriteriaDetailPanelProps {
   selectedItem: CriteriaSelection | null;
   categories: Category[];
   criteria: Criterion[];
+  isVersionLocked?: boolean;
+  usedCriteriaIds?: number[];
   onSaved: (item: CriteriaSelection) => void;
   onDeleted: () => void;
   onCancel: () => void;
@@ -63,7 +65,17 @@ function isCriterionForm(f: FormState): f is CriterionFormState {
   return '_type' in f && f._type === 'criterion';
 }
 
-export function CriteriaDetailPanel({ versionId, selectedItem, categories, criteria, onSaved, onDeleted, onCancel }: CriteriaDetailPanelProps) {
+export function CriteriaDetailPanel({
+  versionId,
+  selectedItem,
+  categories,
+  criteria,
+  isVersionLocked = false,
+  usedCriteriaIds = [],
+  onSaved,
+  onDeleted,
+  onCancel,
+}: CriteriaDetailPanelProps) {
   const [formData, setFormData] = useState<FormState>({});
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -111,6 +123,7 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
           parent_id: '',
           category_id: categories[0]?.id || '',
           sort_order: '0',
+          evidence_guide: '',
         });
       } else {
         const crit = criteria.find(c => c.id === selectedItem.id);
@@ -127,7 +140,7 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
             score_type: crit.score_type,
             score_options: crit.score_options,
             require_evidence: crit.require_evidence,
-            evidence_guide: crit.evidence_guide,
+            evidence_guide: crit.evidence_guide || '',
           });
         }
       }
@@ -149,6 +162,12 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
   const isNew = selectedItem.id === 'new';
   const typeLabel = selectedItem.type === 'category' ? 'Nhóm tiêu chí' : 'Tiêu chí đánh giá';
   const formType: CriteriaItemType = '_type' in formData && (formData as { _type: string })._type === 'category' ? 'category' : 'criterion';
+
+  const isCriterionUsed = !isNew && typeof selectedItem.id === 'number' && usedCriteriaIds.includes(selectedItem.id);
+  const isCategoryUsed = !isNew && selectedItem.type === 'category' && (
+    criteria.some(c => c.category_id === selectedItem.id && usedCriteriaIds.includes(c.id))
+  );
+  const isStructuralLocked = isVersionLocked || isCriterionUsed || isCategoryUsed;
 
   const handleSave = async () => {
     setFormError(null);
@@ -207,6 +226,7 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
             point: formData.point,
             parent_id: parsedParentId,
             category_id: formData.category_id,
+            evidence_guide: formData.evidence_guide || null,
           };
           body = JSON.stringify(payload);
         } else {
@@ -217,6 +237,7 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
             point: formData.point,
             category_id: formData.category_id,
             parent_id: parsedParentId,
+            evidence_guide: formData.evidence_guide || null,
           };
           body = JSON.stringify(payload);
         }
@@ -295,12 +316,12 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
             {isNew ? `Thêm ${typeLabel.toLowerCase()}` : `Chỉnh sửa ${typeLabel.toLowerCase()}`}
           </h3>
           {!isNew && (
-            <p className="text-[13px] text-muted-foreground font-[400] mt-0.5">
+            <p className="text-[13px] text-muted-foreground font-normal mt-0.5">
               ID: {isCategoryForm(formData) ? formData.id : isCriterionForm(formData) ? formData.id : ''}
             </p>
           )}
         </div>
-        <button 
+        <button
           onClick={onCancel}
           className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-muted text-muted-foreground transition-colors"
         >
@@ -310,7 +331,7 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
 
       {/* Inline Error */}
       {formError && (
-        <div className="mx-6 mt-4 px-3 py-2 bg-danger/10 border border-danger/30 rounded-[6px] text-[13px] text-danger font-[510]">
+        <div className="mx-6 mt-4 px-3 py-2 bg-danger/10 border border-danger/30 rounded-md text-[13px] text-danger font-[510]">
           {formError}
         </div>
       )}
@@ -319,64 +340,90 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
       <div className="flex-1 overflow-auto p-6 flex flex-col gap-5">
         {isCategoryForm(formData) ? (
           <>
+            {isCategoryUsed && (
+              <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-md text-[12px] text-amber-600 dark:text-amber-400 font-[510]">
+                <Lock className="w-4 h-4 shrink-0" strokeWidth={2} />
+                <span>Nhóm này đang được phiếu chấm điểm sử dụng. Thang điểm tối đa và mã nhóm đã được khóa an toàn. Bạn vẫn có thể cập nhật Tên nhóm.</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-[590] text-foreground">Mã nhóm <span className="text-danger">*</span></label>
-                <input 
-                  type="text" 
-                  value={formData.code} 
+                <label className="text-[13px] font-[590] text-foreground flex items-center gap-1">
+                  Mã nhóm <span className="text-danger">*</span>
+                  {isStructuralLocked && !isNew && <Lock className="w-3 h-3 text-amber-500 ml-1" />}
+                </label>
+                <input
+                  type="text"
+                  value={formData.code}
+                  disabled={isStructuralLocked && !isNew}
                   onChange={(e) => updateField('code', e.target.value)}
                   placeholder="VD: I, II, III..."
-                  className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
+                  className="px-3 py-2 bg-surface border border-border rounded-md text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all disabled:bg-surface-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-[590] text-foreground">Điểm tối đa</label>
-                <input 
-                  type="number" 
-                  step="0.1" min="0" 
-                  value={formData.max_score} 
+                <label className="text-[13px] font-[590] text-foreground flex items-center gap-1">
+                  Điểm tối đa
+                  {isStructuralLocked && !isNew && <Lock className="w-3 h-3 text-amber-500 ml-1" />}
+                </label>
+                <input
+                  type="number"
+                  step="0.1" min="0"
+                  value={formData.max_score}
+                  disabled={isStructuralLocked && !isNew}
                   onChange={(e) => updateField('max_score', e.target.value)}
-                  className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] font-[590] text-danger outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
+                  className="px-3 py-2 bg-surface border border-border rounded-md text-[14px] font-[590] text-danger outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all disabled:bg-surface-muted disabled:opacity-60 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
-            
+
             <div className="flex flex-col gap-1.5">
               <label className="text-[13px] font-[590] text-foreground">Tên nhóm <span className="text-danger">*</span></label>
-              <input 
-                type="text" 
-                value={formData.name} 
+              <input
+                type="text"
+                value={formData.name}
                 onChange={(e) => updateField('name', e.target.value)}
                 placeholder="VD: Ý thức học tập..."
-                className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
+                className="px-3 py-2 bg-surface border border-border rounded-md text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
               />
             </div>
-            
+
             <div className="flex flex-col gap-1.5">
               <label className="text-[13px] font-[590] text-foreground">Thứ tự sắp xếp</label>
-              <input 
-                type="number" 
-                value={formData.sort_order} 
+              <input
+                type="number"
+                value={formData.sort_order}
                 onChange={(e) => updateField('sort_order', e.target.value)}
-                className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
+                className="px-3 py-2 bg-surface border border-border rounded-md text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
               />
               <p className="text-[12px] text-muted-foreground">
-                Thứ tự hiển thị trong danh sách. Chỉ dùng để sắp xếp trên giao diện, không gửi lên server.
+                Thứ tự hiển thị trong danh sách.
               </p>
             </div>
           </>
         ) : isCriterionForm(formData) ? (
           <>
+            {isCriterionUsed && (
+              <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-md text-[12px] text-amber-600 dark:text-amber-400 font-[510]">
+                <Lock className="w-4 h-4 shrink-0" strokeWidth={2} />
+                <span>Tiêu chí này đã có dữ liệu chấm điểm. Thang điểm, mã và quan hệ cha-con đã được khóa an toàn. Bạn vẫn có thể cập nhật Nội dung và Hướng dẫn minh chứng.</span>
+              </div>
+            )}
+
             <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-[590] text-foreground">Thuộc nhóm <span className="text-danger">*</span></label>
-              <select 
-                value={formData.category_id} 
+              <label className="text-[13px] font-[590] text-foreground flex items-center gap-1">
+                Thuộc nhóm <span className="text-danger">*</span>
+                {isStructuralLocked && !isNew && <Lock className="w-3 h-3 text-amber-500 ml-1" />}
+              </label>
+              <select
+                value={formData.category_id}
+                disabled={isStructuralLocked && !isNew}
                 onChange={(e) => {
                   setFormData(prev => ({ ...(prev as any), category_id: e.target.value, parent_id: '' }));
                   setFormError(null);
                 }}
-                className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
+                className="px-3 py-2 bg-surface border border-border rounded-md text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all disabled:bg-surface-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
               >
                 <option value="">-- Chọn nhóm --</option>
                 {categories.map(c => (
@@ -386,56 +433,82 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-[590] text-foreground">Tiêu chí cha (Nếu có)</label>
-              <ParentCriteriaPicker 
+              <label className="text-[13px] font-[590] text-foreground flex items-center gap-1">
+                Tiêu chí cha (Nếu có)
+                {isStructuralLocked && !isNew && <Lock className="w-3 h-3 text-amber-500 ml-1" />}
+              </label>
+              <ParentCriteriaPicker
                 categoryId={formData.category_id}
                 currentCriterionId={formData.id ?? ''}
                 value={formData.parent_id}
-                onChange={(val) => updateField('parent_id', val)}
+                onChange={(val) => {
+                  if (!isStructuralLocked || isNew) {
+                    updateField('parent_id', val);
+                  }
+                }}
                 criteria={criteria}
               />
               <p className="text-[12px] text-muted-foreground">
-                Nếu chọn tiêu chí cha, tiêu chí này sẽ trở thành tiêu chí con (lá). Tiêu chí cha sẽ không trực tiếp tính điểm.
+                Nếu chọn tiêu chí cha, tiêu chí này sẽ trở thành tiêu chí con (lá).
               </p>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-[590] text-foreground">Mã tiêu chí <span className="text-danger">*</span></label>
-                <input 
-                  type="text" 
-                  value={formData.code} 
+                <label className="text-[13px] font-[590] text-foreground flex items-center gap-1">
+                  Mã tiêu chí <span className="text-danger">*</span>
+                  {isStructuralLocked && !isNew && <Lock className="w-3 h-3 text-amber-500 ml-1" />}
+                </label>
+                <input
+                  type="text"
+                  value={formData.code}
+                  disabled={isStructuralLocked && !isNew}
                   onChange={(e) => updateField('code', e.target.value)}
                   placeholder="VD: 1.1"
-                  className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
+                  className="px-3 py-2 bg-surface border border-border rounded-md text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all disabled:bg-surface-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-[590] text-foreground">Điểm tối đa</label>
-                <input 
-                  type="number" 
-                  step="0.1" min="0" 
-                  value={formData.point} 
+                <label className="text-[13px] font-[590] text-foreground flex items-center gap-1">
+                  Điểm tối đa
+                  {isStructuralLocked && !isNew && <Lock className="w-3 h-3 text-amber-500 ml-1" />}
+                </label>
+                <input
+                  type="number"
+                  step="0.1" min="0"
+                  value={formData.point}
+                  disabled={isStructuralLocked && !isNew}
                   onChange={(e) => updateField('point', e.target.value)}
-                  className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] font-[590] text-danger outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
+                  className="px-3 py-2 bg-surface border border-border rounded-md text-[14px] font-[590] text-danger outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all disabled:bg-surface-muted disabled:opacity-60 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
-            
+
             <div className="flex flex-col gap-1.5">
               <label className="text-[13px] font-[590] text-foreground">Nội dung đánh giá <span className="text-danger">*</span></label>
-              <textarea 
-                value={formData.content} 
+              <textarea
+                value={formData.content}
                 onChange={(e) => updateField('content', e.target.value)}
                 placeholder="Nhập nội dung tiêu chí..."
                 rows={4}
-                className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all resize-none"
+                className="px-3 py-2 bg-surface border border-border rounded-md text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all resize-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-[590] text-foreground">Hướng dẫn minh chứng (Tùy chọn)</label>
+              <textarea
+                value={formData.evidence_guide || ''}
+                onChange={(e) => updateField('evidence_guide', e.target.value)}
+                placeholder="Nhập hướng dẫn sinh viên tải minh chứng (VD: Giấy chứng nhận tham gia, hình ảnh minh họa...)"
+                rows={2}
+                className="px-3 py-2 bg-surface border border-border rounded-6px text-14px text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all resize-none"
               />
             </div>
 
             {/* Read-only display of score_type and require_evidence */}
             {formData.id && (
-              <div className="flex flex-wrap gap-3 text-[12px] text-muted-foreground bg-surface-muted p-3 rounded-[6px] border border-border">
+              <div className="flex flex-wrap gap-3 text-[12px] text-muted-foreground bg-surface-muted p-3 rounded-md border border-border">
                 <span>Loại điểm: <strong className="text-foreground">{formData.score_type || 'RANGE'}</strong></span>
                 <span>Yêu cầu minh chứng: <strong className="text-foreground">{formData.require_evidence === 1 ? 'Có' : 'Không'}</strong></span>
                 {formData.score_options && formData.score_options.length > 0 && (
@@ -446,14 +519,14 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
 
             <div className="flex flex-col gap-1.5">
               <label className="text-[13px] font-[590] text-foreground">Thứ tự sắp xếp</label>
-              <input 
-                type="number" 
-                value={formData.sort_order} 
+              <input
+                type="number"
+                value={formData.sort_order}
                 onChange={(e) => updateField('sort_order', e.target.value)}
-                className="px-3 py-2 bg-surface border border-border rounded-[6px] text-[14px] text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
+                className="px-3 py-2 bg-surface border border-border rounded-6px text-14px text-foreground outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all"
               />
               <p className="text-[12px] text-muted-foreground">
-                Thứ tự hiển thị trên cây. Chỉ dùng cho giao diện, không gửi lên server.
+                Thứ tự hiển thị trên cây.
               </p>
             </div>
           </>
@@ -465,7 +538,9 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
         {!isNew ? (
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-surface border border-danger text-danger hover:bg-danger/10 rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-danger/20 outline-none"
+            disabled={isStructuralLocked}
+            title={isStructuralLocked ? 'Không thể xóa mục đã có dữ liệu chấm điểm' : ''}
+            className="flex items-center gap-2 px-4 py-2 bg-surface border border-danger text-danger hover:bg-danger/10 rounded-6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-danger/20 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 className="w-4 h-4" strokeWidth={2} />
             Xóa
@@ -473,18 +548,18 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
         ) : (
           <div></div>
         )}
-        
+
         <div className="flex gap-2">
           <button
             onClick={onCancel}
-            className="px-4 py-2 bg-surface border border-border text-foreground hover:bg-surface-muted rounded-[6px] text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-border outline-none"
+            className="px-4 py-2 bg-surface border border-border text-foreground hover:bg-surface-muted rounded-6px text-[14px] font-[510] transition-colors focus:ring-[3px] focus:ring-border outline-none"
           >
             Hủy
           </button>
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-2 px-5 py-2 bg-success hover:bg-success-hover text-success-foreground rounded-[6px] text-[14px] font-[510] transition-colors border border-transparent focus:ring-[3px] focus:ring-success/20 outline-none disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 bg-success hover:bg-success-hover text-success-foreground rounded-6px text-[14px] font-[510] transition-colors border border-transparent focus:ring-[3px] focus:ring-success/20 outline-none disabled:opacity-50"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" strokeWidth={2} />}
             Lưu thay đổi
@@ -496,11 +571,11 @@ export function CriteriaDetailPanel({ versionId, selectedItem, categories, crite
         <ConfirmActionDialog
           title="Xác nhận xóa"
           description={
-            isCategoryForm(formData) 
+            isCategoryForm(formData)
               ? `Bạn có chắc chắn muốn xóa nhóm "${formData.name}"? Tất cả tiêu chí con bên trong cũng sẽ bị xóa vĩnh viễn.`
               : isCriterionForm(formData)
-              ? `Bạn có chắc chắn muốn xóa tiêu chí "${formData.code}"?`
-              : ''
+                ? `Bạn có chắc chắn muốn xóa tiêu chí "${formData.code}"?`
+                : ''
           }
           isDestructive={true}
           confirmText="Xóa vĩnh viễn"

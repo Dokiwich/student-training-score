@@ -70,7 +70,7 @@ export const authOptions: AuthOptions = {
           if (codes.includes('SCHOOL_ADMIN')) mappedRole = 'SCHOOL_ADMIN';
           else if (codes.includes('DEPARTMENT')) mappedRole = 'DEPARTMENT';
           else if (codes.includes('ADVISOR')) mappedRole = 'ADVISOR';
-          else if (codes.some(c => ['MONITOR', 'VICE_MONITOR', 'SECRETARY'].includes(c))) mappedRole = 'CLASS_COMMITTEE';
+          else if (codes.some(c => ['CLASS_COMMITTEE', 'MONITOR', 'VICE_MONITOR', 'SECRETARY'].includes(c))) mappedRole = 'CLASS_COMMITTEE';
         }
 
         return {

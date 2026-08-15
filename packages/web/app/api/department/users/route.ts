@@ -155,6 +155,8 @@ export async function POST(req: Request) {
       select: { id: true },
     });
 
+    const dbRoleCode = role === 'CLASS_COMMITTEE' ? 'MONITOR' : role;
+
     const newUser = await prisma.$transaction(async (tx) => {
       const user = await tx.users.create({
         data: {
@@ -166,8 +168,8 @@ export async function POST(req: Request) {
           user_roles: {
             create: {
               id: randomUUID(),
-              roles: { connect: { code: role } },
-              entity_id: ['CLASS_COMMITTEE', 'ADVISOR'].includes(role) ? class_id : null,
+              roles: { connect: { code: dbRoleCode } },
+              entity_id: ['CLASS_COMMITTEE', 'MONITOR', 'VICE_MONITOR', 'SECRETARY', 'ADVISOR'].includes(role) ? class_id : null,
               is_active: 1
             }
           },

@@ -22,7 +22,12 @@ export async function GET(req: Request) {
   const departmentId = searchParams.get('departmentId');
 
   const where: any = {};
-  if (role) where.user_roles = { some: { roles: { code: role }, is_active: 1 } };
+  if (role) {
+    const roleCodes = role === 'CLASS_COMMITTEE'
+      ? ['CLASS_COMMITTEE', 'MONITOR', 'VICE_MONITOR', 'SECRETARY']
+      : [role];
+    where.user_roles = { some: { roles: { code: { in: roleCodes } }, is_active: 1 } };
+  }
   if (departmentId) where.department_id = departmentId;
   if (classId) {
     where.semester_enrollments = { some: { class_id: classId, is_active: 1 } };
@@ -54,13 +59,15 @@ export async function GET(req: Request) {
   return NextResponse.json({
     data: users.map((u: any) => {
       const activeClass = u.semester_enrollments?.[0]?.classes;
+      const rawRole = u.user_roles?.find((ur: any) => ur.is_active === 1)?.roles?.code || 'STUDENT';
+      const normalizedRole = ['MONITOR', 'VICE_MONITOR', 'SECRETARY'].includes(rawRole) ? 'CLASS_COMMITTEE' : rawRole;
       return {
         id: u.id,
         student_id: u.student_id,
         email: u.email,
         full_name: u.full_name,
         phone: u.phone,
-        role: u.user_roles?.find((ur: any) => ur.is_active === 1)?.roles?.code || 'STUDENT',
+        role: normalizedRole,
         department_id: u.department_id,
         class_id: activeClass?.id || '',
         className: activeClass?.name || '',
@@ -112,6 +119,9 @@ export async function POST(req: Request) {
       if (cls?.department_id) resolvedDeptId = cls.department_id;
     }
 
+    // Map UI role to actual DB role code (CLASS_COMMITTEE -> MONITOR)
+    const dbRoleCode = role === 'CLASS_COMMITTEE' ? 'MONITOR' : role;
+
     const password_hash = await bcrypt.hash(password, 10);
     // Bọc toàn bộ vào transaction
     const newUser = await prisma.$transaction(async (tx) => {
@@ -125,8 +135,8 @@ export async function POST(req: Request) {
           user_roles: {
             create: {
               id: randomUUID(),
-              roles: { connect: { code: role } },
-              entity_id: ['CLASS_COMMITTEE', 'ADVISOR'].includes(role) ? class_id : role === 'DEPARTMENT' ? resolvedDeptId : null,
+              roles: { connect: { code: dbRoleCode } },
+              entity_id: ['CLASS_COMMITTEE', 'MONITOR', 'VICE_MONITOR', 'SECRETARY', 'ADVISOR'].includes(role) ? class_id : role === 'DEPARTMENT' ? resolvedDeptId : null,
               is_active: 1
             }
           },
@@ -209,14 +219,15 @@ export async function PUT(req: Request) {
     const user = await prisma.$transaction(async (tx) => {
       if (role !== undefined) {
         await tx.user_roles.deleteMany({ where: { user_id: id } });
-        const targetRole = await tx.roles.findUnique({ where: { code: role } });
+        const dbRoleCode = role === 'CLASS_COMMITTEE' ? 'MONITOR' : role;
+        const targetRole = await tx.roles.findUnique({ where: { code: dbRoleCode } });
         if (targetRole) {
           await tx.user_roles.create({
             data: { 
               id: randomUUID(), 
               user_id: id, 
               role_id: targetRole.id, 
-              entity_id: ['CLASS_COMMITTEE', 'ADVISOR'].includes(role) ? class_id : role === 'DEPARTMENT' ? (updateData.department_id || department_id || null) : null,
+              entity_id: ['CLASS_COMMITTEE', 'MONITOR', 'VICE_MONITOR', 'SECRETARY', 'ADVISOR'].includes(role) ? class_id : role === 'DEPARTMENT' ? (updateData.department_id || department_id || null) : null,
               is_active: 1 
             }
           });

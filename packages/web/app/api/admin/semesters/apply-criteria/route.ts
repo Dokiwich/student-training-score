@@ -4,10 +4,13 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 import { randomUUID } from 'crypto';
 import { logAdminAction } from '../../../../../lib/audit';
+import { computeStatus } from '../../../../../lib/semester';
 
 function isAdmin(session: any): boolean {
   return session?.user && (session.user as { role?: string }).role === 'SCHOOL_ADMIN';
 }
+
+const ACTIVE_SCORING_PHASES = ['STUDENT_SCORING', 'CLASS_REVIEWING', 'ADVISOR_REVIEWING', 'SCHOOL_REVIEWING', 'FINALIZED'];
 
 /**
  * POST: Áp dụng (clone) bộ tiêu chí từ học kỳ nguồn sang học kỳ đích.
@@ -40,7 +43,21 @@ export async function POST(req: Request) {
       include: { criteria_categories: { include: { _count: { select: { criteria: true } } } } },
     });
 
+    const semStatus = computeStatus(targetSemester as any);
+    const isInScoring = ACTIVE_SCORING_PHASES.includes(semStatus);
+
     if (existingVersion) {
+      const catIds = existingVersion.criteria_categories.map(c => c.id);
+      const scoresCount = catIds.length > 0 ? await prisma.score_details.count({
+        where: { criteria: { category_id: { in: catIds } } }
+      }) : 0;
+
+      if (scoresCount > 0 || isInScoring) {
+        return NextResponse.json({
+          message: `Không thể ghi đè bộ tiêu chí: Học kỳ "${targetSemester.name}" đang trong giai đoạn chấm điểm (${semStatus}) hoặc đã có ${scoresCount} phiếu chấm điểm ghi nhận.`
+        }, { status: 400 });
+      }
+
       const totalCriteria = existingVersion.criteria_categories.reduce((a, c) => a + c._count.criteria, 0);
       if (totalCriteria > 0) {
         return NextResponse.json({

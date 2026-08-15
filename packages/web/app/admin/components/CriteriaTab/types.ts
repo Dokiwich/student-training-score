@@ -56,8 +56,11 @@ export interface CriteriaVersion {
   semesters?: {
     name: string;
     code: string;
+    status?: string;
   } | null;
   totalCategories?: number;
+  isLocked?: boolean;
+  lockedReason?: string | null;
 }
 
 // --- API Payloads (only fields the API actually handles) ---
@@ -84,6 +87,7 @@ export interface CreateCriterionPayload {
   point: string;
   parent_id: number | null;
   category_id: string;
+  evidence_guide?: string | null;
 }
 
 export interface UpdateCriterionPayload {
@@ -93,6 +97,7 @@ export interface UpdateCriterionPayload {
   point: string;
   category_id: string;
   parent_id: number | null;
+  evidence_guide?: string | null;
 }
 
 export interface DeleteCategoryPayload {
