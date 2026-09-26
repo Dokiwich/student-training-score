@@ -279,7 +279,8 @@ export async function PUT(req: Request) {
     
     await logAdminAction(actorId, 'UPDATE_USER', 'users', id, oldData ? { ...oldData, password_hash: '***' } : null, { ...user, password_hash: '***' });
 
-    return NextResponse.json({ message: 'Cập nhật người dùng thành công', data: user });
+    const { password_hash: _pw, ...safeUser } = (user as any) || {};
+    return NextResponse.json({ message: 'Cập nhật người dùng thành công', data: safeUser });
   } catch (e) {
     return NextResponse.json({ message: 'Lỗi server' }, { status: 500 });
   }

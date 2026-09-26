@@ -4,7 +4,7 @@ import authConfig from "./auth.config";
 const { auth } = NextAuth(authConfig);
 
 export default auth;
-export const proxy = auth;
+export const middleware = auth;
 
 export const config = {
   // Protect all dashboard routes + root. Login page remains public.
