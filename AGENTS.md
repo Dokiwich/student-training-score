@@ -1,44 +1,67 @@
-<!-- gitnexus:start -->
-# GitNexus — Code Intelligence
+# Hướng Dẫn & Điều Phối AI (Master AGENTS.md)
 
-This project is indexed by GitNexus as **student-training-score** (1251 symbols, 2761 relationships, 100 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+## 1. Quyền quyết định của chủ dự án
 
-> Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
+Chủ dự án là người quyết định cuối cùng về kiến trúc, cấu trúc thư mục, công nghệ, dependency, công cụ, quyền truy cập, schema/migration, API, commit, push và deploy.
 
-## Always Do
+AI được tự đọc, phân tích, kiểm tra và đề xuất. AI chỉ được tự sửa các thay đổi cục bộ đã nằm trong phạm vi yêu cầu, không đổi contract hay cấu trúc hệ thống.
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows. For regression review, compare against the default branch: `detect_changes({scope: "compare", base_ref: "stable"})`.
-- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `query({search_query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `context({name: "symbolName"})`.
-- For security review, `explain({target: "fileOrSymbol"})` lists taint findings (source→sink flows; needs `analyze --pdg`).
+| Mức rủi ro | Hành vi | Quyền hạn AI |
+| :--- | :--- | :--- |
+| **Đọc / Phân tích** | Đọc code, tìm kiếm, chạy test/lint chỉ-đọc, đề xuất phương án | **Tự thực hiện**, không cần xin phép. |
+| **Thay đổi cục bộ** | Sửa lỗi nhỏ đúng phạm vi giao, thêm test phù hợp | **Tự thực hiện**. Nếu làm đổi hành vi/UX/API/schema: **Phải hỏi**. |
+| **Tác động lớn** | Migration DB, cài dependency/tool/plugin, đổi kiến trúc/thư mục, commit/push/deploy, xóa/ghi đè dữ liệu | **Bắt buộc trình phương án & chờ duyệt**. |
 
-## Never Do
+Trước mọi thay đổi có ảnh hưởng rộng, AI phải nêu:
+1. Vấn đề và phạm vi ảnh hưởng (blast radius).
+2. Ít nhất một phương án thay thế cùng trade-off.
+3. Phương án khuyến nghị, rủi ro và kế hoạch rollback.
+4. Chờ phê duyệt rõ ràng từ chủ dự án trước khi thực hiện.
 
-- NEVER edit a function, class, or method without first running `impact` on it.
-- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
-- NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
-- NEVER commit changes without running `detect_changes()` to check affected scope.
+---
 
-## Resources
+## 2. Cây Thư Mục Luật & Hướng Dẫn Điều Hướng
 
-| Resource | Use for |
-|----------|---------|
-| `gitnexus://repo/student-training-score/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/student-training-score/clusters` | All functional areas |
-| `gitnexus://repo/student-training-score/processes` | All execution flows |
-| `gitnexus://repo/student-training-score/process/{name}` | Step-by-step execution trace |
+Khi thực hiện nhiệm vụ ở từng vị trí cụ thể, AI **bắt buộc đọc và tuân thủ luật riêng** tại vị trí đó:
 
-## CLI
+```
+d:\duan\
+├── AGENTS.md                            # [Bạn đang ở đây] Quyền hạn & Cây điều hướng luật
+├── .agents/
+│   ├── AGENTS.md                        # Luật bất biến & nguyên tắc chung toàn dự án
+│   ├── rules/                           # THƯ MỤC LUẬT CHUYÊN BIỆT THEO TỪNG VỊ TRÍ
+│   │   ├── database/RULE.md             # Đọc khi đụng: PostgreSQL, Prisma, $transaction, index, migration
+│   │   │   └── Rule DB.md               # Tra cứu khi cần thiết kế schema/database chuyên sâu (2.187 dòng)
+│   │   ├── api/RULE.md                  # Đọc khi đụng: NestJS, API routes, IDOR, verifyActorRole, HTTP methods
+│   │   ├── web/RULE.md                  # Đọc khi đụng: Next.js, ScoringForm, UI data-driven, dynamic cache
+│   │   └── scoring/RULE.md              # Đọc khi đụng: Quy tắc chấm điểm, leaf-node, evidence, radio/options
+│   ├── worklog/                         # THƯ MỤC LƯU TẠM & LỊCH SỬ CÔNG VIỆC
+│   │   ├── CURRENT_TASK.md              # Kiểm tra trước khi làm và cập nhật tiến độ dở dang
+│   │   ├── sessions/                    # Lưu nhật ký sau mỗi phiên hoàn thành nhiệm vụ
+│   │   └── decisions/                   # Lưu các quyết định kiến trúc đã được duyệt (ADR)
+│   └── skills/
+│       └── dokiwich_project_knowledge/  # Skill tra cứu tình huống bug cũ (on-demand)
+└── packages/
+    ├── database/AGENTS.md               # Tự nạp khi làm việc trong packages/database
+    ├── api/AGENTS.md                    # Tự nạp khi làm việc trong packages/api
+    └── web/AGENTS.md                    # Tự nạp khi làm việc trong packages/web
+```
 
-| Task | Read this skill file |
-|------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+---
 
-<!-- gitnexus:end -->
+## 3. Quy Trình Phân Tích Mã (GitNexus & Code Intelligence)
+
+1. **Trước khi sửa function/class/method:** Bắt buộc chạy `impact({target: "symbolName", direction: "upstream"})` và báo blast radius (caller, process, risk). Cảnh báo nếu mức `HIGH` hoặc `CRITICAL`.
+2. **Trước khi commit:** Bắt buộc chạy `detect_changes()` để đảm bảo thay đổi đúng phạm vi mong muốn.
+3. **Cấm đổi tên bằng find-and-replace:** Dùng call-graph rename.
+4. **Dự phòng công cụ:** Ưu tiên công cụ phân tích mã được cấp (GitNexus, CodeGraph). Nếu không khả dụng, dùng grep/search cơ bản tương đương và nêu rõ giới hạn.
+
+---
+
+## 4. Báo Cáo Kết Quả Chuẩn
+
+Mỗi phản hồi sau khi thực hiện công việc phải nêu:
+1. Đã đổi gì (file nào, thay đổi gì).
+2. Vì sao đổi (gốc rễ vấn đề).
+3. Rủi ro & cách rollback nếu có.
+4. Việc chưa làm vì chờ chủ dự án phê duyệt (nếu có).
